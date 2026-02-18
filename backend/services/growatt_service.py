@@ -134,6 +134,7 @@ class GrowattOSSService:
             for frame in frames:
                 try:
                     tr_count = await frame.evaluate('() => document.querySelectorAll("table tr").length')
+                    logger.info(f"Frame {frame.url}: {tr_count} table rows found")
                     
                     if tr_count > 5:
                         raw_data = await frame.evaluate('''
