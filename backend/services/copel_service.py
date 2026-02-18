@@ -304,53 +304,49 @@ class CopelService:
             return {"success": False, "error": "Não está logado"}
         
         try:
-            # The COPEL portal uses PrimeFaces, so we need to find the onclick element for each row
-            # Find all onclick elements that trigger PrimeFaces.ab()
-            onclick_elements = await self.page.query_selector_all('[onclick*="PrimeFaces.ab"]')
+            # Wait for table to be fully loaded
+            await asyncio.sleep(2)
             
-            # Find the row with this UC number first
+            # Find the row with this UC number and get its select link
             rows = await self.page.query_selector_all('table tbody tr')
-            target_row_index = -1
             
-            for idx, row in enumerate(rows):
-                row_text = await row.text_content()
-                if uc_number in row_text:
-                    target_row_index = idx
-                    logger.info(f"Found UC {uc_number} at row index {idx}")
-                    break
+            for row in rows:
+                cells = await row.query_selector_all('td')
+                if len(cells) >= 1:
+                    uc_text = await cells[0].text_content()
+                    if uc_text and uc_number in uc_text.strip():
+                        # Found the row, now look for the select link
+                        # The link is a ui-commandlink with aria-label="Selecionar"
+                        select_link = await row.query_selector('a.ui-commandlink, a[aria-label="Selecionar"]')
+                        
+                        if not select_link:
+                            # Check if last cell has any link
+                            if len(cells) >= 6:
+                                select_link = await cells[-1].query_selector('a')
+                        
+                        if not select_link:
+                            return {
+                                "success": False, 
+                                "error": f"UC {uc_number} não possui botão de seleção (pode estar desligada ou pendente)"
+                            }
+                        
+                        # Click the select link
+                        await select_link.click()
+                        logger.info(f"Clicked select for UC {uc_number}")
+                        
+                        # Wait for page to load
+                        await asyncio.sleep(4)
+                        
+                        # Take screenshot
+                        await self.page.screenshot(path=f"{self.download_path}/uc_selected_{uc_number}.png")
+                        
+                        return {
+                            "success": True,
+                            "uc_number": uc_number,
+                            "url": self.page.url
+                        }
             
-            if target_row_index == -1:
-                return {"success": False, "error": f"UC {uc_number} não encontrada na tabela"}
-            
-            # Find the select element for this row - it's typically in the last cell
-            row = rows[target_row_index]
-            select_element = await row.query_selector('[onclick*="PrimeFaces.ab"]')
-            
-            if not select_element:
-                # Try to find any clickable element in the row
-                select_element = await row.query_selector('a, span[onclick], td:last-child span')
-            
-            if not select_element:
-                return {"success": False, "error": "Botão de seleção não encontrado"}
-            
-            # Click the select element
-            await select_element.click()
-            
-            # Wait for page to load
-            await asyncio.sleep(4)
-            
-            # Check if we navigated to a new page
-            new_url = self.page.url
-            logger.info(f"After selection, URL: {new_url}")
-            
-            # Take screenshot
-            await self.page.screenshot(path=f"{self.download_path}/uc_selected_{uc_number}.png")
-            
-            return {
-                "success": True,
-                "uc_number": uc_number,
-                "url": new_url
-            }
+            return {"success": False, "error": f"UC {uc_number} não encontrada na tabela"}
             
         except Exception as e:
             logger.error(f"Error selecting UC: {str(e)}")
