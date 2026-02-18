@@ -815,6 +815,49 @@ const PlantDetail = () => {
               </CardContent>
             </Card>
 
+            {/* Integração Growatt */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Sun className="h-5 w-5 text-[#FFD600]" />
+                  Integração com Inversores
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <p className="text-sm text-neutral-500">
+                  Conecte esta usina ao portal Growatt para sincronizar automaticamente os dados de geração.
+                </p>
+                
+                {plant.growatt_plant_name ? (
+                  <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                    <div className="flex items-center gap-2 text-green-700">
+                      <CheckCircle className="h-5 w-5" />
+                      <span className="font-medium">Conectado ao Growatt</span>
+                    </div>
+                    <p className="text-sm text-green-600 mt-1">
+                      Vinculado à usina: <strong>{plant.growatt_plant_name}</strong>
+                    </p>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="mt-3"
+                      onClick={() => setGrowattDialogOpen(true)}
+                    >
+                      Sincronizar Agora
+                    </Button>
+                  </div>
+                ) : (
+                  <Button 
+                    onClick={() => setGrowattDialogOpen(true)}
+                    className="bg-[#FFD600] hover:bg-[#EAB308] text-[#1A1A1A]"
+                  >
+                    <Zap className="h-4 w-4 mr-2" />
+                    Conectar ao Growatt
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+
             {/* Link de Compartilhamento */}
             <Card>
               <CardHeader>
