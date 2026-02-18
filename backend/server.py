@@ -1987,14 +1987,14 @@ async def growatt_logout(current_user: dict = Depends(get_current_user)):
 @api_router.post("/integrations/growatt/link-plant")
 async def link_growatt_plant(
     plant_id: str,
-    growatt_plant_id: str,
+    growatt_plant_name: str,
     current_user: dict = Depends(get_current_user)
 ):
-    """Link a local plant to a Growatt plant ID"""
+    """Link a local plant to a Growatt plant by name"""
     result = await db.plants.update_one(
         {'id': plant_id, 'is_active': True},
         {'$set': {
-            'growatt_plant_id': growatt_plant_id,
+            'growatt_plant_name': growatt_plant_name,
             'inverter_integration': 'growatt'
         }}
     )
@@ -2004,7 +2004,7 @@ async def link_growatt_plant(
     
     return {
         "success": True,
-        "message": f"Usina vinculada ao ID Growatt: {growatt_plant_id}"
+        "message": f"Usina vinculada à Growatt: {growatt_plant_name}"
     }
 
 # Include the router in the main app
