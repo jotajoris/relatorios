@@ -112,10 +112,19 @@ class Plant(PlantBase):
 
 class ConsumerUnitBase(BaseModel):
     plant_id: str
-    contract_number: str
+    uc_number: str  # Número da UC na COPEL (ex: 113577680)
+    contract_number: Optional[str] = None
     address: str
+    city: Optional[str] = None
+    state: str = "PR"
     holder_name: Optional[str] = None
-    is_generator: bool = False
+    holder_document: Optional[str] = None  # CPF/CNPJ
+    is_generator: bool = False  # Se é UC geradora
+    compensation_percentage: float = 100.0  # % de compensação que recebe (0-100)
+    tariff_group: str = "B"  # A ou B
+    tariff_modality: Optional[str] = None  # Convencional, Horária, etc
+    contracted_demand_kw: Optional[float] = None  # Demanda contratada (Grupo A)
+    generator_uc_ids: Optional[List[str]] = None  # IDs das UCs geradoras que abastecem esta UC
 
 class ConsumerUnitCreate(ConsumerUnitBase):
     pass
