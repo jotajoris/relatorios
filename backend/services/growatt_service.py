@@ -117,7 +117,19 @@ class GrowattOSSService:
     async def _extract_plants_from_page(self) -> None:
         """Extract plants data from the current page"""
         try:
+            logger.info("Fetching plants from Growatt OSS...")
+            
+            # Wait for the page to fully load with tables
+            await self.page.wait_for_timeout(5000)
+            
+            # Try to wait for table to appear
+            try:
+                await self.page.wait_for_selector('table tbody tr', timeout=10000)
+            except:
+                logger.debug("Table selector not found, proceeding anyway")
+            
             frames = self.page.frames
+            logger.info(f"Found {len(frames)} frames to check")
             
             for frame in frames:
                 try:
