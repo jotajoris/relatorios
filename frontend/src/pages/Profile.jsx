@@ -90,8 +90,8 @@ const Profile = () => {
       </Card>
 
       {/* Change Password Card */}
-      <Card className="border-neutral-100 shadow-sm">
-        <CardHeader>
+      <Card className="border-neutral-100 shadow-sm bg-white">
+        <CardHeader className="bg-white">
           <CardTitle className="text-lg flex items-center gap-2">
             <Lock className="h-5 w-5 text-[#FFD600]" />
             Alterar Senha
@@ -100,7 +100,7 @@ const Profile = () => {
             Atualize sua senha para manter sua conta segura
           </CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="bg-white">
           <form onSubmit={handleChangePassword} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="currentPassword">Senha Atual</Label>
