@@ -89,8 +89,14 @@ class CopelService:
             # Take screenshot for debugging
             await self.page.screenshot(path=f"{self.download_path}/login_page.png")
             
-            # Try to find login form fields
-            # The COPEL portal uses JSF, so field IDs might vary
+            # Check for reCAPTCHA
+            captcha_element = await self.page.query_selector('.g-recaptcha, [class*="captcha"]')
+            if captcha_element:
+                # Check if captcha is visible (not yet solved)
+                captcha_visible = await captcha_element.is_visible()
+                if captcha_visible:
+                    logger.warning("reCAPTCHA detected on COPEL login page")
+                    # We'll try to proceed anyway - sometimes captcha is not required
             
             # Wait for the form to be visible
             await self.page.wait_for_selector('form', timeout=30000)
