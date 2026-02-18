@@ -68,8 +68,9 @@ const Layout = ({ children }) => {
       >
         {/* Logo */}
         <div className="h-16 flex items-center justify-between px-4 border-b border-neutral-800">
-          <Link to="/" className="flex items-center gap-3">
-            <img src={LOGO_URL} alt="ON Soluções" className="h-10 w-auto" />
+          <Link to="/" className="flex items-center gap-2">
+            <img src={LOGO_URL} alt="ON Soluções" className="h-9 w-auto" />
+            <span className="text-white font-heading font-semibold text-sm">Soluções Energéticas</span>
           </Link>
           <button
             className="lg:hidden text-neutral-400 hover:text-white"
