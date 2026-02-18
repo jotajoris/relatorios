@@ -102,6 +102,16 @@ class PlantBase(BaseModel):
     monthly_prognosis_kwh: Optional[float] = None
     annual_prognosis_kwh: Optional[float] = None
     total_investment: Optional[float] = None
+    logo_url: Optional[str] = None  # Logo específica da usina
+    efficiency_loss_year1: Optional[float] = 2.5  # % perda 1º ano
+    efficiency_loss_year2: Optional[float] = 1.5  # % perda 2º ano
+    efficiency_loss_other: Optional[float] = 0.5  # % perda demais anos
+    is_monitored: bool = True  # Usina ativa (monitorada)
+    show_missing_reports_alert: bool = True  # Exibir alerta relatórios ausentes
+    use_global_notifications: bool = True  # Usar config globais notificações
+    notify_critical_state: bool = False  # Notificar estado crítico
+    public_share_enabled: bool = False  # Permitir link compartilhamento
+    public_share_token: Optional[str] = None  # Token compartilhamento
 
 class PlantCreate(PlantBase):
     pass
