@@ -501,16 +501,43 @@ async def delete_plant(plant_id: str, current_user: dict = Depends(get_current_u
 
 # ==================== CONSUMER UNITS ROUTES ====================
 
-@api_router.get("/consumer-units", response_model=List[ConsumerUnit])
+@api_router.get("/consumer-units")
 async def list_consumer_units(plant_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     query = {'is_active': True}
     if plant_id:
         query['plant_id'] = plant_id
     units = await db.consumer_units.find(query, {'_id': 0}).to_list(1000)
+    
+    # Normalize units for backwards compatibility
+    result = []
     for u in units:
         if isinstance(u.get('created_at'), str):
             u['created_at'] = datetime.fromisoformat(u['created_at'])
-    return units
+        
+        # Migrate old format - use contract_number as uc_number if missing
+        if not u.get('uc_number') and u.get('contract_number'):
+            u['uc_number'] = u['contract_number']
+            # Update in database
+            await db.consumer_units.update_one(
+                {'id': u['id']},
+                {'$set': {'uc_number': u['contract_number']}}
+            )
+        elif not u.get('uc_number'):
+            u['uc_number'] = u.get('id', '')[:9]  # Fallback
+        
+        # Ensure all new fields exist with defaults
+        u.setdefault('city', None)
+        u.setdefault('state', 'PR')
+        u.setdefault('holder_document', None)
+        u.setdefault('compensation_percentage', 100.0)
+        u.setdefault('tariff_group', 'B')
+        u.setdefault('tariff_modality', None)
+        u.setdefault('contracted_demand_kw', None)
+        u.setdefault('generator_uc_ids', None)
+        
+        result.append(u)
+    
+    return result
 
 @api_router.get("/consumer-units/{unit_id}", response_model=ConsumerUnit)
 async def get_consumer_unit(unit_id: str, current_user: dict = Depends(get_current_user)):
