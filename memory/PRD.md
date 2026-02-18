@@ -48,6 +48,16 @@ Sistema web para gerenciamento de usinas de energia solar fotovoltaica, com foco
 - Upload de logo da usina
 - Edição de cadastro (nome, potência, investimento, etc)
 - Preferências (alertas, notificações)
+- **NOVO: Integração com Growatt** (botão "Conectar ao Growatt")
+
+### Integração Growatt ✅ (Implementado em 2026-02-18)
+- Login no portal OSS Growatt via web scraping (Playwright)
+- Listagem de todas as plantas (com paginação automática)
+- Busca de detalhes de planta específica
+- Sincronização de dados de geração
+- Vínculo entre usina local e planta Growatt
+- **50 usinas** listadas com sucesso para a conta BTAVB001
+- Dialog no frontend para configuração da integração
 - Link de compartilhamento público
 - Perda de eficiência por ano
 
