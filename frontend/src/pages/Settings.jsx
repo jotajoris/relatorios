@@ -127,14 +127,14 @@ const Settings = () => {
     setTestingGrowatt(true);
     setGrowattPlants([]);
     try {
-      const response = await api.post('/integrations/growatt/test-login', {
-        plant_id: growattForm.plant_id,
+      // Use the new login endpoint
+      const response = await api.post('/integrations/growatt/login', {
         username: growattForm.username,
         password: growattForm.password
       });
       
       if (response.data.success) {
-        toast.success(`Conectado! Usuário: ${response.data.user_name}`);
+        toast.success(`Conectado! ${response.data.total} usinas encontradas`);
         setGrowattPlants(response.data.plants || []);
       }
     } catch (error) {
@@ -153,18 +153,18 @@ const Settings = () => {
 
     setSyncing(true);
     try {
-      const response = await api.post('/integrations/growatt/fetch-data', null, {
-        params: {
-          plant_id: growattForm.plant_id,
-          growatt_plant_id: selectedGrowattPlant,
-          username: growattForm.username,
-          password: growattForm.password,
-          days: 30
-        }
+      // First link the plant
+      await api.post(`/integrations/growatt/link-plant?plant_id=${growattForm.plant_id}&growatt_plant_name=${encodeURIComponent(selectedGrowattPlant)}`);
+      
+      // Then sync data
+      const response = await api.post('/integrations/growatt/sync', {
+        username: growattForm.username,
+        password: growattForm.password,
+        plant_name: selectedGrowattPlant
       });
       
       if (response.data.success) {
-        toast.success(`Sincronização concluída! ${response.data.total_synced} registros.`);
+        toast.success('Sincronização concluída!');
         setGrowattTestOpen(false);
         setGrowattForm({ plant_id: '', username: '', password: '' });
         setGrowattPlants([]);
