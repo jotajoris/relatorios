@@ -181,6 +181,72 @@ const PlantDetail = () => {
     }
   };
 
+  // Growatt Integration Functions
+  const handleGrowattLogin = async () => {
+    if (!growattCredentials.username || !growattCredentials.password) {
+      toast.error('Preencha usuário e senha');
+      return;
+    }
+    
+    setGrowattLoading(true);
+    try {
+      const response = await api.post('/integrations/growatt/login', {
+        username: growattCredentials.username,
+        password: growattCredentials.password
+      });
+      
+      if (response.data.success) {
+        setGrowattPlants(response.data.plants || []);
+        toast.success(`${response.data.total} usinas encontradas na Growatt`);
+        
+        // Auto-select plant if name matches
+        const matchingPlant = response.data.plants?.find(
+          p => p.name.toLowerCase().includes(data?.plant?.name?.toLowerCase()) ||
+               data?.plant?.name?.toLowerCase().includes(p.name.toLowerCase())
+        );
+        if (matchingPlant) {
+          setSelectedGrowattPlant(matchingPlant);
+          toast.info(`Usina "${matchingPlant.name}" selecionada automaticamente`);
+        }
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Erro ao conectar com Growatt');
+    } finally {
+      setGrowattLoading(false);
+    }
+  };
+
+  const handleSyncGrowatt = async () => {
+    if (!selectedGrowattPlant) {
+      toast.error('Selecione uma usina da Growatt');
+      return;
+    }
+    
+    setSyncingGrowatt(true);
+    try {
+      // First, link the plant
+      await api.post(`/integrations/growatt/link-plant?plant_id=${plantId}&growatt_plant_name=${encodeURIComponent(selectedGrowattPlant.name)}`);
+      
+      // Then sync data
+      const response = await api.post('/integrations/growatt/sync', {
+        username: growattCredentials.username,
+        password: growattCredentials.password,
+        plant_name: selectedGrowattPlant.name
+      });
+      
+      if (response.data.success) {
+        toast.success('Dados sincronizados com sucesso!');
+        setGrowattDialogOpen(false);
+        loadData();
+        loadChartData();
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Erro ao sincronizar dados');
+    } finally {
+      setSyncingGrowatt(false);
+    }
+  };
+
   const handleAddUc = () => {
     setEditingUc(null);
     setUcFormData({
