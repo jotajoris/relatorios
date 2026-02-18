@@ -304,28 +304,53 @@ class CopelService:
             return {"success": False, "error": "Não está logado"}
         
         try:
-            # Find the row with this UC number
+            # The COPEL portal uses PrimeFaces, so we need to find the onclick element for each row
+            # Find all onclick elements that trigger PrimeFaces.ab()
+            onclick_elements = await self.page.query_selector_all('[onclick*="PrimeFaces.ab"]')
+            
+            # Find the row with this UC number first
             rows = await self.page.query_selector_all('table tbody tr')
+            target_row_index = -1
             
-            for row in rows:
-                cells = await row.query_selector_all('td')
-                if cells:
-                    first_cell_text = await cells[0].text_content()
-                    if first_cell_text and uc_number in first_cell_text:
-                        # Find and click the select button/link in this row
-                        select_btn = await row.query_selector('a, button, [onclick]')
-                        if select_btn:
-                            await select_btn.click()
-                            await asyncio.sleep(3)
-                            
-                            logger.info(f"Selected UC: {uc_number}")
-                            return {
-                                "success": True,
-                                "uc_number": uc_number,
-                                "url": self.page.url
-                            }
+            for idx, row in enumerate(rows):
+                row_text = await row.text_content()
+                if uc_number in row_text:
+                    target_row_index = idx
+                    logger.info(f"Found UC {uc_number} at row index {idx}")
+                    break
             
-            return {"success": False, "error": f"UC {uc_number} não encontrada"}
+            if target_row_index == -1:
+                return {"success": False, "error": f"UC {uc_number} não encontrada na tabela"}
+            
+            # Find the select element for this row - it's typically in the last cell
+            row = rows[target_row_index]
+            select_element = await row.query_selector('[onclick*="PrimeFaces.ab"]')
+            
+            if not select_element:
+                # Try to find any clickable element in the row
+                select_element = await row.query_selector('a, span[onclick], td:last-child span')
+            
+            if not select_element:
+                return {"success": False, "error": "Botão de seleção não encontrado"}
+            
+            # Click the select element
+            await select_element.click()
+            
+            # Wait for page to load
+            await asyncio.sleep(4)
+            
+            # Check if we navigated to a new page
+            new_url = self.page.url
+            logger.info(f"After selection, URL: {new_url}")
+            
+            # Take screenshot
+            await self.page.screenshot(path=f"{self.download_path}/uc_selected_{uc_number}.png")
+            
+            return {
+                "success": True,
+                "uc_number": uc_number,
+                "url": new_url
+            }
             
         except Exception as e:
             logger.error(f"Error selecting UC: {str(e)}")
