@@ -713,6 +713,180 @@ async def create_invoice(invoice_data: InvoiceDataCreate, current_user: dict = D
     await db.invoices.insert_one(doc)
     return invoice
 
+@api_router.get("/invoices/{invoice_id}")
+async def get_invoice(invoice_id: str, current_user: dict = Depends(get_current_user)):
+    invoice = await db.invoices.find_one({'id': invoice_id}, {'_id': 0})
+    if not invoice:
+        raise HTTPException(status_code=404, detail="Fatura não encontrada")
+    if isinstance(invoice.get('created_at'), str):
+        invoice['created_at'] = datetime.fromisoformat(invoice['created_at'])
+    return invoice
+
+@api_router.put("/invoices/{invoice_id}")
+async def update_invoice(invoice_id: str, invoice_data: InvoiceDataCreate, current_user: dict = Depends(get_current_user)):
+    result = await db.invoices.update_one(
+        {'id': invoice_id},
+        {'$set': invoice_data.model_dump()}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Fatura não encontrada")
+    return await get_invoice(invoice_id, current_user)
+
+@api_router.delete("/invoices/{invoice_id}")
+async def delete_invoice(invoice_id: str, current_user: dict = Depends(get_current_user)):
+    result = await db.invoices.delete_one({'id': invoice_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Fatura não encontrada")
+    return {"message": "Fatura removida com sucesso"}
+
+# ==================== INVOICE PDF UPLOAD ====================
+
+from services.pdf_parser_service import parse_copel_invoice
+import shutil
+
+UPLOAD_DIR = "/tmp/invoice_uploads"
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+@api_router.post("/invoices/upload-pdf/{consumer_unit_id}")
+async def upload_invoice_pdf(
+    consumer_unit_id: str,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Upload a COPEL invoice PDF and extract data automatically
+    """
+    # Verify consumer unit exists
+    unit = await db.consumer_units.find_one({'id': consumer_unit_id, 'is_active': True}, {'_id': 0})
+    if not unit:
+        raise HTTPException(status_code=404, detail="Unidade consumidora não encontrada")
+    
+    # Validate file type
+    if not file.filename.lower().endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="Apenas arquivos PDF são aceitos")
+    
+    # Save file
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    filename = f"fatura_{consumer_unit_id}_{timestamp}.pdf"
+    filepath = os.path.join(UPLOAD_DIR, filename)
+    
+    try:
+        with open(filepath, 'wb') as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao salvar arquivo: {str(e)}")
+    
+    # Parse PDF
+    try:
+        parsed_data = parse_copel_invoice(filepath)
+    except Exception as e:
+        logger.error(f"Error parsing PDF: {str(e)}")
+        return {
+            "success": False,
+            "error": f"Erro ao processar PDF: {str(e)}",
+            "filepath": filepath
+        }
+    
+    if not parsed_data.get('success'):
+        return {
+            "success": False,
+            "error": parsed_data.get('error', 'Erro desconhecido'),
+            "filepath": filepath
+        }
+    
+    # Return parsed data for user to confirm/edit before saving
+    return {
+        "success": True,
+        "message": "PDF processado com sucesso. Revise os dados antes de salvar.",
+        "filepath": filepath,
+        "parsed_data": {
+            "consumer_unit_id": consumer_unit_id,
+            "plant_id": unit.get('plant_id'),
+            "uc_number": parsed_data.get('uc_number'),
+            "holder_name": parsed_data.get('holder_name'),
+            "reference_month": parsed_data.get('reference_month'),
+            "billing_cycle_start": parsed_data.get('billing_cycle_start'),
+            "billing_cycle_end": parsed_data.get('billing_cycle_end'),
+            "due_date": parsed_data.get('due_date'),
+            "amount_total_brl": parsed_data.get('amount_total_brl', 0),
+            "amount_saved_brl": parsed_data.get('amount_saved_brl', 0),
+            "energy_registered_fp_kwh": parsed_data.get('energy_registered_fp_kwh', 0),
+            "energy_tariff_fp_brl": parsed_data.get('energy_tariff_fp_brl', 0),
+            "energy_billed_fp_kwh": parsed_data.get('energy_billed_fp_kwh', 0),
+            "energy_injected_fp_kwh": parsed_data.get('energy_injected_fp_kwh', 0),
+            "energy_compensated_fp_kwh": parsed_data.get('energy_compensated_fp_kwh', 0),
+            "credits_accumulated_fp_kwh": parsed_data.get('credits_accumulated_fp_kwh', 0),
+            "energy_registered_p_kwh": parsed_data.get('energy_registered_p_kwh', 0),
+            "energy_injected_p_kwh": parsed_data.get('energy_injected_p_kwh', 0),
+            "energy_compensated_p_kwh": parsed_data.get('energy_compensated_p_kwh', 0),
+            "credits_accumulated_p_kwh": parsed_data.get('credits_accumulated_p_kwh', 0),
+            "demand_registered_kw": parsed_data.get('demand_registered_kw', 0),
+            "public_lighting_brl": parsed_data.get('public_lighting_brl', 0),
+            "icms_brl": parsed_data.get('icms_brl', 0),
+            "tariff_group": parsed_data.get('tariff_group', 'B'),
+            "is_generator": parsed_data.get('is_generator', False),
+            "credits_balance_p_kwh": parsed_data.get('credits_balance_p_kwh', 0),
+            "credits_balance_fp_kwh": parsed_data.get('credits_balance_fp_kwh', 0),
+            "pdf_file_path": filepath,
+            "source": "upload"
+        }
+    }
+
+@api_router.post("/invoices/save-from-upload")
+async def save_invoice_from_upload(invoice_data: dict, current_user: dict = Depends(get_current_user)):
+    """
+    Save invoice data after user review/edit from PDF upload
+    """
+    # Verify consumer unit exists
+    consumer_unit_id = invoice_data.get('consumer_unit_id')
+    if not consumer_unit_id:
+        raise HTTPException(status_code=400, detail="consumer_unit_id é obrigatório")
+    
+    unit = await db.consumer_units.find_one({'id': consumer_unit_id, 'is_active': True})
+    if not unit:
+        raise HTTPException(status_code=404, detail="Unidade consumidora não encontrada")
+    
+    # Create invoice record
+    invoice = InvoiceData(
+        consumer_unit_id=consumer_unit_id,
+        plant_id=invoice_data.get('plant_id', unit.get('plant_id')),
+        reference_month=invoice_data.get('reference_month', ''),
+        billing_cycle_start=invoice_data.get('billing_cycle_start', ''),
+        billing_cycle_end=invoice_data.get('billing_cycle_end', ''),
+        due_date=invoice_data.get('due_date'),
+        amount_total_brl=invoice_data.get('amount_total_brl', 0),
+        amount_saved_brl=invoice_data.get('amount_saved_brl', 0),
+        energy_registered_fp_kwh=invoice_data.get('energy_registered_fp_kwh', 0),
+        energy_tariff_fp_brl=invoice_data.get('energy_tariff_fp_brl', 0),
+        energy_billed_fp_kwh=invoice_data.get('energy_billed_fp_kwh', 0),
+        energy_injected_fp_kwh=invoice_data.get('energy_injected_fp_kwh', 0),
+        energy_compensated_fp_kwh=invoice_data.get('energy_compensated_fp_kwh', 0),
+        credits_accumulated_fp_kwh=invoice_data.get('credits_accumulated_fp_kwh', 0),
+        energy_registered_p_kwh=invoice_data.get('energy_registered_p_kwh', 0),
+        energy_injected_p_kwh=invoice_data.get('energy_injected_p_kwh', 0),
+        energy_compensated_p_kwh=invoice_data.get('energy_compensated_p_kwh', 0),
+        credits_accumulated_p_kwh=invoice_data.get('credits_accumulated_p_kwh', 0),
+        demand_registered_kw=invoice_data.get('demand_registered_kw', 0),
+        public_lighting_brl=invoice_data.get('public_lighting_brl', 0),
+        icms_brl=invoice_data.get('icms_brl', 0),
+        tariff_group=invoice_data.get('tariff_group', 'B'),
+        is_generator=invoice_data.get('is_generator', False),
+        credits_balance_p_kwh=invoice_data.get('credits_balance_p_kwh', 0),
+        credits_balance_fp_kwh=invoice_data.get('credits_balance_fp_kwh', 0),
+        pdf_file_path=invoice_data.get('pdf_file_path'),
+        source=invoice_data.get('source', 'upload')
+    )
+    
+    doc = invoice.model_dump()
+    doc['created_at'] = doc['created_at'].isoformat()
+    await db.invoices.insert_one(doc)
+    
+    return {
+        "success": True,
+        "message": "Fatura salva com sucesso",
+        "invoice_id": invoice.id
+    }
+
 # ==================== DASHBOARD STATS ====================
 
 @api_router.get("/dashboard/stats")
