@@ -1590,144 +1590,6 @@ async def get_plant_report_data(
         'historical': list(reversed(historical))
     }
 
-# ==================== GROWATT INTEGRATION ====================
-
-from services.growatt_service import get_growatt_service, GrowattService
-from services.copel_service import CopelService, test_copel_login, download_copel_invoice
-
-class GrowattLoginRequest(BaseModel):
-    plant_id: str  # Our internal plant ID
-    username: str
-    password: str
-
-class GrowattSyncRequest(BaseModel):
-    plant_id: str
-    growatt_plant_id: str
-    days: int = 30
-
-@api_router.post("/integrations/growatt/test-login")
-async def test_growatt_login(request: GrowattLoginRequest, current_user: dict = Depends(get_current_user)):
-    """Test Growatt credentials and list available plants"""
-    service = GrowattService()
-    result = service.login(request.username, request.password)
-    
-    if not result.get('success'):
-        raise HTTPException(status_code=400, detail=result.get('error', 'Login failed'))
-    
-    # Get plant list
-    plants = service.get_plant_list()
-    
-    return {
-        "success": True,
-        "user_name": result.get('user_name'),
-        "plants": plants
-    }
-
-@api_router.post("/integrations/growatt/sync")
-async def sync_growatt_data(request: GrowattSyncRequest, current_user: dict = Depends(get_current_user)):
-    """Sync generation data from Growatt for a plant"""
-    
-    # Get stored credentials
-    cred = await db.inverter_credentials.find_one({
-        'plant_id': request.plant_id,
-        'brand': 'growatt',
-        'is_active': True
-    })
-    
-    if not cred:
-        raise HTTPException(status_code=404, detail="Credenciais Growatt não encontradas para esta usina")
-    
-    # Login to Growatt
-    service = GrowattService()
-    
-    # Note: In production, password should be decrypted
-    # For now, we'll need the user to provide credentials
-    raise HTTPException(
-        status_code=501, 
-        detail="Sincronização automática em desenvolvimento. Use o teste de login primeiro."
-    )
-
-@api_router.get("/integrations/growatt/plants/{plant_id}")
-async def get_growatt_plant_details(plant_id: str, current_user: dict = Depends(get_current_user)):
-    """Get details of a Growatt plant (requires active session)"""
-    service = get_growatt_service()
-    
-    if not service.logged_in:
-        raise HTTPException(status_code=401, detail="Faça login no Growatt primeiro")
-    
-    details = service.get_plant_details(plant_id)
-    if not details:
-        raise HTTPException(status_code=404, detail="Usina não encontrada no Growatt")
-    
-    return details
-
-@api_router.post("/integrations/growatt/fetch-data")
-async def fetch_and_save_growatt_data(
-    plant_id: str,
-    growatt_plant_id: str,
-    username: str,
-    password: str,
-    days: int = 30,
-    current_user: dict = Depends(get_current_user)
-):
-    """Fetch data from Growatt and save to database"""
-    
-    # Verify our plant exists
-    plant = await db.plants.find_one({'id': plant_id, 'is_active': True})
-    if not plant:
-        raise HTTPException(status_code=404, detail="Usina não encontrada")
-    
-    # Login to Growatt
-    service = GrowattService()
-    login_result = service.login(username, password)
-    
-    if not login_result.get('success'):
-        raise HTTPException(status_code=400, detail=login_result.get('error', 'Login failed'))
-    
-    # Sync data
-    sync_result = service.sync_plant_data(growatt_plant_id, days)
-    
-    if not sync_result.get('success'):
-        raise HTTPException(status_code=500, detail=sync_result.get('error', 'Sync failed'))
-    
-    # Save to database
-    records_inserted = 0
-    records_updated = 0
-    
-    for record in sync_result.get('data', []):
-        date_str = record.get('date')
-        gen_kwh = record.get('generation_kwh', 0)
-        
-        if not date_str or gen_kwh <= 0:
-            continue
-        
-        existing = await db.generation_data.find_one({'plant_id': plant_id, 'date': date_str})
-        if existing:
-            await db.generation_data.update_one(
-                {'plant_id': plant_id, 'date': date_str},
-                {'$set': {'generation_kwh': gen_kwh, 'source': 'growatt'}}
-            )
-            records_updated += 1
-        else:
-            data = GenerationData(plant_id=plant_id, date=date_str, generation_kwh=gen_kwh, source='growatt')
-            doc = data.model_dump()
-            doc['created_at'] = doc['created_at'].isoformat()
-            await db.generation_data.insert_one(doc)
-            records_inserted += 1
-    
-    # Update last sync time
-    await db.inverter_credentials.update_one(
-        {'plant_id': plant_id, 'brand': 'growatt'},
-        {'$set': {'last_sync': datetime.now(timezone.utc).isoformat()}}
-    )
-    
-    return {
-        "success": True,
-        "records_inserted": records_inserted,
-        "records_updated": records_updated,
-        "total_synced": records_inserted + records_updated
-    }
-
 # ==================== ROOT ROUTE ====================
 
 @api_router.get("/")
@@ -1748,6 +1610,8 @@ async def generate_pdf_report(
     )
 
 # ==================== COPEL INTEGRATION ====================
+
+from services.copel_service import CopelService, test_copel_login, download_copel_invoice
 
 class CopelLoginRequest(BaseModel):
     cpf_cnpj: str
