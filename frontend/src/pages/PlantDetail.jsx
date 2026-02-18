@@ -78,6 +78,17 @@ const PlantDetail = () => {
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   
+  // Growatt integration
+  const [growattDialogOpen, setGrowattDialogOpen] = useState(false);
+  const [growattLoading, setGrowattLoading] = useState(false);
+  const [growattPlants, setGrowattPlants] = useState([]);
+  const [growattCredentials, setGrowattCredentials] = useState({
+    username: '',
+    password: ''
+  });
+  const [selectedGrowattPlant, setSelectedGrowattPlant] = useState(null);
+  const [syncingGrowatt, setSyncingGrowatt] = useState(false);
+  
   // Form data
   const [ucFormData, setUcFormData] = useState({
     uc_number: '',
