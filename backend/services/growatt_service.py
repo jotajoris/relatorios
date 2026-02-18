@@ -1,287 +1,298 @@
 """
-Growatt API Integration Service
-Handles authentication and data fetching from Growatt solar monitoring platform
-Uses the new OpenAPI V1 with token-based authentication
+Growatt OSS Portal Integration Service
+Uses Playwright for web scraping the OSS portal to fetch plant data
 """
 
-import requests
+import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timezone
 from typing import Optional, Dict, List, Any
+from playwright.async_api import async_playwright, Browser, BrowserContext, Page
 
 logger = logging.getLogger(__name__)
 
 
-class GrowattService:
-    """Service class for Growatt API integration using token authentication"""
+class GrowattOSSService:
+    """Service class for Growatt OSS portal integration using web scraping"""
     
-    def __init__(self, token: Optional[str] = None):
-        self.token = token
-        self.base_url = "https://openapi.growatt.com"
-        self.headers = {
-            "token": token,
-            "Content-Type": "application/json"
-        } if token else {}
-        self.logged_in = token is not None
+    def __init__(self):
+        self.browser: Optional[Browser] = None
+        self.context: Optional[BrowserContext] = None
+        self.page: Optional[Page] = None
+        self.logged_in = False
+        self.plants_cache: List[Dict] = []
+        self.cache_time: Optional[datetime] = None
+        self.cache_ttl_seconds = 300  # 5 minutes cache
     
-    def set_token(self, token: str):
-        """Set the API token for authentication"""
-        self.token = token
-        self.headers["token"] = token
-        self.logged_in = True
-        logger.info("Growatt API token configured")
+    async def _init_browser(self):
+        """Initialize browser if not already done"""
+        if self.browser is None:
+            playwright = await async_playwright().start()
+            self.browser = await playwright.chromium.launch(headless=True)
+            self.context = await self.browser.new_context(
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                viewport={'width': 1920, 'height': 1080}
+            )
+            self.page = await self.context.new_page()
     
-    def _make_request(self, endpoint: str, params: Optional[Dict] = None) -> Dict[str, Any]:
-        """Make a GET request to the Growatt API"""
-        if not self.token:
-            return {"success": False, "error": "No API token configured"}
-        
-        try:
-            url = f"{self.base_url}/v1{endpoint}"
-            response = requests.get(url, headers=self.headers, params=params or {}, timeout=30)
-            response.raise_for_status()
-            
-            data = response.json()
-            
-            if data.get("error_code") == 0:
-                return {"success": True, "data": data.get("data", {})}
-            else:
-                error_msg = data.get("error_msg", "Unknown error")
-                return {"success": False, "error": error_msg, "error_code": data.get("error_code")}
-                
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Growatt API request error: {str(e)}")
-            return {"success": False, "error": str(e)}
-        except Exception as e:
-            logger.error(f"Unexpected error in Growatt API: {str(e)}")
-            return {"success": False, "error": str(e)}
+    async def close(self):
+        """Close browser and cleanup resources"""
+        if self.browser:
+            await self.browser.close()
+            self.browser = None
+            self.context = None
+            self.page = None
+            self.logged_in = False
     
-    def test_connection(self) -> Dict[str, Any]:
-        """Test the API connection and token validity"""
-        result = self._make_request("/plant/list", {"page": 1, "perpage": 1})
-        
-        if result.get("success"):
-            return {
-                "success": True,
-                "message": "Connection successful",
-                "plants_count": result.get("data", {}).get("count", 0)
-            }
-        elif result.get("error_code") == 10011:
-            return {
-                "success": False,
-                "error": "Token inválido ou permissão negada. Verifique se o token foi gerado pelo app ShinePhone."
-            }
-        else:
-            return result
-    
-    def get_plant_list(self, page: int = 1, per_page: int = 100) -> List[Dict[str, Any]]:
+    async def login(self, username: str, password: str) -> Dict[str, Any]:
         """
-        Get list of all plants associated with the token
+        Login to Growatt OSS portal
         
+        Args:
+            username: Growatt account username
+            password: Growatt account password
+            
+        Returns:
+            Login result with success status
+        """
+        try:
+            await self._init_browser()
+            
+            logger.info(f"Attempting Growatt OSS login for user: {username}")
+            
+            # Navigate to login page
+            await self.page.goto("https://oss.growatt.com/login", wait_until="networkidle", timeout=30000)
+            await self.page.wait_for_timeout(2000)
+            
+            # Close region modal if present
+            try:
+                confirm_btn = self.page.locator('#fenquLayer .fenquLayerBtn:has-text("Confirm")')
+                if await confirm_btn.is_visible():
+                    await confirm_btn.click(force=True, timeout=3000)
+                    await self.page.wait_for_timeout(500)
+            except:
+                pass
+            
+            # Accept terms if present
+            try:
+                agree_btn = self.page.locator('#agree')
+                if await agree_btn.is_visible():
+                    await agree_btn.click(force=True, timeout=3000)
+                    await self.page.wait_for_timeout(500)
+            except:
+                pass
+            
+            # Fill credentials
+            await self.page.locator('#userName-id').fill(username)
+            await self.page.locator('#passWd-id').fill(password)
+            
+            # Submit login
+            await self.page.locator('#passWd-id').press('Enter')
+            await self.page.wait_for_timeout(5000)
+            
+            # Check if login was successful
+            if 'index' in self.page.url:
+                self.logged_in = True
+                logger.info("Growatt OSS login successful")
+                return {
+                    "success": True,
+                    "message": "Login realizado com sucesso",
+                    "url": self.page.url
+                }
+            else:
+                logger.error(f"Growatt OSS login failed. URL: {self.page.url}")
+                return {
+                    "success": False,
+                    "error": "Login falhou. Verifique as credenciais."
+                }
+                
+        except Exception as e:
+            logger.error(f"Growatt OSS login error: {str(e)}")
+            return {"success": False, "error": str(e)}
+    
+    async def get_plants(self, force_refresh: bool = False) -> List[Dict[str, Any]]:
+        """
+        Get list of all plants from Growatt OSS
+        
+        Args:
+            force_refresh: Force refresh from server even if cache is valid
+            
         Returns:
             List of plant information dictionaries
         """
-        result = self._make_request("/plant/list", {"page": page, "perpage": per_page})
-        
-        if not result.get("success"):
-            logger.error(f"Failed to get plant list: {result.get('error')}")
+        if not self.logged_in:
             return []
         
-        plants_data = result.get("data", {})
-        plants = plants_data.get("plants", [])
+        # Check cache
+        if not force_refresh and self.plants_cache and self.cache_time:
+            cache_age = (datetime.now(timezone.utc) - self.cache_time).total_seconds()
+            if cache_age < self.cache_ttl_seconds:
+                logger.info(f"Returning cached plants ({len(self.plants_cache)} plants)")
+                return self.plants_cache
         
-        return [
-            {
-                "id": p.get("plant_id") or p.get("plantId") or p.get("id"),
-                "name": p.get("plant_name") or p.get("plantName") or p.get("name"),
-                "capacity_kwp": float(p.get("peak_power", 0) or p.get("nominal_power", 0)) / 1000 if p.get("peak_power") or p.get("nominal_power") else 0,
-                "location": p.get("city", ""),
-                "country": p.get("country", ""),
-                "timezone": p.get("timezone", ""),
-                "status": "online" if p.get("status") == "1" else "offline",
-                "today_energy_kwh": float(p.get("today_energy", 0) or 0),
-                "total_energy_kwh": float(p.get("total_energy", 0) or 0),
-                "current_power_kw": float(p.get("current_power", 0) or 0),
-            }
-            for p in plants if isinstance(p, dict)
-        ]
+        try:
+            logger.info("Fetching plants from Growatt OSS...")
+            
+            # Wait for page to be ready
+            await self.page.wait_for_timeout(3000)
+            
+            # Extract data from table in main frame
+            frames = self.page.frames
+            
+            for frame in frames:
+                try:
+                    # Check if this frame has the plant table
+                    tr_count = await frame.evaluate('() => document.querySelectorAll("table tr").length')
+                    
+                    if tr_count > 5:  # Has data
+                        raw_data = await frame.evaluate('''
+                            () => {
+                                const rows = document.querySelectorAll('table tbody tr');
+                                const plants = [];
+                                
+                                rows.forEach((row) => {
+                                    const cells = row.querySelectorAll('td');
+                                    if (cells.length >= 10) {
+                                        plants.push({
+                                            number: cells[0]?.innerText?.trim() || '',
+                                            group: cells[1]?.innerText?.trim() || '',
+                                            status: cells[2]?.innerText?.trim() || '',
+                                            plantName: cells[3]?.innerText?.trim() || '',
+                                            alias: cells[4]?.innerText?.trim() || '',
+                                            userName: cells[5]?.innerText?.trim() || '',
+                                            city: cells[6]?.innerText?.trim() || '',
+                                            revenue: cells[7]?.innerText?.trim() || '',
+                                            timezone: cells[8]?.innerText?.trim() || '',
+                                            installDate: cells[9]?.innerText?.trim() || '',
+                                            deviceCount: cells[10]?.innerText?.trim() || '',
+                                            pvPower: cells[11]?.innerText?.trim() || '',
+                                            dailyGen: cells[12]?.innerText?.trim() || '',
+                                            fullHours: cells[13]?.innerText?.trim() || '',
+                                            totalGen: cells[14]?.innerText?.trim() || ''
+                                        });
+                                    }
+                                });
+                                
+                                return plants;
+                            }
+                        ''')
+                        
+                        if raw_data:
+                            # Parse and normalize data
+                            plants = []
+                            for p in raw_data:
+                                if p.get('plantName'):
+                                    # Parse power values
+                                    pv_power = p.get('pvPower', '0')
+                                    pv_power_kwp = float(pv_power.replace('kWp', '').replace(',', '.').strip() or 0)
+                                    
+                                    daily_gen = p.get('dailyGen', '0')
+                                    daily_gen_kwh = float(daily_gen.replace('kWh', '').replace(',', '.').strip() or 0)
+                                    
+                                    total_gen = p.get('totalGen', '0')
+                                    total_gen_kwh = float(total_gen.replace('kWh', '').replace(',', '.').strip() or 0)
+                                    
+                                    plants.append({
+                                        "id": p.get('number', ''),
+                                        "name": p.get('plantName', ''),
+                                        "alias": p.get('alias', ''),
+                                        "username": p.get('userName', ''),
+                                        "group": p.get('group', ''),
+                                        "city": p.get('city', ''),
+                                        "status": "online" if p.get('status', '').lower() == 'online' else "offline",
+                                        "capacity_kwp": pv_power_kwp,
+                                        "today_energy_kwh": daily_gen_kwh,
+                                        "total_energy_kwh": total_gen_kwh,
+                                        "full_hours": float(p.get('fullHours', '0').replace(',', '.') or 0),
+                                        "device_count": int(p.get('deviceCount', '0') or 0),
+                                        "installation_date": p.get('installDate', ''),
+                                        "timezone": p.get('timezone', ''),
+                                        "revenue": p.get('revenue', ''),
+                                    })
+                            
+                            # Update cache
+                            self.plants_cache = plants
+                            self.cache_time = datetime.now(timezone.utc)
+                            
+                            logger.info(f"Successfully fetched {len(plants)} plants from Growatt OSS")
+                            return plants
+                            
+                except Exception as e:
+                    logger.debug(f"Frame extraction error: {e}")
+                    continue
+            
+            logger.warning("No plant data found in any frame")
+            return []
+            
+        except Exception as e:
+            logger.error(f"Error fetching plants from Growatt OSS: {str(e)}")
+            return []
     
-    def get_plant_details(self, plant_id: str) -> Optional[Dict[str, Any]]:
+    async def get_plant_details(self, plant_name: str) -> Optional[Dict[str, Any]]:
         """
-        Get detailed information for a specific plant
+        Get details for a specific plant by name
         
         Args:
-            plant_id: The Growatt plant ID
+            plant_name: Name of the plant
             
         Returns:
-            Plant details dictionary or None
+            Plant details or None
         """
-        result = self._make_request("/plant/details", {"plant_id": plant_id})
+        plants = await self.get_plants()
         
-        if not result.get("success"):
-            logger.error(f"Failed to get plant details for {plant_id}: {result.get('error')}")
-            return None
+        for plant in plants:
+            if plant.get('name', '').lower() == plant_name.lower() or \
+               plant.get('alias', '').lower() == plant_name.lower():
+                return plant
         
-        details = result.get("data", {})
+        return None
+    
+    async def sync_plant_energy_data(self, plant_name: str) -> Dict[str, Any]:
+        """
+        Get the latest energy data for a plant
+        
+        Args:
+            plant_name: Name of the plant to sync
+            
+        Returns:
+            Sync result with energy data
+        """
+        plant = await self.get_plant_details(plant_name)
+        
+        if not plant:
+            return {
+                "success": False,
+                "error": f"Usina '{plant_name}' não encontrada"
+            }
         
         return {
-            "id": plant_id,
-            "name": details.get("plant_name") or details.get("plantName"),
-            "capacity_kwp": float(details.get("peak_power", 0) or details.get("nominal_power", 0)) / 1000,
-            "today_energy_kwh": float(details.get("today_energy", 0) or 0),
-            "month_energy_kwh": float(details.get("month_energy", 0) or 0),
-            "year_energy_kwh": float(details.get("year_energy", 0) or 0),
-            "total_energy_kwh": float(details.get("total_energy", 0) or 0),
-            "current_power_kw": float(details.get("current_power", 0) or 0),
-            "co2_reduced_kg": float(details.get("co2_reduction", 0) or details.get("Co2Reduction", 0) or 0),
-            "efficiency_percent": float(details.get("efficiency", 0) or 0),
-            "create_date": details.get("create_date"),
-            "timezone": details.get("timezone"),
-            "country": details.get("country"),
-            "city": details.get("city"),
-        }
-    
-    def get_plant_energy_overview(self, plant_id: str) -> Optional[Dict[str, Any]]:
-        """Get energy overview for a plant"""
-        result = self._make_request("/plant/energy/overview", {"plant_id": plant_id})
-        
-        if not result.get("success"):
-            return None
-            
-        return result.get("data", {})
-    
-    def get_device_list(self, plant_id: str) -> List[Dict[str, Any]]:
-        """
-        Get list of devices (inverters, etc.) for a plant
-        
-        Args:
-            plant_id: The Growatt plant ID
-            
-        Returns:
-            List of device information
-        """
-        result = self._make_request("/device/list", {"plant_id": plant_id})
-        
-        if not result.get("success"):
-            logger.error(f"Failed to get device list for {plant_id}: {result.get('error')}")
-            return []
-        
-        devices = result.get("data", {}).get("devices", [])
-        
-        return [
-            {
-                "serial_number": d.get("device_sn") or d.get("deviceSn") or d.get("sn"),
-                "alias": d.get("alias") or d.get("deviceAilas"),
-                "type": d.get("device_type") or d.get("deviceType"),
-                "model": d.get("device_model") or d.get("deviceModel"),
-                "status": "online" if d.get("status") == "1" else "offline",
-                "last_update": d.get("last_update_time") or d.get("lastUpdateTime"),
-                "datalogger_sn": d.get("datalogger_sn") or d.get("dataloggerSn"),
+            "success": True,
+            "plant_name": plant.get('name'),
+            "data": {
+                "date": datetime.now(timezone.utc).strftime('%Y-%m-%d'),
+                "generation_kwh": plant.get('today_energy_kwh', 0),
+                "capacity_kwp": plant.get('capacity_kwp', 0),
+                "status": plant.get('status'),
+                "full_hours": plant.get('full_hours', 0),
             }
-            for d in devices if isinstance(d, dict)
-        ]
-    
-    def get_inverter_data(self, device_sn: str, device_type: str = "min") -> Optional[Dict[str, Any]]:
-        """
-        Get real-time data for a specific inverter
-        
-        Args:
-            device_sn: Device serial number
-            device_type: Device type (min, max, mix, tlx, spa, etc.)
-            
-        Returns:
-            Inverter data dictionary or None
-        """
-        endpoint_map = {
-            "min": "/device/min/data",
-            "max": "/device/max/data",
-            "mix": "/device/mix/data",
-            "tlx": "/device/tlx/data",
-            "spa": "/device/spa/data",
-            "sph": "/device/sph/data",
         }
-        
-        endpoint = endpoint_map.get(device_type.lower(), "/device/inverter/data")
-        result = self._make_request(endpoint, {"device_sn": device_sn})
-        
-        if not result.get("success"):
-            return None
-            
-        return result.get("data", {})
-    
-    def get_plant_energy_history(self, plant_id: str, time_unit: str = "day", 
-                                  start_date: Optional[str] = None) -> List[Dict[str, Any]]:
-        """
-        Get historical energy data for a plant
-        
-        Args:
-            plant_id: The Growatt plant ID
-            time_unit: "day", "month", or "year"
-            start_date: Start date in YYYY-MM-DD format
-            
-        Returns:
-            List of energy data records
-        """
-        params = {
-            "plant_id": plant_id,
-            "time_unit": time_unit,
-        }
-        if start_date:
-            params["start_date"] = start_date
-            
-        result = self._make_request("/plant/energy/history", params)
-        
-        if not result.get("success"):
-            return []
-            
-        return result.get("data", {}).get("datas", [])
-    
-    def sync_plant_data(self, plant_id: str, days: int = 30) -> Dict[str, Any]:
-        """
-        Sync all generation data for a plant for the last N days
-        
-        Args:
-            plant_id: The Growatt plant ID
-            days: Number of days to sync (default 30)
-            
-        Returns:
-            Sync results with all daily data
-        """
-        try:
-            daily_records = []
-            today = datetime.now()
-            start_date = (today - timedelta(days=days)).strftime("%Y-%m-%d")
-            
-            # Get historical data
-            history = self.get_plant_energy_history(plant_id, "day", start_date)
-            
-            for record in history:
-                daily_records.append({
-                    "date": record.get("date") or record.get("time"),
-                    "generation_kwh": float(record.get("energy", 0) or 0),
-                    "power_kw": float(record.get("power", 0) or 0),
-                })
-            
-            return {
-                "success": True,
-                "plant_id": plant_id,
-                "records_fetched": len(daily_records),
-                "data": daily_records
-            }
-        except Exception as e:
-            logger.error(f"Error syncing plant data for {plant_id}: {str(e)}")
-            return {"success": False, "error": str(e)}
 
 
 # Singleton instance
-_growatt_service: Optional[GrowattService] = None
+_growatt_oss_service: Optional[GrowattOSSService] = None
 
 
-def get_growatt_service(token: Optional[str] = None) -> GrowattService:
-    """Get or create the Growatt service singleton"""
-    global _growatt_service
-    if _growatt_service is None:
-        _growatt_service = GrowattService(token)
-    elif token and token != _growatt_service.token:
-        _growatt_service.set_token(token)
-    return _growatt_service
+def get_growatt_oss_service() -> GrowattOSSService:
+    """Get or create the Growatt OSS service singleton"""
+    global _growatt_oss_service
+    if _growatt_oss_service is None:
+        _growatt_oss_service = GrowattOSSService()
+    return _growatt_oss_service
+
+
+async def reset_growatt_oss_service():
+    """Reset the service and close browser"""
+    global _growatt_oss_service
+    if _growatt_oss_service:
+        await _growatt_oss_service.close()
+        _growatt_oss_service = None
