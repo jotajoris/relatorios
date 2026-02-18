@@ -306,6 +306,56 @@ async def refresh_token(refresh_token: str):
 async def get_me(current_user: dict = Depends(get_current_user)):
     return current_user
 
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+@api_router.post("/auth/change-password")
+async def change_password(request: ChangePasswordRequest, current_user: dict = Depends(get_current_user)):
+    # Get user with password hash
+    user = await db.users.find_one({'id': current_user['id']}, {'_id': 0})
+    if not user:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado")
+    
+    # Verify current password
+    if not verify_password(request.current_password, user.get('password_hash', '')):
+        raise HTTPException(status_code=400, detail="Senha atual incorreta")
+    
+    # Update password
+    new_hash = hash_password(request.new_password)
+    await db.users.update_one(
+        {'id': current_user['id']},
+        {'$set': {'password_hash': new_hash}}
+    )
+    
+    return {"message": "Senha alterada com sucesso"}
+
+# Seed initial users on startup
+async def seed_users():
+    """Create initial users if they don't exist"""
+    initial_users = [
+        {"email": "projetos.onsolucoes@gmail.com", "name": "João", "role": "admin"},
+        {"email": "comercial.onsolucoes@gmail.com", "name": "Mateus", "role": "user"},
+        {"email": "gerencia.onsolucoes@gmail.com", "name": "Roberto", "role": "user"},
+        {"email": "fabioonsolucoes@gmail.com", "name": "Fabio", "role": "user"},
+    ]
+    
+    default_password = "on123456"
+    
+    for user_data in initial_users:
+        existing = await db.users.find_one({'email': user_data['email']})
+        if not existing:
+            user = User(**user_data)
+            doc = user.model_dump()
+            doc['password_hash'] = hash_password(default_password)
+            doc['created_at'] = doc['created_at'].isoformat()
+            await db.users.insert_one(doc)
+            logger.info(f"Created user: {user_data['email']}")
+
+@app.on_event("startup")
+async def startup_event():
+    await seed_users()
+
 # ==================== CLIENTS ROUTES ====================
 
 @api_router.get("/clients", response_model=List[Client])
