@@ -954,8 +954,8 @@ async def get_plants_summary(current_user: dict = Depends(get_current_user)):
         }, {'_id': 0, 'generation_kwh': 1}).to_list(100)
         
         total_gen = sum(d.get('generation_kwh', 0) for d in gen_data)
-        prognosis = plant.get('monthly_prognosis_kwh', 0)
-        performance = (total_gen / prognosis * 100) if prognosis > 0 else 0
+        prognosis = plant.get('monthly_prognosis_kwh') or 0
+        performance = (total_gen / prognosis * 100) if prognosis and prognosis > 0 else 0
         
         # Get client name
         client = await db.clients.find_one({'id': plant['client_id']}, {'_id': 0, 'name': 1})
