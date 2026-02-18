@@ -206,20 +206,30 @@ class CopelService:
             # Check if login was successful
             current_url = self.page.url
             page_content = await self.page.content()
+            page_text = await self.page.evaluate('() => document.body.innerText')
+            
+            # Check for captcha error specifically
+            if 'captcha' in page_text.lower():
+                logger.warning("CAPTCHA verification required/failed")
+                return {
+                    "success": False, 
+                    "error": "O portal COPEL está exigindo verificação de captcha. Tente novamente mais tarde ou faça login manualmente.",
+                    "captcha_required": True
+                }
             
             # Check for error messages
             error_indicators = ['erro', 'inválid', 'incorret', 'falha', 'error']
             for indicator in error_indicators:
-                if indicator.lower() in page_content.lower():
+                if indicator.lower() in page_text.lower():
                     # Check if it's an actual error message (not just page text)
-                    error_elements = await self.page.query_selector_all('[class*="error"], [class*="alert"], .mensagem-erro')
+                    error_elements = await self.page.query_selector_all('[class*="error"], [class*="alert"], .mensagem-erro, .ui-messages-error')
                     for elem in error_elements:
                         error_text = await elem.text_content()
                         if error_text and len(error_text.strip()) > 0:
                             return {"success": False, "error": f"Erro de login: {error_text.strip()}"}
             
             # Check if we're on a different page (logged in)
-            if 'login' not in current_url.lower() or 'home' in current_url.lower() or 'dashboard' in current_url.lower():
+            if 'login' not in current_url.lower() or 'listarUcs' in current_url or 'inicio' in current_url:
                 self.logged_in = True
                 logger.info("COPEL login successful")
                 return {
@@ -229,9 +239,9 @@ class CopelService:
                 }
             
             # Check for successful login indicators in page content
-            success_indicators = ['bem-vindo', 'faturas', 'unidades', 'consumo', 'histórico']
+            success_indicators = ['bem-vindo', 'faturas', 'unidades', 'consumo', 'histórico', 'selecione']
             for indicator in success_indicators:
-                if indicator.lower() in page_content.lower():
+                if indicator.lower() in page_text.lower():
                     self.logged_in = True
                     logger.info(f"COPEL login successful (found: {indicator})")
                     return {
