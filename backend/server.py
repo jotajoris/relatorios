@@ -1847,6 +1847,140 @@ async def sync_copel_data(request: CopelSyncRequest, current_user: dict = Depend
         "message": "Sincronização COPEL realizada. Fatura baixada com sucesso."
     }
 
+# ==================== GROWATT INTEGRATION ====================
+
+from services.growatt_service import get_growatt_service, GrowattService
+
+class GrowattTokenRequest(BaseModel):
+    token: str
+
+class GrowattPlantSyncRequest(BaseModel):
+    token: str
+    plant_id: str
+    days: int = 30
+
+@api_router.post("/integrations/growatt/test")
+async def test_growatt_connection(request: GrowattTokenRequest, current_user: dict = Depends(get_current_user)):
+    """Test Growatt API connection with the provided token"""
+    service = get_growatt_service(request.token)
+    result = service.test_connection()
+    
+    if not result.get('success'):
+        raise HTTPException(status_code=400, detail=result.get('error', 'Conexão Growatt falhou'))
+    
+    return result
+
+@api_router.post("/integrations/growatt/plants")
+async def list_growatt_plants(request: GrowattTokenRequest, current_user: dict = Depends(get_current_user)):
+    """List all plants from Growatt account"""
+    service = get_growatt_service(request.token)
+    plants = service.get_plant_list()
+    
+    return {
+        "success": True,
+        "plants": plants,
+        "total": len(plants)
+    }
+
+@api_router.post("/integrations/growatt/plant-details")
+async def get_growatt_plant_details(request: GrowattPlantSyncRequest, current_user: dict = Depends(get_current_user)):
+    """Get detailed information for a specific Growatt plant"""
+    service = get_growatt_service(request.token)
+    details = service.get_plant_details(request.plant_id)
+    
+    if not details:
+        raise HTTPException(status_code=404, detail="Usina não encontrada na conta Growatt")
+    
+    return {
+        "success": True,
+        "plant": details
+    }
+
+@api_router.post("/integrations/growatt/devices")
+async def list_growatt_devices(request: GrowattPlantSyncRequest, current_user: dict = Depends(get_current_user)):
+    """List all devices (inverters) for a Growatt plant"""
+    service = get_growatt_service(request.token)
+    devices = service.get_device_list(request.plant_id)
+    
+    return {
+        "success": True,
+        "devices": devices,
+        "total": len(devices)
+    }
+
+@api_router.post("/integrations/growatt/sync")
+async def sync_growatt_data(request: GrowattPlantSyncRequest, current_user: dict = Depends(get_current_user)):
+    """Sync generation data from Growatt for a specific plant"""
+    service = get_growatt_service(request.token)
+    
+    # Get sync data
+    sync_result = service.sync_plant_data(request.plant_id, request.days)
+    
+    if not sync_result.get('success'):
+        raise HTTPException(status_code=400, detail=sync_result.get('error', 'Falha ao sincronizar dados'))
+    
+    # Save to database - find local plant that matches
+    # We need to find the local plant by Growatt plant_id
+    local_plant = await db.plants.find_one({
+        '$or': [
+            {'growatt_plant_id': request.plant_id},
+            {'external_plant_id': request.plant_id}
+        ],
+        'is_active': True
+    })
+    
+    records_saved = 0
+    if local_plant:
+        for record in sync_result.get('data', []):
+            if record.get('date') and record.get('generation_kwh', 0) > 0:
+                await db.generation_data.update_one(
+                    {'plant_id': local_plant['id'], 'date': record['date']},
+                    {'$set': {
+                        'generation_kwh': record['generation_kwh'],
+                        'source': 'growatt',
+                        'synced_at': datetime.now(timezone.utc).isoformat()
+                    }},
+                    upsert=True
+                )
+                records_saved += 1
+        
+        # Log activity
+        await log_activity(local_plant['id'], "growatt_sync", 
+                          f"Sincronização Growatt: {records_saved} registros importados", 
+                          current_user.get('name'))
+    
+    return {
+        "success": True,
+        "growatt_plant_id": request.plant_id,
+        "records_fetched": sync_result.get('records_fetched', 0),
+        "records_saved": records_saved,
+        "local_plant_found": local_plant is not None,
+        "message": f"Sincronização concluída. {records_saved} registros salvos." if local_plant else "Dados obtidos, mas nenhuma usina local vinculada encontrada."
+    }
+
+@api_router.post("/integrations/growatt/link-plant")
+async def link_growatt_plant(
+    plant_id: str,
+    growatt_plant_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Link a local plant to a Growatt plant ID"""
+    result = await db.plants.update_one(
+        {'id': plant_id, 'is_active': True},
+        {'$set': {
+            'growatt_plant_id': growatt_plant_id,
+            'inverter_integration': 'growatt'
+        }}
+    )
+    
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Usina não encontrada")
+    
+    return {
+        "success": True,
+        "message": f"Usina vinculada ao ID Growatt: {growatt_plant_id}"
+    }
+
 # Include the router in the main app
 app.include_router(api_router)
 
