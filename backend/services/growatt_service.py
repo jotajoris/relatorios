@@ -1,23 +1,38 @@
 """
 Growatt OSS Portal Integration Service
 Uses Playwright for web scraping the OSS portal to fetch plant data
+
+NOTE: Playwright is imported lazily to allow the app to start without it installed.
+The automation features will only work when playwright is available.
 """
 
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Optional, Dict, List, Any
-from playwright.async_api import async_playwright, Browser, BrowserContext, Page
+from typing import Optional, Dict, List, Any, TYPE_CHECKING
+
+# Lazy import for playwright - will be imported when actually needed
+if TYPE_CHECKING:
+    from playwright.async_api import Browser, BrowserContext, Page
 
 logger = logging.getLogger(__name__)
+
+# Flag to track if playwright is available
+PLAYWRIGHT_AVAILABLE = False
+try:
+    from playwright.async_api import async_playwright
+    PLAYWRIGHT_AVAILABLE = True
+except ImportError:
+    logger.warning("Playwright not available. Growatt automation features will be disabled.")
+    async_playwright = None
 
 
 class GrowattOSSService:
     """Service class for Growatt OSS portal integration using web scraping"""
     
     def __init__(self):
-        self.browser: Optional[Browser] = None
-        self.context: Optional[BrowserContext] = None
+        self.browser: Optional["Browser"] = None
+        self.context: Optional["BrowserContext"] = None
         self.page: Optional[Page] = None
         self.logged_in = False
         self.plants_cache: List[Dict] = []
