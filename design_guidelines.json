@@ -1,0 +1,175 @@
+{
+  "project_name": "ON Soluções Energéticas - Solar Management System",
+  "design_philosophy": {
+    "identity": "Professional, High-Contrast, Data-First",
+    "emotional_tone": "Efficiency, Reliability, Sustainability",
+    "visual_style": "Dark Sidebar Dashboard with Clean White Data Surfaces",
+    "key_principles": [
+      "Yellow (#FFD600) is for Action and Energy - use it for CTAs, active states, and primary data.",
+      "Black (#1A1A1A) is for Structure - sidebar, headers, strong text.",
+      "White/Light Grey is for Content - cards, tables, reading areas.",
+      "Data Density: High. Use compact tables and clear hierarchy.",
+      "Language: All interface text MUST be in Brazilian Portuguese (pt-BR)."
+    ]
+  },
+  "typography": {
+    "font_family_heading": "Poppins, sans-serif",
+    "font_family_body": "Inter, sans-serif",
+    "scale": {
+      "h1": "text-3xl font-bold tracking-tight text-neutral-900",
+      "h2": "text-2xl font-semibold tracking-tight text-neutral-900",
+      "h3": "text-xl font-semibold text-neutral-900",
+      "body": "text-sm font-normal text-neutral-600 leading-relaxed",
+      "caption": "text-xs font-medium text-neutral-400 uppercase tracking-wider",
+      "data_value": "text-2xl font-bold text-neutral-900 tabular-nums",
+      "data_label": "text-sm text-neutral-500 font-medium"
+    }
+  },
+  "colors": {
+    "primary": {
+      "DEFAULT": "#FFD600",
+      "foreground": "#1A1A1A",
+      "hover": "#EAB308",
+      "active": "#CA8A04"
+    },
+    "secondary": {
+      "DEFAULT": "#1A1A1A",
+      "foreground": "#FFFFFF"
+    },
+    "background": {
+      "body": "#F4F4F5",
+      "card": "#FFFFFF",
+      "sidebar": "#1A1A1A",
+      "sidebar_hover": "#27272A"
+    },
+    "status": {
+      "success": "#10B981",
+      "success_bg": "#ECFDF5",
+      "warning": "#F59E0B",
+      "warning_bg": "#FFFBEB",
+      "error": "#EF4444",
+      "error_bg": "#FEF2F2",
+      "info": "#3B82F6",
+      "info_bg": "#EFF6FF"
+    },
+    "charts": {
+      "generation": "#FFD600",
+      "consumption": "#A1A1AA",
+      "savings": "#10B981",
+      "grid_export": "#3B82F6"
+    }
+  },
+  "layout": {
+    "sidebar": {
+      "width": "w-64",
+      "background": "bg-[#1A1A1A]",
+      "text": "text-neutral-400",
+      "active_text": "text-[#FFD600]",
+      "active_bg": "bg-neutral-800/50",
+      "logo_area": "h-16 flex items-center px-6 border-b border-neutral-800"
+    },
+    "header": {
+      "height": "h-16",
+      "background": "bg-white/80 backdrop-blur-md border-b border-neutral-200",
+      "elements": "flex justify-between items-center px-6"
+    },
+    "main_content": {
+      "padding": "p-6 space-y-6",
+      "grid_dashboard": "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6",
+      "card_style": "bg-white rounded-xl shadow-sm border border-neutral-100 p-6 transition-all hover:shadow-md"
+    }
+  },
+  "components": {
+    "buttons": {
+      "primary": "bg-[#FFD600] hover:bg-[#EAB308] text-[#1A1A1A] font-semibold px-4 py-2 rounded-lg transition-colors shadow-sm",
+      "secondary": "bg-white border border-neutral-200 text-neutral-700 hover:bg-neutral-50 font-medium px-4 py-2 rounded-lg transition-colors",
+      "danger": "bg-red-50 text-red-600 hover:bg-red-100 font-medium px-4 py-2 rounded-lg transition-colors",
+      "ghost": "hover:bg-neutral-100 text-neutral-600 px-3 py-2 rounded-lg transition-colors"
+    },
+    "inputs": {
+      "default": "border-neutral-200 focus:ring-2 focus:ring-[#FFD600] focus:border-transparent rounded-lg text-sm"
+    },
+    "cards": {
+      "kpi": {
+        "wrapper": "flex flex-col justify-between h-full bg-white rounded-xl p-5 border border-neutral-100 shadow-sm relative overflow-hidden",
+        "icon_wrapper": "p-3 rounded-lg bg-neutral-50 text-[#FFD600] w-fit mb-4",
+        "value": "text-3xl font-bold text-neutral-900 tracking-tight",
+        "label": "text-sm text-neutral-500 font-medium uppercase tracking-wide",
+        "trend_positive": "text-emerald-600 text-xs font-medium flex items-center gap-1 mt-2",
+        "trend_negative": "text-red-600 text-xs font-medium flex items-center gap-1 mt-2"
+      }
+    },
+    "tables": {
+      "header": "bg-neutral-50 text-neutral-500 text-xs font-semibold uppercase tracking-wider px-6 py-3 text-left",
+      "row": "border-b border-neutral-100 hover:bg-neutral-50/50 transition-colors",
+      "cell": "px-6 py-4 text-sm text-neutral-700 whitespace-nowrap",
+      "status_badge": "inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium"
+    }
+  },
+  "assets": {
+    "logo": {
+      "url_light_bg": "https://customer-assets.emergentagent.com/job_powerplant-analytics/artifacts/q3i8xrcz_Logo%20ON%20sem%20fundo.png",
+      "url_dark_bg": "https://customer-assets.emergentagent.com/job_powerplant-analytics/artifacts/q3i8xrcz_Logo%20ON%20sem%20fundo.png",
+      "alt": "ON Soluções Energéticas",
+      "note": "Use 'sem fundo' (transparent) version. Ensure it contrasts with the dark sidebar. If the text is black and invisible on the sidebar, use a white container or the 'fundo preto' version: https://customer-assets.emergentagent.com/job_powerplant-analytics/artifacts/jjj04u17_logo%20on%20fundo%20preto.png"
+    },
+    "images": {
+      "login_background": "https://images.unsplash.com/photo-1508514177221-188b1cf16e9d?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDk1Nzd8MHwxfHNlYXJjaHwzfHxzb2xhciUyMHBhbmVsc3xlbnwwfHx8fDE3NzE0MTcwNTB8MA&ixlib=rb-4.1.0&q=85",
+      "empty_state_plants": "https://illustrations.popsy.co/amber/solar-panel.svg",
+      "empty_state_clients": "https://illustrations.popsy.co/amber/engineer.svg"
+    },
+    "icons": {
+      "library": "lucide-react",
+      "dashboard": "LayoutDashboard",
+      "plants": "Factory",
+      "clients": "Users",
+      "reports": "FileText",
+      "settings": "Settings",
+      "logout": "LogOut",
+      "sun": "Sun",
+      "battery": "Battery",
+      "grid": "Zap",
+      "leaf": "Leaf",
+      "money": "DollarSign"
+    }
+  },
+  "pages": {
+    "login": {
+      "layout": "Split screen: Left 40% Form (White), Right 60% Image (Solar Field)",
+      "elements": "Logo top-left, 'Bem-vindo de volta' heading, Email/Password inputs, 'Entrar' primary button."
+    },
+    "dashboard": {
+      "layout": "Sidebar fixed left. Top bar sticky. Main content scrollable.",
+      "widgets": [
+        "Total Generation (kWh) - Yellow Accent",
+        "Active Plants (Count) - Green Accent",
+        "Financial Savings (R$) - Blue Accent",
+        "CO2 Avoided (kg) - Grey Accent",
+        "Generation Chart (Area Chart) - Full Width",
+        "Recent Alerts (List) - Half Width",
+        "Plant Status Table (List) - Half Width"
+      ]
+    },
+    "plants_list": {
+      "view": "Card Grid or Table Toggle.",
+      "card_content": "Image thumbnail, Name, Capacity (kWp), Current Output, Status Badge."
+    }
+  },
+  "instructions_to_main_agent": [
+    "1. Setup Shadcn UI components immediately (Button, Input, Card, Table, Dialog, DropdownMenu).",
+    "2. Configure Tailwind theme with the provided colors (#FFD600 primary).",
+    "3. Implement the LayoutWrapper component with the dark sidebar (#1A1A1A).",
+    "4. Use Recharts for all data visualization. Style them to match the theme (minimalist, no grid lines, custom tooltips).",
+    "5. Ensure ALL text is in Portuguese (pt-BR). Use 'R$' for currency formatting.",
+    "6. Create a 'KPICard' component that accepts title, value, icon, and trend.",
+    "7. Create a 'StatusBadge' component for consistent plant status display.",
+    "8. For the login page, use the provided Unsplash image on the right side with a dark overlay if needed for text contrast."
+  ],
+  "universal_guidelines": [
+    "Do not use generic gradients. Use flat, bold colors or subtle mesh gradients if absolutely necessary.",
+    "Spacing is luxury. Use p-6 or p-8 for card padding.",
+    "Border radius: rounded-xl for containers, rounded-lg for inner elements.",
+    "Micro-interactions: Buttons should scale down slightly on click (active:scale-95). Cards should lift on hover (-translate-y-1).",
+    "Glassmorphism: Use backdrop-blur-md for the top navigation bar to let content scroll underneath smoothly."
+  ]
+}
