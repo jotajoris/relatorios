@@ -33,7 +33,7 @@ class GrowattOSSService:
     def __init__(self):
         self.browser: Optional["Browser"] = None
         self.context: Optional["BrowserContext"] = None
-        self.page: Optional[Page] = None
+        self.page: Optional["Page"] = None
         self.logged_in = False
         self.plants_cache: List[Dict] = []
         self.cache_time: Optional[datetime] = None
@@ -41,6 +41,9 @@ class GrowattOSSService:
     
     async def _init_browser(self):
         """Initialize browser if not already done"""
+        if not PLAYWRIGHT_AVAILABLE:
+            raise RuntimeError("Playwright não está disponível. A integração Growatt está desativada neste ambiente.")
+        
         if self.browser is None:
             playwright = await async_playwright().start()
             self.browser = await playwright.chromium.launch(headless=True)
