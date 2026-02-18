@@ -1,14 +1,21 @@
 """
 COPEL Portal Automation Service
 Uses Playwright to automate login and invoice download from COPEL customer portal
+
+NOTE: Playwright is imported lazily to allow the app to start without it installed.
+The automation features will only work when playwright is available.
 """
 
 import asyncio
 import logging
 import os
 from datetime import datetime
-from typing import Optional, Dict, List, Any
-from playwright.async_api import async_playwright, Browser, Page, TimeoutError as PlaywrightTimeout
+from typing import Optional, Dict, List, Any, TYPE_CHECKING
+
+# Lazy import for playwright - will be imported when actually needed
+# This allows the app to start even if playwright is not installed
+if TYPE_CHECKING:
+    from playwright.async_api import Browser, Page
 
 logger = logging.getLogger(__name__)
 
@@ -16,16 +23,25 @@ logger = logging.getLogger(__name__)
 COPEL_LOGIN_URL = "https://www.copel.com/avaweb/paginaLogin/login.jsf"
 COPEL_BASE_URL = "https://www.copel.com/avaweb"
 
-# Set Playwright browsers path
-os.environ['PLAYWRIGHT_BROWSERS_PATH'] = '/pw-browsers'
+# Flag to track if playwright is available
+PLAYWRIGHT_AVAILABLE = False
+try:
+    from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeout
+    PLAYWRIGHT_AVAILABLE = True
+    # Set Playwright browsers path
+    os.environ['PLAYWRIGHT_BROWSERS_PATH'] = '/pw-browsers'
+except ImportError:
+    logger.warning("Playwright not available. COPEL automation features will be disabled.")
+    async_playwright = None
+    PlaywrightTimeout = Exception
 
 
 class CopelService:
     """Service class for COPEL portal automation"""
     
     def __init__(self):
-        self.browser: Optional[Browser] = None
-        self.page: Optional[Page] = None
+        self.browser: Optional["Browser"] = None
+        self.page: Optional["Page"] = None
         self.logged_in = False
         self.download_path = "/tmp/copel_downloads"
         
