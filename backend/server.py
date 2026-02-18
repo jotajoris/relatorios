@@ -520,6 +520,67 @@ async def delete_client(client_id: str, current_user: dict = Depends(get_current
         raise HTTPException(status_code=404, detail="Cliente não encontrado")
     return {"message": "Cliente removido com sucesso"}
 
+# ==================== LOGO UPLOAD ====================
+
+LOGO_UPLOAD_DIR = "/tmp/logos"
+os.makedirs(LOGO_UPLOAD_DIR, exist_ok=True)
+
+@api_router.post("/upload/logo/{entity_type}/{entity_id}")
+async def upload_logo(
+    entity_type: str,  # "client" or "plant"
+    entity_id: str,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """Upload logo for client or plant"""
+    if entity_type not in ["client", "plant"]:
+        raise HTTPException(status_code=400, detail="Tipo inválido. Use 'client' ou 'plant'")
+    
+    # Validate file type
+    allowed_types = [".png", ".jpg", ".jpeg", ".webp", ".svg"]
+    ext = os.path.splitext(file.filename)[1].lower()
+    if ext not in allowed_types:
+        raise HTTPException(status_code=400, detail=f"Tipo de arquivo não suportado. Use: {', '.join(allowed_types)}")
+    
+    # Verify entity exists
+    collection = db.clients if entity_type == "client" else db.plants
+    entity = await collection.find_one({'id': entity_id, 'is_active': True})
+    if not entity:
+        raise HTTPException(status_code=404, detail=f"{'Cliente' if entity_type == 'client' else 'Usina'} não encontrado")
+    
+    # Save file
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    filename = f"{entity_type}_{entity_id}_{timestamp}{ext}"
+    filepath = os.path.join(LOGO_UPLOAD_DIR, filename)
+    
+    try:
+        with open(filepath, 'wb') as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao salvar arquivo: {str(e)}")
+    
+    # Update entity with logo URL
+    logo_url = f"/api/logos/{filename}"
+    await collection.update_one(
+        {'id': entity_id},
+        {'$set': {'logo_url': logo_url}}
+    )
+    
+    return {
+        "success": True,
+        "logo_url": logo_url,
+        "filename": filename
+    }
+
+@api_router.get("/logos/{filename}")
+async def get_logo(filename: str):
+    """Serve logo file"""
+    from fastapi.responses import FileResponse
+    filepath = os.path.join(LOGO_UPLOAD_DIR, filename)
+    if not os.path.exists(filepath):
+        raise HTTPException(status_code=404, detail="Logo não encontrado")
+    return FileResponse(filepath)
+
 # ==================== PLANTS ROUTES ====================
 
 @api_router.get("/plants", response_model=List[Plant])
