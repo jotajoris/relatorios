@@ -219,103 +219,13 @@ class GrowattOSSService:
                 logger.info(f"Returning cached plants ({len(self.plants_cache)} plants)")
                 return self.plants_cache
         
+        # Force refresh by re-extracting from page
         try:
-            logger.info("Fetching plants from Growatt OSS...")
-            
-            # Wait for page to be ready
-            await self.page.wait_for_timeout(3000)
-            
-            # Extract data from table in main frame
-            frames = self.page.frames
-            
-            for frame in frames:
-                try:
-                    # Check if this frame has the plant table
-                    tr_count = await frame.evaluate('() => document.querySelectorAll("table tr").length')
-                    
-                    if tr_count > 5:  # Has data
-                        raw_data = await frame.evaluate('''
-                            () => {
-                                const rows = document.querySelectorAll('table tbody tr');
-                                const plants = [];
-                                
-                                rows.forEach((row) => {
-                                    const cells = row.querySelectorAll('td');
-                                    if (cells.length >= 10) {
-                                        plants.push({
-                                            number: cells[0]?.innerText?.trim() || '',
-                                            group: cells[1]?.innerText?.trim() || '',
-                                            status: cells[2]?.innerText?.trim() || '',
-                                            plantName: cells[3]?.innerText?.trim() || '',
-                                            alias: cells[4]?.innerText?.trim() || '',
-                                            userName: cells[5]?.innerText?.trim() || '',
-                                            city: cells[6]?.innerText?.trim() || '',
-                                            revenue: cells[7]?.innerText?.trim() || '',
-                                            timezone: cells[8]?.innerText?.trim() || '',
-                                            installDate: cells[9]?.innerText?.trim() || '',
-                                            deviceCount: cells[10]?.innerText?.trim() || '',
-                                            pvPower: cells[11]?.innerText?.trim() || '',
-                                            dailyGen: cells[12]?.innerText?.trim() || '',
-                                            fullHours: cells[13]?.innerText?.trim() || '',
-                                            totalGen: cells[14]?.innerText?.trim() || ''
-                                        });
-                                    }
-                                });
-                                
-                                return plants;
-                            }
-                        ''')
-                        
-                        if raw_data:
-                            # Parse and normalize data
-                            plants = []
-                            for p in raw_data:
-                                if p.get('plantName'):
-                                    # Parse power values
-                                    pv_power = p.get('pvPower', '0')
-                                    pv_power_kwp = float(pv_power.replace('kWp', '').replace(',', '.').strip() or 0)
-                                    
-                                    daily_gen = p.get('dailyGen', '0')
-                                    daily_gen_kwh = float(daily_gen.replace('kWh', '').replace(',', '.').strip() or 0)
-                                    
-                                    total_gen = p.get('totalGen', '0')
-                                    total_gen_kwh = float(total_gen.replace('kWh', '').replace(',', '.').strip() or 0)
-                                    
-                                    plants.append({
-                                        "id": p.get('number', ''),
-                                        "name": p.get('plantName', ''),
-                                        "alias": p.get('alias', ''),
-                                        "username": p.get('userName', ''),
-                                        "group": p.get('group', ''),
-                                        "city": p.get('city', ''),
-                                        "status": "online" if p.get('status', '').lower() == 'online' else "offline",
-                                        "capacity_kwp": pv_power_kwp,
-                                        "today_energy_kwh": daily_gen_kwh,
-                                        "total_energy_kwh": total_gen_kwh,
-                                        "full_hours": float(p.get('fullHours', '0').replace(',', '.') or 0),
-                                        "device_count": int(p.get('deviceCount', '0') or 0),
-                                        "installation_date": p.get('installDate', ''),
-                                        "timezone": p.get('timezone', ''),
-                                        "revenue": p.get('revenue', ''),
-                                    })
-                            
-                            # Update cache
-                            self.plants_cache = plants
-                            self.cache_time = datetime.now(timezone.utc)
-                            
-                            logger.info(f"Successfully fetched {len(plants)} plants from Growatt OSS")
-                            return plants
-                            
-                except Exception as e:
-                    logger.debug(f"Frame extraction error: {e}")
-                    continue
-            
-            logger.warning("No plant data found in any frame")
-            return []
-            
+            await self._extract_plants_from_page()
+            return self.plants_cache
         except Exception as e:
-            logger.error(f"Error fetching plants from Growatt OSS: {str(e)}")
-            return []
+            logger.error(f"Error refreshing plants: {e}")
+            return self.plants_cache  # Return cached data if available
     
     async def get_plant_details(self, plant_name: str) -> Optional[Dict[str, Any]]:
         """
