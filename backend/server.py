@@ -152,16 +152,54 @@ class GenerationData(GenerationDataBase):
 class InvoiceDataBase(BaseModel):
     consumer_unit_id: str
     plant_id: str
+    reference_month: str  # MM/YYYY
     billing_cycle_start: str
     billing_cycle_end: str
-    consumption_ponta_kwh: float = 0
-    consumption_fora_ponta_kwh: float = 0
-    energy_compensated_kwh: float = 0
-    energy_billed_kwh: float = 0
-    credits_previous_kwh: float = 0
-    credits_accumulated_kwh: float = 0
-    amount_billed_brl: float = 0
-    amount_saved_brl: float = 0
+    due_date: Optional[str] = None
+    
+    # Valores financeiros
+    amount_total_brl: float = 0  # Total a pagar
+    amount_saved_brl: float = 0  # Economizado
+    
+    # Dados de energia - Fora Ponta
+    energy_registered_fp_kwh: float = 0
+    energy_tariff_fp_brl: float = 0
+    energy_billed_fp_kwh: float = 0
+    energy_injected_fp_kwh: float = 0
+    energy_compensated_fp_kwh: float = 0
+    credits_accumulated_fp_kwh: float = 0
+    tariff_te_fp_brl: float = 0
+    
+    # Dados de energia - Ponta (Grupo A)
+    energy_registered_p_kwh: float = 0
+    energy_tariff_p_brl: float = 0
+    energy_billed_p_kwh: float = 0
+    energy_injected_p_kwh: float = 0
+    energy_compensated_p_kwh: float = 0
+    credits_accumulated_p_kwh: float = 0
+    tariff_te_p_brl: float = 0
+    
+    # Demanda (Grupo A)
+    demand_registered_kw: float = 0
+    demand_contracted_kw: float = 0
+    demand_billed_kw: float = 0
+    
+    # Créditos
+    credits_balance_p_kwh: float = 0
+    credits_balance_fp_kwh: float = 0
+    
+    # Iluminação pública
+    public_lighting_brl: float = 0
+    
+    # Tributos
+    icms_brl: float = 0
+    pis_cofins_brl: float = 0
+    
+    # Metadados
+    tariff_group: str = "B"  # A ou B
+    is_generator: bool = False
+    pdf_file_path: Optional[str] = None
+    source: str = "manual"  # manual, copel_api, upload
 
 class InvoiceDataCreate(InvoiceDataBase):
     pass
