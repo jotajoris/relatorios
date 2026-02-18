@@ -87,17 +87,28 @@ class SolarPlantAPITester:
     def test_login(self):
         """Test login with provided credentials"""
         login_data = {
-            "email": "admin@on.solar",
-            "password": "admin123"
+            "email": "projetos.onsolucoes@gmail.com", 
+            "password": "on123456"
         }
         success, response = self.run_test(
-            "User Login", "POST", "auth/login", 200, login_data
+            "User Login (projetos.onsolucoes)", "POST", "auth/login", 200, login_data
         )
         if success and 'access_token' in response:
             self.token = response['access_token']
             print(f"   ✓ Token received: {self.token[:20]}...")
             return True
         return False
+    
+    def test_login_comercial(self):
+        """Test login with comercial credentials"""
+        login_data = {
+            "email": "comercial.onsolucoes@gmail.com", 
+            "password": "on123456"
+        }
+        success, response = self.run_test(
+            "User Login (comercial.onsolucoes)", "POST", "auth/login", 200, login_data
+        )
+        return success and 'access_token' in response
 
     def test_get_me(self):
         """Test getting current user info"""
