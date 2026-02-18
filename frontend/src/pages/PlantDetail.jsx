@@ -266,6 +266,128 @@ const PlantDetail = () => {
     }
   };
 
+  // PDF Download Functions
+  const handleDownloadPdf = async (month, type = 'basic') => {
+    const monthStr = `${selectedYear}-${String(month).padStart(2, '0')}`;
+    setDownloadingPdf(month);
+    
+    try {
+      const response = await api.get(`/reports/download-pdf/${plantId}`, {
+        params: { month: monthStr, report_type: type },
+        responseType: 'blob'
+      });
+      
+      // Create download link
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `relatorio_${data?.plant?.name?.replace(/\s+/g, '_')}_${monthStr}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      
+      toast.success('Relatório baixado com sucesso!');
+    } catch (error) {
+      toast.error('Erro ao gerar relatório PDF');
+      console.error(error);
+    } finally {
+      setDownloadingPdf(null);
+    }
+  };
+
+  const openReportDialog = (month) => {
+    setSelectedMonth(month);
+    setReportDialogOpen(true);
+  };
+
+  // Excel Upload Functions
+  const handleExcelUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    setUploadingExcel(true);
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    try {
+      const response = await api.post(`/generation-data/upload-growatt-excel/${plantId}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      
+      if (response.data.success) {
+        const { parsed_data } = response.data;
+        toast.success(
+          `Excel importado: ${parsed_data.plant_name} - ${parsed_data.month_year}\n` +
+          `${response.data.total_processed} registros processados (${parsed_data.total_generation_kwh?.toLocaleString()} kWh)`
+        );
+        loadData();
+        loadChartData();
+      } else {
+        toast.error(response.data.error || 'Erro ao processar Excel');
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Erro ao fazer upload do Excel');
+    } finally {
+      setUploadingExcel(false);
+      if (excelInputRef.current) {
+        excelInputRef.current.value = '';
+      }
+    }
+  };
+
+  // Invoice Upload Functions
+  const handleInvoiceUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    if (!selectedUcForInvoice) {
+      toast.error('Selecione uma UC primeiro');
+      return;
+    }
+    
+    setUploadingInvoice(true);
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    try {
+      const response = await api.post(`/invoices/upload-pdf/${selectedUcForInvoice}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      
+      if (response.data.success) {
+        setParsedInvoice(response.data.parsed_data);
+        toast.success('Fatura processada! Revise os dados antes de salvar.');
+      } else {
+        toast.error(response.data.error || 'Erro ao processar fatura');
+      }
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Erro ao fazer upload da fatura');
+    } finally {
+      setUploadingInvoice(false);
+      if (invoiceInputRef.current) {
+        invoiceInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleSaveInvoice = async () => {
+    if (!parsedInvoice) return;
+    
+    setSaving(true);
+    try {
+      await api.post('/invoices/save-from-upload', parsedInvoice);
+      toast.success('Fatura salva com sucesso!');
+      setParsedInvoice(null);
+      setInvoiceDialogOpen(false);
+      loadData();
+    } catch (error) {
+      toast.error('Erro ao salvar fatura');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleAddUc = () => {
     setEditingUc(null);
     setUcFormData({
