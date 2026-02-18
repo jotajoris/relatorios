@@ -577,7 +577,7 @@ const PlantDetail = () => {
                         <td className="px-4 py-3 text-neutral-600">{uc.uc_number}</td>
                         <td className="px-4 py-3">
                           <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-sm">
-                            {uc.tariff_group || 'A'}4-Comercial
+                            {uc.tariff_modality || `${uc.tariff_group || 'A'}4-Comercial`}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-right font-medium">0%</td>
@@ -605,8 +605,12 @@ const PlantDetail = () => {
                         </td>
                         <td className="px-4 py-3 text-neutral-600">{uc.uc_number}</td>
                         <td className="px-4 py-3">
-                          <span className="px-2 py-1 bg-green-100 text-green-700 rounded text-sm">
-                            {uc.tariff_group || 'B'}3-Comercial
+                          <span className={`px-2 py-1 rounded text-sm ${
+                            uc.tariff_modality?.includes('B1') 
+                              ? 'bg-blue-100 text-blue-700' 
+                              : 'bg-green-100 text-green-700'
+                          }`}>
+                            {uc.tariff_modality || `${uc.tariff_group || 'B'}3-Comercial`}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-right font-medium">{uc.compensation_percentage || 0}%</td>
