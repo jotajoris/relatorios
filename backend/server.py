@@ -1120,6 +1120,87 @@ async def generate_pdf_report(
         detail="Geração de PDF em desenvolvimento. Use a prévia do relatório no frontend."
     )
 
+# ==================== COPEL INTEGRATION ====================
+
+class CopelLoginRequest(BaseModel):
+    cpf_cnpj: str
+    password: str
+
+class CopelSyncRequest(BaseModel):
+    consumer_unit_id: str
+    cpf_cnpj: str
+    password: str
+
+@api_router.post("/integrations/copel/test-login")
+async def test_copel_login_endpoint(request: CopelLoginRequest, current_user: dict = Depends(get_current_user)):
+    """Test COPEL portal credentials"""
+    result = await test_copel_login(request.cpf_cnpj, request.password)
+    
+    if not result.get('success'):
+        raise HTTPException(status_code=400, detail=result.get('error', 'Login COPEL falhou'))
+    
+    return {
+        "success": True,
+        "message": result.get('message', 'Login realizado com sucesso'),
+        "url": result.get('url')
+    }
+
+@api_router.post("/integrations/copel/download-invoice")
+async def download_copel_invoice_endpoint(request: CopelSyncRequest, current_user: dict = Depends(get_current_user)):
+    """Download invoice from COPEL portal"""
+    
+    # Verify consumer unit exists
+    unit = await db.consumer_units.find_one({'id': request.consumer_unit_id, 'is_active': True})
+    if not unit:
+        raise HTTPException(status_code=404, detail="Unidade consumidora não encontrada")
+    
+    result = await download_copel_invoice(request.cpf_cnpj, request.password)
+    
+    if not result.get('success'):
+        raise HTTPException(status_code=400, detail=result.get('error', 'Falha ao baixar fatura'))
+    
+    # Update last sync time
+    await db.copel_credentials.update_one(
+        {'consumer_unit_id': request.consumer_unit_id},
+        {'$set': {'last_sync': datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    return {
+        "success": True,
+        "filepath": result.get('filepath'),
+        "filename": result.get('filename'),
+        "message": "Fatura baixada com sucesso"
+    }
+
+@api_router.post("/integrations/copel/sync")
+async def sync_copel_data(request: CopelSyncRequest, current_user: dict = Depends(get_current_user)):
+    """Sync invoice data from COPEL portal - login, download and parse"""
+    
+    # Verify consumer unit exists
+    unit = await db.consumer_units.find_one({'id': request.consumer_unit_id, 'is_active': True})
+    if not unit:
+        raise HTTPException(status_code=404, detail="Unidade consumidora não encontrada")
+    
+    # First, login and download invoice
+    download_result = await download_copel_invoice(request.cpf_cnpj, request.password)
+    
+    if not download_result.get('success'):
+        raise HTTPException(status_code=400, detail=download_result.get('error', 'Falha ao sincronizar com COPEL'))
+    
+    # Update last sync time
+    await db.copel_credentials.update_one(
+        {'consumer_unit_id': request.consumer_unit_id},
+        {'$set': {'last_sync': datetime.now(timezone.utc).isoformat()}},
+        upsert=True
+    )
+    
+    return {
+        "success": True,
+        "filepath": download_result.get('filepath'),
+        "filename": download_result.get('filename'),
+        "message": "Sincronização COPEL realizada. Fatura baixada com sucesso."
+    }
+
 # Include the router in the main app
 app.include_router(api_router)
 
