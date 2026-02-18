@@ -966,6 +966,7 @@ async def get_plant_report_data(
 # ==================== GROWATT INTEGRATION ====================
 
 from services.growatt_service import get_growatt_service, GrowattService
+from services.copel_service import CopelService, test_copel_login, download_copel_invoice
 
 class GrowattLoginRequest(BaseModel):
     plant_id: str  # Our internal plant ID
