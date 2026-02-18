@@ -23,8 +23,8 @@ module.exports = {
                 background: 'hsl(var(--background))',
                 foreground: 'hsl(var(--foreground))',
                 card: {
-                    DEFAULT: 'hsl(var(--card))',
-                    foreground: 'hsl(var(--card-foreground))'
+                    DEFAULT: 'hsl(0 0% 100%)',
+                    foreground: 'hsl(0 0% 9%)'
                 },
                 popover: {
                     DEFAULT: 'hsl(var(--popover))',
