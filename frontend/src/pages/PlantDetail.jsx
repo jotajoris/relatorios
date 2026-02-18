@@ -1434,6 +1434,149 @@ const PlantDetail = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Invoice Upload Dialog */}
+      <Dialog open={invoiceDialogOpen} onOpenChange={setInvoiceDialogOpen}>
+        <DialogContent className="sm:max-w-lg bg-white">
+          <DialogHeader>
+            <DialogTitle className="font-heading flex items-center gap-2">
+              <Upload className="h-5 w-5 text-[#FFD600]" />
+              Enviar Fatura COPEL (PDF)
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            {/* Select UC */}
+            <div className="space-y-2">
+              <Label>Selecione a Unidade Consumidora *</Label>
+              <Select
+                value={selectedUcForInvoice}
+                onValueChange={setSelectedUcForInvoice}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione uma UC" />
+                </SelectTrigger>
+                <SelectContent>
+                  {[...(data?.generators || []), ...(data?.beneficiaries || [])].map((uc) => (
+                    <SelectItem key={uc.id} value={uc.id}>
+                      {uc.uc_number} - {uc.address || uc.holder_name || 'Sem endereço'}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Upload PDF */}
+            {selectedUcForInvoice && !parsedInvoice && (
+              <div className="space-y-2">
+                <Label>Arquivo PDF da Fatura</Label>
+                <input
+                  ref={invoiceInputRef}
+                  type="file"
+                  accept=".pdf"
+                  onChange={handleInvoiceUpload}
+                  className="hidden"
+                />
+                <Button 
+                  variant="outline" 
+                  className="w-full"
+                  onClick={() => invoiceInputRef.current?.click()}
+                  disabled={uploadingInvoice}
+                >
+                  {uploadingInvoice ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Processando...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-4 w-4 mr-2" />
+                      Selecionar PDF
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
+
+            {/* Parsed Invoice Preview */}
+            {parsedInvoice && (
+              <div className="space-y-4 border rounded-lg p-4 bg-neutral-50">
+                <h4 className="font-medium text-neutral-900">Dados Extraídos</h4>
+                
+                <div className="grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <span className="text-neutral-500">Mês Referência:</span>
+                    <span className="ml-2 font-medium">{parsedInvoice.reference_month}</span>
+                  </div>
+                  <div>
+                    <span className="text-neutral-500">Vencimento:</span>
+                    <span className="ml-2 font-medium">{parsedInvoice.due_date}</span>
+                  </div>
+                  <div>
+                    <span className="text-neutral-500">Total a Pagar:</span>
+                    <span className="ml-2 font-medium text-red-600">
+                      R$ {parsedInvoice.amount_total_brl?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-neutral-500">Economia:</span>
+                    <span className="ml-2 font-medium text-green-600">
+                      R$ {parsedInvoice.amount_saved_brl?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-neutral-500">Consumo FP:</span>
+                    <span className="ml-2 font-medium">{parsedInvoice.energy_registered_fp_kwh?.toLocaleString()} kWh</span>
+                  </div>
+                  <div>
+                    <span className="text-neutral-500">Compensado FP:</span>
+                    <span className="ml-2 font-medium">{parsedInvoice.energy_compensated_fp_kwh?.toLocaleString()} kWh</span>
+                  </div>
+                  <div>
+                    <span className="text-neutral-500">Créditos Acum.:</span>
+                    <span className="ml-2 font-medium">{parsedInvoice.credits_accumulated_fp_kwh?.toLocaleString()} kWh</span>
+                  </div>
+                  <div>
+                    <span className="text-neutral-500">Grupo Tarifário:</span>
+                    <span className="ml-2 font-medium">{parsedInvoice.tariff_group}</span>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => setParsedInvoice(null)}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    className="flex-1 bg-[#FFD600] hover:bg-[#EAB308] text-[#1A1A1A]"
+                    onClick={handleSaveInvoice}
+                    disabled={saving}
+                  >
+                    {saving ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      'Salvar Fatura'
+                    )}
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setInvoiceDialogOpen(false);
+              setParsedInvoice(null);
+              setSelectedUcForInvoice('');
+            }}>
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
