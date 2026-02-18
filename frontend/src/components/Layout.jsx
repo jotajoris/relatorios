@@ -11,7 +11,8 @@ import {
   Menu,
   X,
   Zap,
-  ChevronDown
+  ChevronDown,
+  User
 } from 'lucide-react';
 import {
   DropdownMenu,
