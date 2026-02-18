@@ -549,7 +549,7 @@ const PlantDetail = () => {
               {/* Active Distribution List Header */}
               <div className="bg-[#FFD600] text-[#1A1A1A] px-4 py-2 rounded-t-lg font-medium flex items-center gap-2">
                 <AlertCircle className="h-4 w-4" />
-                Vigência {new Date().toLocaleDateString('pt-BR', { month: '2-digit', year: 'numeric' })} - Baseada em Lista de Porcentagem
+                Vigência 12/2025 - Baseada em Lista de Porcentagem
               </div>
               
               {/* Table */}
