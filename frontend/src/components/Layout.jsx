@@ -161,6 +161,10 @@ const Layout = ({ children }) => {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="w-48">
+                  <DropdownMenuItem onClick={() => navigate('/perfil')}>
+                    <User className="h-4 w-4 mr-2" />
+                    Meu Perfil
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => navigate('/configuracoes')}>
                     <Settings className="h-4 w-4 mr-2" />
                     Configurações
