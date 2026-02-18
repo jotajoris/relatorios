@@ -93,6 +93,11 @@ function App() {
               <Settings />
             </ProtectedRoute>
           } />
+          <Route path="/perfil" element={
+            <ProtectedRoute>
+              <Profile />
+            </ProtectedRoute>
+          } />
         </Routes>
       </BrowserRouter>
       <Toaster position="top-right" richColors />
