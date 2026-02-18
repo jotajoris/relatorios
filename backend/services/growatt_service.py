@@ -115,7 +115,7 @@ class GrowattOSSService:
             return {"success": False, "error": str(e)}
     
     async def _extract_plants_from_page(self) -> None:
-        """Extract plants data from the current page"""
+        """Extract plants data from all pages"""
         try:
             logger.info("Fetching plants from Growatt OSS...")
             
@@ -124,80 +124,130 @@ class GrowattOSSService:
             
             # Try to wait for table to appear
             try:
-                await self.page.wait_for_selector('table tbody tr', timeout=10000)
+                await self.page.wait_for_selector('table tbody tr td', timeout=15000)
             except:
                 logger.debug("Table selector not found, proceeding anyway")
             
-            frames = self.page.frames
-            logger.info(f"Found {len(frames)} frames to check")
+            all_plants = []
             
-            for frame in frames:
-                try:
-                    tr_count = await frame.evaluate('() => document.querySelectorAll("table tr").length')
-                    logger.info(f"Frame {frame.url}: {tr_count} table rows found")
-                    
-                    if tr_count > 5:
-                        raw_data = await frame.evaluate('''
-                            () => {
-                                const rows = document.querySelectorAll('table tbody tr');
-                                const plants = [];
-                                
-                                rows.forEach((row) => {
-                                    const cells = row.querySelectorAll('td');
-                                    // Table has 21 cells per row, plant data starts at index 1
-                                    if (cells.length >= 15) {
-                                        const plantName = cells[4]?.innerText?.trim() || '';
-                                        // Only add if plantName is not empty and is a real plant row
-                                        if (plantName && !plantName.includes('*') && !plantName.includes('Type')) {
-                                            plants.push({
-                                                number: cells[1]?.innerText?.trim() || '',
-                                                group: cells[2]?.innerText?.trim() || '',
-                                                status: cells[3]?.innerText?.trim() || '',
-                                                plantName: plantName,
-                                                alias: cells[5]?.innerText?.trim() || '',
-                                                userName: cells[6]?.innerText?.trim() || '',
-                                                city: cells[7]?.innerText?.trim() || '',
-                                                revenue: cells[8]?.innerText?.trim() || '',
-                                                timezone: cells[9]?.innerText?.trim() || '',
-                                                installDate: cells[10]?.innerText?.trim() || '',
-                                                deviceCount: cells[11]?.innerText?.trim() || '',
-                                                pvPower: cells[12]?.innerText?.trim() || '',
-                                                dailyGen: cells[13]?.innerText?.trim() || '',
-                                                fullHours: cells[14]?.innerText?.trim() || '',
-                                                totalGen: cells[15]?.innerText?.trim() || ''
-                                            });
-                                        }
-                                    }
-                                });
-                                
-                                return plants;
-                            }
-                        ''')
+            # Function to extract plants from current page view
+            async def extract_current_page():
+                return await self.page.evaluate('''
+                    () => {
+                        const rows = document.querySelectorAll('table tbody tr');
+                        const plants = [];
                         
-                        if raw_data:
-                            plants = []
-                            for p in raw_data:
-                                if p.get('plantName'):
-                                    pv_power = p.get('pvPower', '0')
-                                    pv_power_kwp = float(pv_power.replace('kWp', '').replace(',', '.').strip() or 0)
-                                    
-                                    daily_gen = p.get('dailyGen', '0')
-                                    daily_gen_kwh = float(daily_gen.replace('kWh', '').replace(',', '.').strip() or 0)
-                                    
-                                    total_gen = p.get('totalGen', '0')
-                                    total_gen_kwh = float(total_gen.replace('kWh', '').replace(',', '.').strip() or 0)
-                                    
-                                    plants.append({
-                                        "id": p.get('number', ''),
-                                        "name": p.get('plantName', ''),
-                                        "alias": p.get('alias', ''),
-                                        "username": p.get('userName', ''),
-                                        "group": p.get('group', ''),
-                                        "city": p.get('city', ''),
-                                        "status": "online" if p.get('status', '').lower() == 'online' else "offline",
-                                        "capacity_kwp": pv_power_kwp,
-                                        "today_energy_kwh": daily_gen_kwh,
-                                        "total_energy_kwh": total_gen_kwh,
+                        rows.forEach((row) => {
+                            const cells = row.querySelectorAll('td');
+                            if (cells.length >= 15) {
+                                const num = cells[1]?.innerText?.trim();
+                                const name = cells[4]?.innerText?.trim();
+                                // Only add if it has a valid number and name
+                                if (num && name && !isNaN(parseInt(num))) {
+                                    plants.push({
+                                        number: num,
+                                        group: cells[2]?.innerText?.trim() || '',
+                                        status: cells[3]?.innerText?.trim() || '',
+                                        plantName: name,
+                                        alias: cells[5]?.innerText?.trim() || '',
+                                        userName: cells[6]?.innerText?.trim() || '',
+                                        city: cells[7]?.innerText?.trim() || '',
+                                        revenue: cells[8]?.innerText?.trim() || '',
+                                        timezone: cells[9]?.innerText?.trim() || '',
+                                        installDate: cells[10]?.innerText?.trim() || '',
+                                        deviceCount: cells[11]?.innerText?.trim() || '',
+                                        pvPower: cells[12]?.innerText?.trim() || '',
+                                        dailyGen: cells[13]?.innerText?.trim() || '',
+                                        fullHours: cells[14]?.innerText?.trim() || '',
+                                        totalGen: cells[15]?.innerText?.trim() || ''
+                                    });
+                                }
+                            }
+                        });
+                        
+                        return plants;
+                    }
+                ''')
+            
+            # Extract page 1
+            page1_plants = await extract_current_page()
+            all_plants.extend(page1_plants)
+            logger.info(f"Page 1: {len(page1_plants)} plants")
+            
+            # Click through pages 2, 3, 4, etc.
+            existing_nums = {p['number'] for p in all_plants}
+            
+            for page_num in range(2, 15):  # Support up to 14 pages (200+ plants)
+                try:
+                    # Find and click page number link
+                    page_link = self.page.locator(f'a:has-text("{page_num}")').first
+                    
+                    if await page_link.count() > 0:
+                        # Check if this looks like a pagination link
+                        link_text = await page_link.text_content()
+                        if link_text and link_text.strip() == str(page_num):
+                            await page_link.click()
+                            await self.page.wait_for_timeout(3000)
+                            
+                            page_plants = await extract_current_page()
+                            
+                            # Filter out duplicates
+                            new_plants = [p for p in page_plants if p['number'] not in existing_nums]
+                            
+                            if new_plants:
+                                all_plants.extend(new_plants)
+                                existing_nums.update(p['number'] for p in new_plants)
+                                logger.info(f"Page {page_num}: +{len(new_plants)} plants")
+                            else:
+                                logger.info(f"Page {page_num}: No new plants, stopping pagination")
+                                break
+                    else:
+                        break
+                except Exception as e:
+                    logger.debug(f"Pagination ended at page {page_num}: {e}")
+                    break
+            
+            # Parse and normalize all plant data
+            if all_plants:
+                plants = []
+                for p in all_plants:
+                    if p.get('plantName'):
+                        pv_power = p.get('pvPower', '0')
+                        pv_power_kwp = float(pv_power.replace('kWp', '').replace(',', '.').strip() or 0)
+                        
+                        daily_gen = p.get('dailyGen', '0')
+                        daily_gen_kwh = float(daily_gen.replace('kWh', '').replace(',', '.').strip() or 0)
+                        
+                        total_gen = p.get('totalGen', '0')
+                        total_gen_kwh = float(total_gen.replace('kWh', '').replace(',', '.').strip() or 0)
+                        
+                        status = p.get('status', '').lower()
+                        normalized_status = "online" if status == 'online' else ("abnormal" if status == 'abnormal' else "offline")
+                        
+                        plants.append({
+                            "id": p.get('number', ''),
+                            "name": p.get('plantName', ''),
+                            "alias": p.get('alias', ''),
+                            "username": p.get('userName', ''),
+                            "group": p.get('group', ''),
+                            "city": p.get('city', ''),
+                            "status": normalized_status,
+                            "capacity_kwp": pv_power_kwp,
+                            "today_energy_kwh": daily_gen_kwh,
+                            "total_energy_kwh": total_gen_kwh,
+                            "full_hours": float(p.get('fullHours', '0').replace(',', '.').replace('h', '').strip() or 0),
+                            "device_count": int(p.get('deviceCount', '0') or 0),
+                            "installation_date": p.get('installDate', ''),
+                            "timezone": p.get('timezone', ''),
+                            "revenue": p.get('revenue', ''),
+                        })
+                
+                self.plants_cache = plants
+                self.cache_time = datetime.now(timezone.utc)
+                logger.info(f"Total: {len(plants)} plants extracted from Growatt OSS")
+                
+        except Exception as e:
+            logger.error(f"Error extracting plants from page: {e}")
                                         "full_hours": float(p.get('fullHours', '0').replace(',', '.') or 0),
                                         "device_count": int(p.get('deviceCount', '0') or 0),
                                         "installation_date": p.get('installDate', ''),
