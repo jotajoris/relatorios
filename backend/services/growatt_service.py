@@ -248,24 +248,6 @@ class GrowattOSSService:
                 
         except Exception as e:
             logger.error(f"Error extracting plants from page: {e}")
-                                        "full_hours": float(p.get('fullHours', '0').replace(',', '.') or 0),
-                                        "device_count": int(p.get('deviceCount', '0') or 0),
-                                        "installation_date": p.get('installDate', ''),
-                                        "timezone": p.get('timezone', ''),
-                                        "revenue": p.get('revenue', ''),
-                                    })
-                            
-                            self.plants_cache = plants
-                            self.cache_time = datetime.now(timezone.utc)
-                            logger.info(f"Extracted {len(plants)} plants from page")
-                            return
-                            
-                except Exception as e:
-                    logger.debug(f"Frame extraction error: {e}")
-                    continue
-                    
-        except Exception as e:
-            logger.error(f"Error extracting plants from page: {e}")
     
     async def get_plants(self, force_refresh: bool = False) -> List[Dict[str, Any]]:
         """
