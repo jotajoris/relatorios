@@ -55,7 +55,9 @@ import {
   Loader2,
   ExternalLink,
   Copy,
-  Image
+  Image,
+  Download,
+  FileSpreadsheet
 } from 'lucide-react';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
@@ -64,6 +66,8 @@ const PlantDetail = () => {
   const { plantId } = useParams();
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
+  const excelInputRef = useRef(null);
+  const invoiceInputRef = useRef(null);
   
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
@@ -77,6 +81,21 @@ const PlantDetail = () => {
   const [editingUc, setEditingUc] = useState(null);
   const [configDialogOpen, setConfigDialogOpen] = useState(false);
   const [saving, setSaving] = useState(false);
+  
+  // PDF Download
+  const [downloadingPdf, setDownloadingPdf] = useState(null);
+  const [reportDialogOpen, setReportDialogOpen] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState(null);
+  const [reportType, setReportType] = useState('basic');
+  
+  // Excel Upload
+  const [uploadingExcel, setUploadingExcel] = useState(false);
+  
+  // Invoice Upload
+  const [uploadingInvoice, setUploadingInvoice] = useState(false);
+  const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
+  const [parsedInvoice, setParsedInvoice] = useState(null);
+  const [selectedUcForInvoice, setSelectedUcForInvoice] = useState('');
   
   // Growatt integration
   const [growattDialogOpen, setGrowattDialogOpen] = useState(false);
