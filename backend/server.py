@@ -1871,6 +1871,278 @@ async def link_growatt_plant(
         "message": f"Usina vinculada à Growatt: {growatt_plant_name}"
     }
 
+# ==================== GROWATT EXCEL UPLOAD ====================
+
+from services.growatt_excel_service import parse_growatt_excel, extract_generation_records
+
+@api_router.post("/generation-data/upload-growatt-excel/{plant_id}")
+async def upload_growatt_excel(
+    plant_id: str,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Upload a Growatt Excel report and extract generation data.
+    The Excel file should be the monthly report exported from Growatt portal.
+    """
+    # Verify plant exists
+    plant = await db.plants.find_one({'id': plant_id, 'is_active': True})
+    if not plant:
+        raise HTTPException(status_code=404, detail="Usina não encontrada")
+    
+    # Validate file type
+    if not file.filename.lower().endswith(('.xls', '.xlsx')):
+        raise HTTPException(status_code=400, detail="Apenas arquivos Excel (.xls, .xlsx) são aceitos")
+    
+    # Read and parse file
+    content = await file.read()
+    parsed_data = parse_growatt_excel(content, file.filename)
+    
+    if not parsed_data.get('success'):
+        return {
+            "success": False,
+            "error": parsed_data.get('error', 'Erro ao processar arquivo Excel'),
+            "filename": file.filename
+        }
+    
+    # Extract generation records
+    records = extract_generation_records(parsed_data, plant_id)
+    
+    # Insert/update records
+    records_inserted = 0
+    records_updated = 0
+    
+    for record in records:
+        existing = await db.generation_data.find_one({
+            'plant_id': record['plant_id'],
+            'date': record['date']
+        })
+        
+        if existing:
+            await db.generation_data.update_one(
+                {'plant_id': record['plant_id'], 'date': record['date']},
+                {'$set': {'generation_kwh': record['generation_kwh'], 'source': record['source']}}
+            )
+            records_updated += 1
+        else:
+            gen_data = GenerationData(**record)
+            doc = gen_data.model_dump()
+            doc['created_at'] = doc['created_at'].isoformat()
+            await db.generation_data.insert_one(doc)
+            records_inserted += 1
+    
+    # Log activity
+    await log_activity(
+        plant_id,
+        "growatt_excel_upload",
+        f"Importado Excel Growatt: {parsed_data.get('plant_name', file.filename)} - {parsed_data.get('month_year', '')}",
+        current_user.get('name'),
+        {'total_kwh': parsed_data.get('total_generation_kwh', 0), 'inverters': len(parsed_data.get('inverters', []))}
+    )
+    
+    return {
+        "success": True,
+        "message": "Excel Growatt processado com sucesso",
+        "filename": file.filename,
+        "parsed_data": {
+            "plant_name": parsed_data.get('plant_name'),
+            "month_year": parsed_data.get('month_year'),
+            "total_generation_kwh": parsed_data.get('total_generation_kwh'),
+            "inverters_count": len(parsed_data.get('inverters', [])),
+            "days_with_data": len(parsed_data.get('daily_generation', []))
+        },
+        "records_inserted": records_inserted,
+        "records_updated": records_updated,
+        "total_processed": records_inserted + records_updated
+    }
+
+# ==================== PDF REPORT GENERATION ====================
+
+from services.pdf_generator_service import generate_plant_report
+from fastapi.responses import Response
+import calendar
+
+@api_router.get("/reports/download-pdf/{plant_id}")
+async def download_pdf_report(
+    plant_id: str,
+    month: str,
+    report_type: str = "basic",
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Generate and download a PDF report for a plant.
+    
+    Args:
+        plant_id: Plant ID
+        month: Month in YYYY-MM format
+        report_type: 'basic' or 'complete'
+    """
+    # Get plant
+    plant = await db.plants.find_one({'id': plant_id, 'is_active': True}, {'_id': 0})
+    if not plant:
+        raise HTTPException(status_code=404, detail="Usina não encontrada")
+    
+    # Get client
+    client = await db.clients.find_one({'id': plant.get('client_id')}, {'_id': 0})
+    
+    # Parse month
+    try:
+        year, mon = map(int, month.split('-'))
+        days_in_month = calendar.monthrange(year, mon)[1]
+        start_date = f"{month}-01"
+        end_date = f"{month}-{days_in_month:02d}"
+    except Exception:
+        raise HTTPException(status_code=400, detail="Formato de mês inválido. Use YYYY-MM")
+    
+    # Get generation data
+    gen_data = await db.generation_data.find({
+        'plant_id': plant_id,
+        'date': {'$gte': start_date, '$lte': end_date}
+    }, {'_id': 0}).sort('date', 1).to_list(100)
+    
+    total_generation = sum(d.get('generation_kwh', 0) for d in gen_data)
+    prognosis = plant.get('monthly_prognosis_kwh', 0)
+    
+    # Build daily generation list (fill gaps with 0)
+    daily_dict = {d['date']: d['generation_kwh'] for d in gen_data}
+    daily_generation = []
+    for day in range(1, days_in_month + 1):
+        date_str = f"{month}-{day:02d}"
+        daily_generation.append({
+            'day': day,
+            'date': date_str,
+            'generation_kwh': daily_dict.get(date_str, 0)
+        })
+    
+    # Get historical data (last 12 months)
+    historical = []
+    for i in range(1, 5):  # Last 4 months
+        hist_date = datetime(year, mon, 1) - timedelta(days=30*i)
+        hist_month = hist_date.strftime('%Y-%m')
+        hist_start = f"{hist_month}-01"
+        hist_days = calendar.monthrange(hist_date.year, hist_date.month)[1]
+        hist_end = f"{hist_month}-{hist_days:02d}"
+        
+        hist_gen = await db.generation_data.find({
+            'plant_id': plant_id,
+            'date': {'$gte': hist_start, '$lte': hist_end}
+        }, {'_id': 0, 'generation_kwh': 1}).to_list(100)
+        
+        hist_total = sum(d['generation_kwh'] for d in hist_gen)
+        
+        # Format month as MMM/YYYY
+        month_abbr = {1: 'JAN', 2: 'FEV', 3: 'MAR', 4: 'ABR', 5: 'MAI', 6: 'JUN',
+                      7: 'JUL', 8: 'AGO', 9: 'SET', 10: 'OUT', 11: 'NOV', 12: 'DEZ'}
+        
+        historical.append({
+            'month': f"{month_abbr[hist_date.month]}./{hist_date.year}",
+            'month_year': hist_month,
+            'generation_kwh': round(hist_total, 2),
+            'prognosis_kwh': prognosis
+        })
+    
+    # Calculate environmental impact (last 12 months)
+    twelve_months_ago = (datetime(year, mon, 1) - timedelta(days=365)).strftime('%Y-%m-%d')
+    all_gen = await db.generation_data.find({
+        'plant_id': plant_id,
+        'date': {'$gte': twelve_months_ago}
+    }, {'_id': 0, 'generation_kwh': 1}).to_list(10000)
+    total_gen_12m = sum(d['generation_kwh'] for d in all_gen)
+    co2_avoided = total_gen_12m * 0.5  # kg
+    trees_saved = co2_avoided / 22  # trees/year
+    
+    # Prepare report data
+    report_data = {
+        'plant_name': plant.get('name', 'Usina FV'),
+        'company_name': client.get('name', 'ON Soluções Energéticas') if client else 'ON Soluções Energéticas',
+        'month_year': month,
+        'capacity_kwp': plant.get('capacity_kwp', 0),
+        'total_generation_kwh': total_generation,
+        'prognosis_kwh': prognosis,
+        'prognosis_annual_kwh': plant.get('annual_prognosis_kwh', prognosis * 12),
+        'daily_generation': daily_generation,
+        'historical': historical,
+        'environmental': {
+            'co2_avoided_kg': co2_avoided,
+            'trees_saved': trees_saved
+        }
+    }
+    
+    # For complete report, add financial and consumer data
+    if report_type == 'complete':
+        # Get consumer units
+        units = await db.consumer_units.find({'plant_id': plant_id, 'is_active': True}, {'_id': 0}).to_list(100)
+        unit_ids = [u['id'] for u in units]
+        
+        # Get invoices
+        invoices = await db.invoices.find({
+            'consumer_unit_id': {'$in': unit_ids},
+            'billing_cycle_end': {'$gte': start_date, '$lte': end_date}
+        }, {'_id': 0}).to_list(1000)
+        
+        total_saved = sum(i.get('amount_saved_brl', 0) for i in invoices)
+        total_billed = sum(i.get('amount_total_brl', 0) for i in invoices)
+        
+        # Get all-time savings for ROI
+        all_invoices = await db.invoices.find({'plant_id': plant_id}, {'_id': 0, 'amount_saved_brl': 1}).to_list(10000)
+        total_savings_all_time = sum(i.get('amount_saved_brl', 0) for i in all_invoices)
+        
+        total_investment = plant.get('total_investment', 0)
+        roi_monthly = (total_saved / total_investment * 100) if total_investment > 0 else 0
+        roi_total = (total_savings_all_time / total_investment * 100) if total_investment > 0 else 0
+        
+        report_data['financial'] = {
+            'saved_brl': total_saved,
+            'billed_brl': total_billed,
+            'roi_monthly': roi_monthly,
+            'roi_total': roi_total,
+            'total_savings': total_savings_all_time
+        }
+        
+        # Energy flow
+        report_data['energy_injected_p'] = sum(i.get('energy_injected_p_kwh', 0) for i in invoices)
+        report_data['energy_injected_fp'] = sum(i.get('energy_injected_fp_kwh', 0) for i in invoices)
+        report_data['consumption_p'] = sum(i.get('energy_registered_p_kwh', 0) for i in invoices)
+        report_data['consumption_fp'] = sum(i.get('energy_registered_fp_kwh', 0) for i in invoices)
+        
+        # Consumer units with invoice data
+        consumer_units_data = []
+        for inv in invoices:
+            unit = next((u for u in units if u['id'] == inv.get('consumer_unit_id')), None)
+            if unit:
+                consumer_units_data.append({
+                    'name': unit.get('holder_name', unit.get('address', '')),
+                    'uc_number': unit.get('uc_number', ''),
+                    'cycle': f"{inv.get('billing_cycle_start', '')[:5]} a {inv.get('billing_cycle_end', '')[:5]}",
+                    'consumption_registered': inv.get('energy_registered_fp_kwh', 0) + inv.get('energy_registered_p_kwh', 0),
+                    'energy_compensated': inv.get('energy_compensated_fp_kwh', 0) + inv.get('energy_compensated_p_kwh', 0),
+                    'energy_billed': inv.get('energy_billed_fp_kwh', 0),
+                    'credit_previous': inv.get('credits_balance_fp_kwh', 0),
+                    'credit_accumulated': inv.get('credits_accumulated_fp_kwh', 0),
+                    'amount_billed': inv.get('amount_total_brl', 0),
+                    'amount_saved': inv.get('amount_saved_brl', 0)
+                })
+        
+        report_data['consumer_units'] = consumer_units_data
+    
+    # Generate PDF
+    try:
+        pdf_bytes = generate_plant_report(report_data, report_type)
+    except Exception as e:
+        logger.error(f"Error generating PDF: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erro ao gerar PDF: {str(e)}")
+    
+    # Return PDF
+    filename = f"relatorio_{plant.get('name', 'usina').replace(' ', '_')}_{month}.pdf"
+    
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}"
+        }
+    )
+
 # Include the router in the main app
 app.include_router(api_router)
 
