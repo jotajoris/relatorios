@@ -62,7 +62,7 @@ code {
         @apply border-border;
     }
     body {
-        @apply bg-[#F4F4F5] text-neutral-900;
+        @apply bg-neutral-100 text-neutral-900;
     }
 }
 
