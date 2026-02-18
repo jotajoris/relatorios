@@ -747,8 +747,8 @@ const PlantDetail = () => {
                   return (
                     <Card 
                       key={month} 
-                      className={`cursor-pointer transition-all hover:shadow-md ${
-                        report ? 'border-[#FFD600]' : 'border-neutral-200 opacity-60'
+                      className={`transition-all hover:shadow-md ${
+                        report ? 'border-[#FFD600]' : 'border-neutral-200'
                       }`}
                     >
                       <CardContent className="p-4 text-center">
@@ -763,6 +763,44 @@ const PlantDetail = () => {
                         }`}>
                           {report ? `${report.performance_percentage.toFixed(2)}%` : '-'}
                         </p>
+                        
+                        {/* Download buttons */}
+                        <div className="flex gap-1 mt-3 justify-center">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-xs h-7 px-2"
+                            onClick={() => handleDownloadPdf(month, 'basic')}
+                            disabled={downloadingPdf === month}
+                            data-testid={`download-basic-${month}`}
+                          >
+                            {downloadingPdf === month ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <>
+                                <Download className="h-3 w-3 mr-1" />
+                                Básico
+                              </>
+                            )}
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-xs h-7 px-2"
+                            onClick={() => handleDownloadPdf(month, 'complete')}
+                            disabled={downloadingPdf === month}
+                            data-testid={`download-complete-${month}`}
+                          >
+                            {downloadingPdf === month ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                            ) : (
+                              <>
+                                <Download className="h-3 w-3 mr-1" />
+                                Completo
+                              </>
+                            )}
+                          </Button>
+                        </div>
                       </CardContent>
                     </Card>
                   );
