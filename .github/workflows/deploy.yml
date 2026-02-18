@@ -1,0 +1,97 @@
+# ON Soluções Energéticas - CI/CD Pipeline para Hostinger
+# Este workflow faz deploy automático para Hostinger via FTP quando há push na branch main
+
+name: Deploy to Hostinger
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy-frontend:
+    name: Deploy Frontend
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'yarn'
+          cache-dependency-path: frontend/yarn.lock
+
+      - name: Install dependencies
+        working-directory: ./frontend
+        run: yarn install --frozen-lockfile
+
+      - name: Build frontend
+        working-directory: ./frontend
+        env:
+          REACT_APP_BACKEND_URL: ${{ secrets.REACT_APP_BACKEND_URL }}
+        run: yarn build
+
+      - name: Deploy to Hostinger via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.4
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./frontend/build/
+          server-dir: ${{ secrets.FTP_SERVER_DIR }}  # Ex: /public_html/
+          exclude: |
+            **/.git*
+            **/.git*/**
+            **/node_modules/**
+
+  deploy-backend:
+    name: Deploy Backend
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy Backend via SSH
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script: |
+            cd ${{ secrets.BACKEND_DIR }}
+            git pull origin main
+            pip install -r requirements.txt
+            supervisorctl restart backend
+
+# =======================================================
+# CONFIGURAÇÃO DAS SECRETS NO GITHUB
+# =======================================================
+# Vá em Settings > Secrets and variables > Actions no seu repositório
+# e adicione as seguintes secrets:
+#
+# FTP_HOST          - Servidor FTP da Hostinger (ex: ftp.seudominio.com)
+# FTP_USERNAME      - Usuário FTP
+# FTP_PASSWORD      - Senha FTP
+# FTP_SERVER_DIR    - Diretório no servidor (ex: /public_html/)
+#
+# SSH_HOST          - Endereço SSH da Hostinger
+# SSH_USERNAME      - Usuário SSH
+# SSH_PRIVATE_KEY   - Chave privada SSH (inteira, incluindo BEGIN/END)
+# SSH_PORT          - Porta SSH (geralmente 22)
+# BACKEND_DIR       - Diretório do backend no servidor
+#
+# REACT_APP_BACKEND_URL - URL da API em produção (ex: https://api.seudominio.com)
+#
+# =======================================================
+# ALTERNATIVA: Deploy apenas do Frontend via FTP
+# =======================================================
+# Se você não tiver acesso SSH para o backend, pode:
+# 1. Hospedar o backend em outro lugar (Railway, Render, etc.)
+# 2. Usar apenas o deploy FTP para o frontend
+# 3. Remover o job deploy-backend deste arquivo
