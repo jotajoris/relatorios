@@ -174,7 +174,7 @@ Sistema web para gerenciamento de usinas de energia solar fotovoltaica, com foco
 - **COPEL:** 77952604000162 / Portao62*
 
 ## 🌐 Preview URL
-https://copel-sync.preview.emergentagent.com
+https://energy-hub-24.preview.emergentagent.com
 
 ---
 
