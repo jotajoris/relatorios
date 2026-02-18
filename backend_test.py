@@ -332,7 +332,8 @@ class SolarPlantAPITester:
         # Test sequence
         tests = [
             ("API Health", self.test_health_check),
-            ("User Login", self.test_login),
+            ("User Login (projetos)", self.test_login),
+            ("User Login (comercial)", self.test_login_comercial),
             ("Get Current User", self.test_get_me),
             ("Dashboard Stats", self.test_dashboard_stats),
             ("Plants Summary", self.test_plants_summary),
