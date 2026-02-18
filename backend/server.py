@@ -1177,7 +1177,252 @@ async def get_generation_chart(
     
     return chart_data
 
-# ==================== INVERTER CREDENTIALS ====================
+# ==================== CREDIT DISTRIBUTION LISTS ====================
+
+@api_router.get("/credit-distribution/{plant_id}")
+async def get_credit_distribution_lists(plant_id: str, current_user: dict = Depends(get_current_user)):
+    """Get all credit distribution lists for a plant"""
+    lists = await db.credit_distribution_lists.find(
+        {'plant_id': plant_id, 'is_active': True},
+        {'_id': 0}
+    ).sort('created_at', -1).to_list(100)
+    
+    for lst in lists:
+        if isinstance(lst.get('created_at'), str):
+            lst['created_at'] = datetime.fromisoformat(lst['created_at'])
+    
+    return lists
+
+@api_router.post("/credit-distribution")
+async def create_credit_distribution_list(
+    list_data: CreditDistributionListCreate,
+    current_user: dict = Depends(get_current_user)
+):
+    """Create a new credit distribution list"""
+    # Verify plant exists
+    plant = await db.plants.find_one({'id': list_data.plant_id, 'is_active': True})
+    if not plant:
+        raise HTTPException(status_code=404, detail="Usina não encontrada")
+    
+    dist_list = CreditDistributionList(**list_data.model_dump())
+    doc = dist_list.model_dump()
+    doc['created_at'] = doc['created_at'].isoformat()
+    await db.credit_distribution_lists.insert_one(doc)
+    
+    # Log activity
+    await log_activity(list_data.plant_id, "created_distribution_list", 
+                      f"Lista de distribuição criada: {list_data.name}", 
+                      current_user.get('name'))
+    
+    return dist_list
+
+@api_router.put("/credit-distribution/{list_id}")
+async def update_credit_distribution_list(
+    list_id: str,
+    list_data: CreditDistributionListCreate,
+    current_user: dict = Depends(get_current_user)
+):
+    """Update a credit distribution list"""
+    result = await db.credit_distribution_lists.update_one(
+        {'id': list_id, 'is_active': True},
+        {'$set': list_data.model_dump()}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Lista não encontrada")
+    
+    updated = await db.credit_distribution_lists.find_one({'id': list_id}, {'_id': 0})
+    return updated
+
+@api_router.delete("/credit-distribution/{list_id}")
+async def delete_credit_distribution_list(list_id: str, current_user: dict = Depends(get_current_user)):
+    """Delete a credit distribution list"""
+    result = await db.credit_distribution_lists.update_one(
+        {'id': list_id},
+        {'$set': {'is_active': False}}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Lista não encontrada")
+    return {"message": "Lista removida com sucesso"}
+
+# ==================== MONTHLY REPORTS ====================
+
+@api_router.get("/reports/{plant_id}")
+async def get_monthly_reports(
+    plant_id: str,
+    year: Optional[int] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get monthly reports for a plant"""
+    query = {'plant_id': plant_id}
+    if year:
+        query['year'] = year
+    
+    reports = await db.monthly_reports.find(query, {'_id': 0}).sort([('year', -1), ('month', -1)]).to_list(100)
+    
+    for r in reports:
+        if isinstance(r.get('created_at'), str):
+            r['created_at'] = datetime.fromisoformat(r['created_at'])
+        if r.get('generated_at') and isinstance(r['generated_at'], str):
+            r['generated_at'] = datetime.fromisoformat(r['generated_at'])
+    
+    return reports
+
+@api_router.post("/reports")
+async def create_or_update_monthly_report(
+    report_data: MonthlyReportCreate,
+    current_user: dict = Depends(get_current_user)
+):
+    """Create or update a monthly report"""
+    # Check if report already exists
+    existing = await db.monthly_reports.find_one({
+        'plant_id': report_data.plant_id,
+        'year': report_data.year,
+        'month': report_data.month
+    })
+    
+    if existing:
+        # Update existing
+        await db.monthly_reports.update_one(
+            {'id': existing['id']},
+            {'$set': report_data.model_dump()}
+        )
+        updated = await db.monthly_reports.find_one({'id': existing['id']}, {'_id': 0})
+        return updated
+    else:
+        # Create new
+        report = MonthlyReport(**report_data.model_dump())
+        doc = report.model_dump()
+        doc['created_at'] = doc['created_at'].isoformat()
+        if doc.get('generated_at'):
+            doc['generated_at'] = doc['generated_at'].isoformat()
+        await db.monthly_reports.insert_one(doc)
+        return report
+
+@api_router.get("/reports/{plant_id}/years")
+async def get_available_report_years(plant_id: str, current_user: dict = Depends(get_current_user)):
+    """Get list of years with reports for a plant"""
+    pipeline = [
+        {'$match': {'plant_id': plant_id}},
+        {'$group': {'_id': '$year'}},
+        {'$sort': {'_id': -1}}
+    ]
+    result = await db.monthly_reports.aggregate(pipeline).to_list(100)
+    years = [r['_id'] for r in result if r['_id']]
+    
+    # Always include current year
+    current_year = datetime.now().year
+    if current_year not in years:
+        years.insert(0, current_year)
+    
+    return sorted(years, reverse=True)
+
+# ==================== ACTIVITY LOG ====================
+
+async def log_activity(plant_id: str, action: str, description: str, user_name: Optional[str] = None, details: Optional[Dict] = None):
+    """Helper to log activities"""
+    activity = ActivityLog(
+        plant_id=plant_id,
+        action=action,
+        description=description,
+        user_name=user_name,
+        details=details
+    )
+    doc = activity.model_dump()
+    doc['created_at'] = doc['created_at'].isoformat()
+    await db.activity_logs.insert_one(doc)
+
+@api_router.get("/activity/{plant_id}")
+async def get_activity_log(
+    plant_id: str,
+    limit: int = 50,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get activity log for a plant"""
+    activities = await db.activity_logs.find(
+        {'plant_id': plant_id},
+        {'_id': 0}
+    ).sort('created_at', -1).limit(limit).to_list(limit)
+    
+    for a in activities:
+        if isinstance(a.get('created_at'), str):
+            a['created_at'] = datetime.fromisoformat(a['created_at'])
+    
+    return activities
+
+@api_router.post("/activity")
+async def create_activity(
+    plant_id: str,
+    action: str,
+    description: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Create a manual activity log entry"""
+    await log_activity(plant_id, action, description, current_user.get('name'))
+    return {"success": True}
+
+# ==================== PLANT DETAILS (EXTENDED) ====================
+
+@api_router.get("/plants/{plant_id}/full-details")
+async def get_plant_full_details(plant_id: str, current_user: dict = Depends(get_current_user)):
+    """Get complete plant details including client, UCs, reports, etc."""
+    # Get plant
+    plant = await db.plants.find_one({'id': plant_id, 'is_active': True}, {'_id': 0})
+    if not plant:
+        raise HTTPException(status_code=404, detail="Usina não encontrada")
+    
+    # Get client
+    client = await db.clients.find_one({'id': plant.get('client_id'), 'is_active': True}, {'_id': 0})
+    
+    # Get consumer units
+    units = await db.consumer_units.find({'plant_id': plant_id, 'is_active': True}, {'_id': 0}).to_list(100)
+    
+    # Separate generators and beneficiaries
+    generators = [u for u in units if u.get('is_generator')]
+    beneficiaries = [u for u in units if not u.get('is_generator')]
+    
+    # Get credit distribution lists
+    credit_lists = await db.credit_distribution_lists.find(
+        {'plant_id': plant_id, 'is_active': True}, {'_id': 0}
+    ).sort('created_at', -1).to_list(10)
+    
+    # Get latest reports (current year)
+    current_year = datetime.now().year
+    reports = await db.monthly_reports.find(
+        {'plant_id': plant_id, 'year': current_year}, {'_id': 0}
+    ).sort('month', -1).to_list(12)
+    
+    # Get generation stats for last 12 months
+    twelve_months_ago = (datetime.now() - timedelta(days=365)).strftime('%Y-%m-%d')
+    gen_data = await db.generation_data.find({
+        'plant_id': plant_id,
+        'date': {'$gte': twelve_months_ago}
+    }, {'_id': 0}).to_list(10000)
+    
+    total_gen_12m = sum(d.get('generation_kwh', 0) for d in gen_data)
+    
+    # Get recent activity
+    activities = await db.activity_logs.find(
+        {'plant_id': plant_id}, {'_id': 0}
+    ).sort('created_at', -1).limit(20).to_list(20)
+    
+    return {
+        "plant": plant,
+        "client": client,
+        "generators": generators,
+        "beneficiaries": beneficiaries,
+        "credit_distribution_lists": credit_lists,
+        "reports": reports,
+        "stats": {
+            "total_generation_12m_kwh": round(total_gen_12m, 2),
+            "capacity_kwp": plant.get('capacity_kwp', 0),
+            "status": plant.get('status', 'online'),
+            "generator_count": len(generators),
+            "beneficiary_count": len(beneficiaries)
+        },
+        "activities": activities
+    }
+
+
 
 @api_router.post("/inverter-credentials")
 async def create_inverter_credential(cred_data: InverterCredentialCreate, current_user: dict = Depends(get_current_user)):
