@@ -1145,6 +1145,25 @@ async def test_copel_login_endpoint(request: CopelLoginRequest, current_user: di
         "url": result.get('url')
     }
 
+@api_router.post("/integrations/copel/list-ucs")
+async def list_copel_ucs_endpoint(request: CopelLoginRequest, current_user: dict = Depends(get_current_user)):
+    """List all consumer units (UCs) from COPEL account"""
+    service = CopelService()
+    try:
+        login_result = await service.login(request.cpf_cnpj, request.password)
+        if not login_result.get('success'):
+            raise HTTPException(status_code=400, detail=login_result.get('error', 'Login COPEL falhou'))
+        
+        units = await service.get_consumer_units()
+        
+        return {
+            "success": True,
+            "ucs": units,
+            "total": len(units)
+        }
+    finally:
+        await service.close()
+
 @api_router.post("/integrations/copel/download-invoice")
 async def download_copel_invoice_endpoint(request: CopelSyncRequest, current_user: dict = Depends(get_current_user)):
     """Download invoice from COPEL portal"""
