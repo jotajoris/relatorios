@@ -1106,6 +1106,19 @@ async def fetch_and_save_growatt_data(
 async def root():
     return {"message": "ON Soluções Energéticas API", "version": "1.0.0"}
 
+@api_router.get("/reports/generate-pdf/{plant_id}")
+async def generate_pdf_report(
+    plant_id: str,
+    month: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Generate PDF report for a plant (placeholder - implementation pending)"""
+    # This endpoint will be implemented with a Node.js microservice or Python alternative
+    raise HTTPException(
+        status_code=501, 
+        detail="Geração de PDF em desenvolvimento. Use a prévia do relatório no frontend."
+    )
+
 # Include the router in the main app
 app.include_router(api_router)
 
