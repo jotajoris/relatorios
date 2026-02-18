@@ -1,9 +1,10 @@
 """
 Growatt API Integration Service
 Handles authentication and data fetching from Growatt solar monitoring platform
+Uses the new OpenAPI V1 with token-based authentication
 """
 
-import growattServer
+import requests
 import logging
 from datetime import datetime, timedelta
 from typing import Optional, Dict, List, Any
@@ -12,85 +13,98 @@ logger = logging.getLogger(__name__)
 
 
 class GrowattService:
-    """Service class for Growatt API integration"""
+    """Service class for Growatt API integration using token authentication"""
     
-    def __init__(self, server: str = "oss"):
-        # Use random User-Agent to avoid 403 errors from Growatt WAF
-        self.api = growattServer.GrowattApi(True, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
-        
-        # Set server URL based on region
-        # oss = Other countries (Brazil, etc)
-        # openapi = Europe
-        # openapi-us = North America
-        # openapi-cn = China
-        if server == "oss":
-            self.api.server_url = 'https://server.growatt.com/'  # OSS uses same API
-        elif server == "us":
-            self.api.server_url = 'https://openapi-us.growatt.com/'
-        elif server == "cn":
-            self.api.server_url = 'https://openapi-cn.growatt.com/'
-        else:
-            self.api.server_url = 'https://openapi.growatt.com/'
-        
-        self.user_id = None
-        self.logged_in = False
+    def __init__(self, token: Optional[str] = None):
+        self.token = token
+        self.base_url = "https://openapi.growatt.com"
+        self.headers = {
+            "token": token,
+            "Content-Type": "application/json"
+        } if token else {}
+        self.logged_in = token is not None
     
-    def login(self, username: str, password: str) -> Dict[str, Any]:
-        """
-        Login to Growatt API
+    def set_token(self, token: str):
+        """Set the API token for authentication"""
+        self.token = token
+        self.headers["token"] = token
+        self.logged_in = True
+        logger.info("Growatt API token configured")
+    
+    def _make_request(self, endpoint: str, params: Optional[Dict] = None) -> Dict[str, Any]:
+        """Make a GET request to the Growatt API"""
+        if not self.token:
+            return {"success": False, "error": "No API token configured"}
         
-        Args:
-            username: Growatt account username/email
-            password: Growatt account password
-            
-        Returns:
-            Login response with user info
-        """
         try:
-            response = self.api.login(username, password)
-            if response and response.get('user'):
-                self.user_id = response['user'].get('id')
-                self.logged_in = True
-                logger.info(f"Growatt login successful for user: {username}")
-                return {
-                    "success": True,
-                    "user_id": self.user_id,
-                    "user_name": response['user'].get('name', username)
-                }
+            url = f"{self.base_url}/v1{endpoint}"
+            response = requests.get(url, headers=self.headers, params=params or {}, timeout=30)
+            response.raise_for_status()
+            
+            data = response.json()
+            
+            if data.get("error_code") == 0:
+                return {"success": True, "data": data.get("data", {})}
             else:
-                logger.error(f"Growatt login failed for user: {username}")
-                return {"success": False, "error": "Login failed - invalid credentials"}
+                error_msg = data.get("error_msg", "Unknown error")
+                return {"success": False, "error": error_msg, "error_code": data.get("error_code")}
+                
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Growatt API request error: {str(e)}")
+            return {"success": False, "error": str(e)}
         except Exception as e:
-            logger.error(f"Growatt login error: {str(e)}")
+            logger.error(f"Unexpected error in Growatt API: {str(e)}")
             return {"success": False, "error": str(e)}
     
-    def get_plant_list(self) -> List[Dict[str, Any]]:
+    def test_connection(self) -> Dict[str, Any]:
+        """Test the API connection and token validity"""
+        result = self._make_request("/plant/list", {"page": 1, "perpage": 1})
+        
+        if result.get("success"):
+            return {
+                "success": True,
+                "message": "Connection successful",
+                "plants_count": result.get("data", {}).get("count", 0)
+            }
+        elif result.get("error_code") == 10011:
+            return {
+                "success": False,
+                "error": "Token inválido ou permissão negada. Verifique se o token foi gerado pelo app ShinePhone."
+            }
+        else:
+            return result
+    
+    def get_plant_list(self, page: int = 1, per_page: int = 100) -> List[Dict[str, Any]]:
         """
-        Get list of all plants associated with the logged in user
+        Get list of all plants associated with the token
         
         Returns:
             List of plant information dictionaries
         """
-        if not self.logged_in or not self.user_id:
+        result = self._make_request("/plant/list", {"page": page, "perpage": per_page})
+        
+        if not result.get("success"):
+            logger.error(f"Failed to get plant list: {result.get('error')}")
             return []
         
-        try:
-            plants = self.api.plant_list(self.user_id)
-            return [
-                {
-                    "id": p.get('plantId') or p.get('id'),
-                    "name": p.get('plantName') or p.get('name'),
-                    "capacity_kwp": float(p.get('nominal_power', 0)) / 1000 if p.get('nominal_power') else 0,
-                    "location": p.get('city', ''),
-                    "status": "online" if p.get('status') == '1' else "offline",
-                    "today_energy_kwh": float(p.get('today_energy', 0)),
-                    "total_energy_kwh": float(p.get('total_energy', 0)),
-                }
-                for p in plants if isinstance(p, dict)
-            ]
-        except Exception as e:
-            logger.error(f"Error fetching plant list: {str(e)}")
-            return []
+        plants_data = result.get("data", {})
+        plants = plants_data.get("plants", [])
+        
+        return [
+            {
+                "id": p.get("plant_id") or p.get("plantId") or p.get("id"),
+                "name": p.get("plant_name") or p.get("plantName") or p.get("name"),
+                "capacity_kwp": float(p.get("peak_power", 0) or p.get("nominal_power", 0)) / 1000 if p.get("peak_power") or p.get("nominal_power") else 0,
+                "location": p.get("city", ""),
+                "country": p.get("country", ""),
+                "timezone": p.get("timezone", ""),
+                "status": "online" if p.get("status") == "1" else "offline",
+                "today_energy_kwh": float(p.get("today_energy", 0) or 0),
+                "total_energy_kwh": float(p.get("total_energy", 0) or 0),
+                "current_power_kw": float(p.get("current_power", 0) or 0),
+            }
+            for p in plants if isinstance(p, dict)
+        ]
     
     def get_plant_details(self, plant_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -102,129 +116,125 @@ class GrowattService:
         Returns:
             Plant details dictionary or None
         """
-        if not self.logged_in:
+        result = self._make_request("/plant/details", {"plant_id": plant_id})
+        
+        if not result.get("success"):
+            logger.error(f"Failed to get plant details for {plant_id}: {result.get('error')}")
             return None
         
-        try:
-            details = self.api.plant_detail(plant_id)
-            if not details:
-                return None
+        details = result.get("data", {})
+        
+        return {
+            "id": plant_id,
+            "name": details.get("plant_name") or details.get("plantName"),
+            "capacity_kwp": float(details.get("peak_power", 0) or details.get("nominal_power", 0)) / 1000,
+            "today_energy_kwh": float(details.get("today_energy", 0) or 0),
+            "month_energy_kwh": float(details.get("month_energy", 0) or 0),
+            "year_energy_kwh": float(details.get("year_energy", 0) or 0),
+            "total_energy_kwh": float(details.get("total_energy", 0) or 0),
+            "current_power_kw": float(details.get("current_power", 0) or 0),
+            "co2_reduced_kg": float(details.get("co2_reduction", 0) or details.get("Co2Reduction", 0) or 0),
+            "efficiency_percent": float(details.get("efficiency", 0) or 0),
+            "create_date": details.get("create_date"),
+            "timezone": details.get("timezone"),
+            "country": details.get("country"),
+            "city": details.get("city"),
+        }
+    
+    def get_plant_energy_overview(self, plant_id: str) -> Optional[Dict[str, Any]]:
+        """Get energy overview for a plant"""
+        result = self._make_request("/plant/energy/overview", {"plant_id": plant_id})
+        
+        if not result.get("success"):
+            return None
             
-            return {
-                "id": plant_id,
-                "name": details.get('plantName'),
-                "capacity_kwp": float(details.get('nominal_power', 0)) / 1000,
-                "today_energy_kwh": float(details.get('todayEnergy', 0)),
-                "month_energy_kwh": float(details.get('monthEnergy', 0)),
-                "year_energy_kwh": float(details.get('yearEnergy', 0)),
-                "total_energy_kwh": float(details.get('totalEnergy', 0)),
-                "current_power_kw": float(details.get('currentPower', 0)),
-                "co2_reduced_kg": float(details.get('Co2Reduction', 0)),
-                "efficiency_percent": float(details.get('efficiency', 0)),
+        return result.get("data", {})
+    
+    def get_device_list(self, plant_id: str) -> List[Dict[str, Any]]:
+        """
+        Get list of devices (inverters, etc.) for a plant
+        
+        Args:
+            plant_id: The Growatt plant ID
+            
+        Returns:
+            List of device information
+        """
+        result = self._make_request("/device/list", {"plant_id": plant_id})
+        
+        if not result.get("success"):
+            logger.error(f"Failed to get device list for {plant_id}: {result.get('error')}")
+            return []
+        
+        devices = result.get("data", {}).get("devices", [])
+        
+        return [
+            {
+                "serial_number": d.get("device_sn") or d.get("deviceSn") or d.get("sn"),
+                "alias": d.get("alias") or d.get("deviceAilas"),
+                "type": d.get("device_type") or d.get("deviceType"),
+                "model": d.get("device_model") or d.get("deviceModel"),
+                "status": "online" if d.get("status") == "1" else "offline",
+                "last_update": d.get("last_update_time") or d.get("lastUpdateTime"),
+                "datalogger_sn": d.get("datalogger_sn") or d.get("dataloggerSn"),
             }
-        except Exception as e:
-            logger.error(f"Error fetching plant details for {plant_id}: {str(e)}")
-            return None
+            for d in devices if isinstance(d, dict)
+        ]
     
-    def get_daily_generation(self, plant_id: str, date: str) -> Optional[Dict[str, Any]]:
+    def get_inverter_data(self, device_sn: str, device_type: str = "min") -> Optional[Dict[str, Any]]:
         """
-        Get generation data for a specific date
+        Get real-time data for a specific inverter
+        
+        Args:
+            device_sn: Device serial number
+            device_type: Device type (min, max, mix, tlx, spa, etc.)
+            
+        Returns:
+            Inverter data dictionary or None
+        """
+        endpoint_map = {
+            "min": "/device/min/data",
+            "max": "/device/max/data",
+            "mix": "/device/mix/data",
+            "tlx": "/device/tlx/data",
+            "spa": "/device/spa/data",
+            "sph": "/device/sph/data",
+        }
+        
+        endpoint = endpoint_map.get(device_type.lower(), "/device/inverter/data")
+        result = self._make_request(endpoint, {"device_sn": device_sn})
+        
+        if not result.get("success"):
+            return None
+            
+        return result.get("data", {})
+    
+    def get_plant_energy_history(self, plant_id: str, time_unit: str = "day", 
+                                  start_date: Optional[str] = None) -> List[Dict[str, Any]]:
+        """
+        Get historical energy data for a plant
         
         Args:
             plant_id: The Growatt plant ID
-            date: Date string in YYYY-MM-DD format
+            time_unit: "day", "month", or "year"
+            start_date: Start date in YYYY-MM-DD format
             
         Returns:
-            Daily generation data or None
+            List of energy data records
         """
-        if not self.logged_in:
-            return None
+        params = {
+            "plant_id": plant_id,
+            "time_unit": time_unit,
+        }
+        if start_date:
+            params["start_date"] = start_date
+            
+        result = self._make_request("/plant/energy/history", params)
         
-        try:
-            # Parse date
-            dt = datetime.strptime(date, '%Y-%m-%d')
-            
-            # Get energy data for the day
-            energy_data = self.api.plant_energy_data(plant_id, date)
-            
-            if not energy_data:
-                return None
-            
-            return {
-                "date": date,
-                "generation_kwh": float(energy_data.get('energy', 0)),
-                "pac_kw": float(energy_data.get('pac', 0)),
-            }
-        except Exception as e:
-            logger.error(f"Error fetching daily generation for {plant_id} on {date}: {str(e)}")
-            return None
-    
-    def get_month_generation(self, plant_id: str, year: int, month: int) -> List[Dict[str, Any]]:
-        """
-        Get daily generation data for an entire month
-        
-        Args:
-            plant_id: The Growatt plant ID
-            year: Year (e.g., 2025)
-            month: Month (1-12)
-            
-        Returns:
-            List of daily generation records
-        """
-        if not self.logged_in:
+        if not result.get("success"):
             return []
-        
-        try:
-            # Format the date as required by Growatt API
-            date_str = f"{year}-{month:02d}"
             
-            # Try to get monthly data
-            energy_data = self.api.plant_energy_overview(plant_id, date_str)
-            
-            daily_data = []
-            if energy_data and 'data' in energy_data:
-                for day_data in energy_data.get('data', []):
-                    daily_data.append({
-                        "date": day_data.get('date'),
-                        "generation_kwh": float(day_data.get('energy', 0)),
-                    })
-            
-            return daily_data
-        except Exception as e:
-            logger.error(f"Error fetching month generation for {plant_id} ({year}-{month}): {str(e)}")
-            return []
-    
-    def get_inverter_list(self, plant_id: str) -> List[Dict[str, Any]]:
-        """
-        Get list of inverters for a plant
-        
-        Args:
-            plant_id: The Growatt plant ID
-            
-        Returns:
-            List of inverter information
-        """
-        if not self.logged_in:
-            return []
-        
-        try:
-            devices = self.api.device_list(plant_id)
-            inverters = []
-            
-            for device in devices if devices else []:
-                if device.get('deviceType') in ['inverter', 'max', 'mix', 'spa', 'min', 'tlx']:
-                    inverters.append({
-                        "serial_number": device.get('deviceSn') or device.get('sn'),
-                        "alias": device.get('deviceAilas') or device.get('alias'),
-                        "type": device.get('deviceType'),
-                        "status": "online" if device.get('status') == '1' else "offline",
-                        "last_update": device.get('lastUpdateTime'),
-                    })
-            
-            return inverters
-        except Exception as e:
-            logger.error(f"Error fetching inverter list for {plant_id}: {str(e)}")
-            return []
+        return result.get("data", {}).get("datas", [])
     
     def sync_plant_data(self, plant_id: str, days: int = 30) -> Dict[str, Any]:
         """
@@ -237,20 +247,20 @@ class GrowattService:
         Returns:
             Sync results with all daily data
         """
-        if not self.logged_in:
-            return {"success": False, "error": "Not logged in"}
-        
         try:
             daily_records = []
             today = datetime.now()
+            start_date = (today - timedelta(days=days)).strftime("%Y-%m-%d")
             
-            for i in range(days):
-                date = today - timedelta(days=i)
-                date_str = date.strftime('%Y-%m-%d')
-                
-                day_data = self.get_daily_generation(plant_id, date_str)
-                if day_data and day_data.get('generation_kwh', 0) > 0:
-                    daily_records.append(day_data)
+            # Get historical data
+            history = self.get_plant_energy_history(plant_id, "day", start_date)
+            
+            for record in history:
+                daily_records.append({
+                    "date": record.get("date") or record.get("time"),
+                    "generation_kwh": float(record.get("energy", 0) or 0),
+                    "power_kw": float(record.get("power", 0) or 0),
+                })
             
             return {
                 "success": True,
@@ -267,9 +277,11 @@ class GrowattService:
 _growatt_service: Optional[GrowattService] = None
 
 
-def get_growatt_service() -> GrowattService:
+def get_growatt_service(token: Optional[str] = None) -> GrowattService:
     """Get or create the Growatt service singleton"""
     global _growatt_service
     if _growatt_service is None:
-        _growatt_service = GrowattService()
+        _growatt_service = GrowattService(token)
+    elif token and token != _growatt_service.token:
+        _growatt_service.set_token(token)
     return _growatt_service
