@@ -252,40 +252,84 @@ class CopelService:
         Get list of consumer units (UCs) from logged in account
         
         Returns:
-            List of consumer units
+            List of consumer units with details
         """
         if not self.logged_in or not self.page:
             return []
         
         try:
-            # Look for UC selection or list
+            await asyncio.sleep(2)  # Wait for page to fully render
+            
             units = []
             
-            # Try to find UC elements
-            uc_selectors = [
-                '[class*="unidade"]',
-                '[class*="uc"]',
-                'select[id*="unidade"]',
-                'table tr',
-                '.card-uc'
-            ]
+            # The COPEL portal shows UCs in a table
+            # Each row has: UC number, City, Address, Group, Status, Select button
+            rows = await self.page.query_selector_all('table tbody tr')
             
-            for selector in uc_selectors:
-                try:
-                    elements = await self.page.query_selector_all(selector)
-                    if elements:
-                        for elem in elements:
-                            text = await elem.text_content()
-                            if text:
-                                units.append({"text": text.strip()})
-                        break
-                except:
-                    continue
+            for row in rows:
+                cells = await row.query_selector_all('td')
+                if len(cells) >= 5:
+                    uc_number = await cells[0].text_content()
+                    city = await cells[1].text_content()
+                    address = await cells[2].text_content()
+                    group = await cells[3].text_content()
+                    status = await cells[4].text_content()
+                    
+                    units.append({
+                        "uc_number": uc_number.strip() if uc_number else "",
+                        "city": city.strip() if city else "",
+                        "address": address.strip() if address else "",
+                        "group": group.strip() if group else "",
+                        "status": status.strip() if status else "",
+                    })
             
+            logger.info(f"Found {len(units)} consumer units")
             return units
+            
         except Exception as e:
             logger.error(f"Error getting consumer units: {str(e)}")
             return []
+    
+    async def select_consumer_unit(self, uc_number: str) -> Dict[str, Any]:
+        """
+        Select a consumer unit to view its details and invoices
+        
+        Args:
+            uc_number: The UC number to select
+            
+        Returns:
+            Selection result
+        """
+        if not self.logged_in or not self.page:
+            return {"success": False, "error": "Não está logado"}
+        
+        try:
+            # Find the row with this UC number
+            rows = await self.page.query_selector_all('table tbody tr')
+            
+            for row in rows:
+                cells = await row.query_selector_all('td')
+                if cells:
+                    first_cell_text = await cells[0].text_content()
+                    if first_cell_text and uc_number in first_cell_text:
+                        # Find and click the select button/link in this row
+                        select_btn = await row.query_selector('a, button, [onclick]')
+                        if select_btn:
+                            await select_btn.click()
+                            await asyncio.sleep(3)
+                            
+                            logger.info(f"Selected UC: {uc_number}")
+                            return {
+                                "success": True,
+                                "uc_number": uc_number,
+                                "url": self.page.url
+                            }
+            
+            return {"success": False, "error": f"UC {uc_number} não encontrada"}
+            
+        except Exception as e:
+            logger.error(f"Error selecting UC: {str(e)}")
+            return {"success": False, "error": str(e)}
     
     async def download_invoice(self, uc_number: Optional[str] = None) -> Dict[str, Any]:
         """
