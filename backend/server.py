@@ -1847,34 +1847,53 @@ async def sync_copel_data(request: CopelSyncRequest, current_user: dict = Depend
         "message": "Sincronização COPEL realizada. Fatura baixada com sucesso."
     }
 
-# ==================== GROWATT INTEGRATION ====================
+# ==================== GROWATT INTEGRATION (OSS Portal via Web Scraping) ====================
 
-from services.growatt_service import get_growatt_service, GrowattService
+from services.growatt_service import get_growatt_oss_service, reset_growatt_oss_service
 
-class GrowattTokenRequest(BaseModel):
-    token: str
+class GrowattLoginRequest(BaseModel):
+    username: str
+    password: str
 
 class GrowattPlantSyncRequest(BaseModel):
-    token: str
-    plant_id: str
-    days: int = 30
+    username: str
+    password: str
+    plant_name: str
 
-@api_router.post("/integrations/growatt/test")
-async def test_growatt_connection(request: GrowattTokenRequest, current_user: dict = Depends(get_current_user)):
-    """Test Growatt API connection with the provided token"""
-    service = get_growatt_service(request.token)
-    result = service.test_connection()
+@api_router.post("/integrations/growatt/login")
+async def growatt_login(request: GrowattLoginRequest, current_user: dict = Depends(get_current_user)):
+    """Login to Growatt OSS portal and get plant list"""
+    service = get_growatt_oss_service()
     
-    if not result.get('success'):
-        raise HTTPException(status_code=400, detail=result.get('error', 'Conexão Growatt falhou'))
+    # Login
+    login_result = await service.login(request.username, request.password)
     
-    return result
+    if not login_result.get('success'):
+        raise HTTPException(status_code=400, detail=login_result.get('error', 'Login Growatt falhou'))
+    
+    # Get plants after successful login
+    plants = await service.get_plants()
+    
+    return {
+        "success": True,
+        "message": "Login realizado com sucesso",
+        "plants": plants,
+        "total": len(plants)
+    }
 
 @api_router.post("/integrations/growatt/plants")
-async def list_growatt_plants(request: GrowattTokenRequest, current_user: dict = Depends(get_current_user)):
-    """List all plants from Growatt account"""
-    service = get_growatt_service(request.token)
-    plants = service.get_plant_list()
+async def list_growatt_plants(request: GrowattLoginRequest, current_user: dict = Depends(get_current_user)):
+    """List all plants from Growatt OSS account"""
+    service = get_growatt_oss_service()
+    
+    # Login if not already logged in
+    if not service.logged_in:
+        login_result = await service.login(request.username, request.password)
+        if not login_result.get('success'):
+            raise HTTPException(status_code=400, detail=login_result.get('error', 'Login Growatt falhou'))
+    
+    # Get plants
+    plants = await service.get_plants(force_refresh=True)
     
     return {
         "success": True,
@@ -1885,78 +1904,85 @@ async def list_growatt_plants(request: GrowattTokenRequest, current_user: dict =
 @api_router.post("/integrations/growatt/plant-details")
 async def get_growatt_plant_details(request: GrowattPlantSyncRequest, current_user: dict = Depends(get_current_user)):
     """Get detailed information for a specific Growatt plant"""
-    service = get_growatt_service(request.token)
-    details = service.get_plant_details(request.plant_id)
+    service = get_growatt_oss_service()
+    
+    # Login if not already logged in
+    if not service.logged_in:
+        login_result = await service.login(request.username, request.password)
+        if not login_result.get('success'):
+            raise HTTPException(status_code=400, detail=login_result.get('error', 'Login Growatt falhou'))
+    
+    # Get plant details
+    details = await service.get_plant_details(request.plant_name)
     
     if not details:
-        raise HTTPException(status_code=404, detail="Usina não encontrada na conta Growatt")
+        raise HTTPException(status_code=404, detail=f"Usina '{request.plant_name}' não encontrada na conta Growatt")
     
     return {
         "success": True,
         "plant": details
     }
 
-@api_router.post("/integrations/growatt/devices")
-async def list_growatt_devices(request: GrowattPlantSyncRequest, current_user: dict = Depends(get_current_user)):
-    """List all devices (inverters) for a Growatt plant"""
-    service = get_growatt_service(request.token)
-    devices = service.get_device_list(request.plant_id)
-    
-    return {
-        "success": True,
-        "devices": devices,
-        "total": len(devices)
-    }
-
 @api_router.post("/integrations/growatt/sync")
 async def sync_growatt_data(request: GrowattPlantSyncRequest, current_user: dict = Depends(get_current_user)):
     """Sync generation data from Growatt for a specific plant"""
-    service = get_growatt_service(request.token)
+    service = get_growatt_oss_service()
+    
+    # Login if not already logged in
+    if not service.logged_in:
+        login_result = await service.login(request.username, request.password)
+        if not login_result.get('success'):
+            raise HTTPException(status_code=400, detail=login_result.get('error', 'Login Growatt falhou'))
     
     # Get sync data
-    sync_result = service.sync_plant_data(request.plant_id, request.days)
+    sync_result = await service.sync_plant_energy_data(request.plant_name)
     
     if not sync_result.get('success'):
         raise HTTPException(status_code=400, detail=sync_result.get('error', 'Falha ao sincronizar dados'))
     
-    # Save to database - find local plant that matches
-    # We need to find the local plant by Growatt plant_id
+    # Save to database - find local plant that matches by name
     local_plant = await db.plants.find_one({
         '$or': [
-            {'growatt_plant_id': request.plant_id},
-            {'external_plant_id': request.plant_id}
+            {'name': {'$regex': request.plant_name, '$options': 'i'}},
+            {'growatt_plant_name': request.plant_name}
         ],
         'is_active': True
     })
     
     records_saved = 0
-    if local_plant:
-        for record in sync_result.get('data', []):
-            if record.get('date') and record.get('generation_kwh', 0) > 0:
-                await db.generation_data.update_one(
-                    {'plant_id': local_plant['id'], 'date': record['date']},
-                    {'$set': {
-                        'generation_kwh': record['generation_kwh'],
-                        'source': 'growatt',
-                        'synced_at': datetime.now(timezone.utc).isoformat()
-                    }},
-                    upsert=True
-                )
-                records_saved += 1
+    if local_plant and sync_result.get('data'):
+        data = sync_result['data']
+        if data.get('date') and data.get('generation_kwh', 0) > 0:
+            await db.generation_data.update_one(
+                {'plant_id': local_plant['id'], 'date': data['date']},
+                {'$set': {
+                    'generation_kwh': data['generation_kwh'],
+                    'source': 'growatt',
+                    'synced_at': datetime.now(timezone.utc).isoformat()
+                }},
+                upsert=True
+            )
+            records_saved = 1
         
         # Log activity
         await log_activity(local_plant['id'], "growatt_sync", 
-                          f"Sincronização Growatt: {records_saved} registros importados", 
+                          f"Sincronização Growatt: {data.get('generation_kwh', 0)} kWh importados para {data.get('date')}", 
                           current_user.get('name'))
     
     return {
         "success": True,
-        "growatt_plant_id": request.plant_id,
-        "records_fetched": sync_result.get('records_fetched', 0),
+        "plant_name": request.plant_name,
+        "data": sync_result.get('data'),
         "records_saved": records_saved,
         "local_plant_found": local_plant is not None,
-        "message": f"Sincronização concluída. {records_saved} registros salvos." if local_plant else "Dados obtidos, mas nenhuma usina local vinculada encontrada."
+        "message": f"Sincronização concluída. Dados salvos para {sync_result.get('data', {}).get('date')}." if local_plant else "Dados obtidos, mas nenhuma usina local vinculada encontrada."
     }
+
+@api_router.post("/integrations/growatt/logout")
+async def growatt_logout(current_user: dict = Depends(get_current_user)):
+    """Logout from Growatt OSS portal and cleanup resources"""
+    await reset_growatt_oss_service()
+    return {"success": True, "message": "Logout realizado com sucesso"}
 
 @api_router.post("/integrations/growatt/link-plant")
 async def link_growatt_plant(
