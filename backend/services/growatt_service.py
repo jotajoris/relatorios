@@ -14,9 +14,24 @@ logger = logging.getLogger(__name__)
 class GrowattService:
     """Service class for Growatt API integration"""
     
-    def __init__(self):
+    def __init__(self, server: str = "oss"):
         # Use random User-Agent to avoid 403 errors from Growatt WAF
         self.api = growattServer.GrowattApi(True, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        
+        # Set server URL based on region
+        # oss = Other countries (Brazil, etc)
+        # openapi = Europe
+        # openapi-us = North America
+        # openapi-cn = China
+        if server == "oss":
+            self.api.server_url = 'https://server.growatt.com/'  # OSS uses same API
+        elif server == "us":
+            self.api.server_url = 'https://openapi-us.growatt.com/'
+        elif server == "cn":
+            self.api.server_url = 'https://openapi-cn.growatt.com/'
+        else:
+            self.api.server_url = 'https://openapi.growatt.com/'
+        
         self.user_id = None
         self.logged_in = False
     
