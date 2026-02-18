@@ -62,14 +62,14 @@ const Profile = () => {
       </div>
 
       {/* User Info Card */}
-      <Card className="border-neutral-100 shadow-sm">
-        <CardHeader>
+      <Card className="border-neutral-100 shadow-sm bg-white">
+        <CardHeader className="bg-white">
           <CardTitle className="text-lg flex items-center gap-2">
             <User className="h-5 w-5 text-[#FFD600]" />
             Informações do Usuário
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="bg-white">
           <div className="flex items-center gap-4">
             <div className="w-16 h-16 rounded-full bg-[#FFD600] flex items-center justify-center text-[#1A1A1A] text-2xl font-bold">
               {user?.name?.charAt(0).toUpperCase() || 'U'}
