@@ -336,7 +336,7 @@ class CopelService:
         Download the latest invoice PDF for a consumer unit
         
         Args:
-            uc_number: Consumer unit number (optional if only one UC)
+            uc_number: Consumer unit number (required to select the UC first)
             
         Returns:
             Download result with file path
@@ -345,63 +345,100 @@ class CopelService:
             return {"success": False, "error": "Não está logado no portal COPEL"}
         
         try:
-            # Navigate to invoices page
+            # If UC number provided, select it first
+            if uc_number:
+                select_result = await self.select_consumer_unit(uc_number)
+                if not select_result.get('success'):
+                    return select_result
+            
+            await asyncio.sleep(2)
+            
+            # Take screenshot of current page
+            await self.page.screenshot(path=f"{self.download_path}/uc_page.png")
+            
+            # Log current page content for debugging
+            page_text = await self.page.evaluate('() => document.body.innerText')
+            logger.info(f"UC page content (first 500 chars): {page_text[:500]}")
+            
+            # Look for invoice/fatura links on UC detail page
             invoice_links = [
-                'a:has-text("Fatura")',
+                'a:has-text("2ª Via")',
                 'a:has-text("Segunda Via")',
+                'a:has-text("Fatura")',
                 'a:has-text("Conta")',
+                'a:has-text("PDF")',
+                'a:has-text("Visualizar")',
                 '[href*="fatura"]',
-                '[href*="conta"]'
+                '[href*="conta"]',
+                '[href*="pdf"]',
+                'button:has-text("Fatura")',
             ]
             
+            found_link = None
             for selector in invoice_links:
                 try:
-                    link = await self.page.wait_for_selector(selector, timeout=5000)
-                    if link:
-                        await link.click()
-                        await asyncio.sleep(3)
+                    found_link = await self.page.wait_for_selector(selector, timeout=3000)
+                    if found_link:
+                        logger.info(f"Found invoice link with selector: {selector}")
                         break
                 except:
                     continue
             
-            # Look for PDF download button/link
-            pdf_selectors = [
-                'a:has-text("PDF")',
-                'a:has-text("Download")',
-                'a:has-text("Baixar")',
-                '[href*=".pdf"]',
-                'button:has-text("Baixar")'
-            ]
+            if not found_link:
+                # Try to find any clickable element that might lead to invoice
+                all_links = await self.page.query_selector_all('a')
+                for link in all_links:
+                    text = await link.text_content()
+                    if text and any(word in text.lower() for word in ['fatura', 'conta', 'pdf', 'via', 'baixar', 'visualizar']):
+                        found_link = link
+                        logger.info(f"Found invoice link by text: {text}")
+                        break
             
-            async with self.page.expect_download(timeout=30000) as download_info:
-                for selector in pdf_selectors:
-                    try:
-                        btn = await self.page.wait_for_selector(selector, timeout=3000)
-                        if btn:
-                            await btn.click()
-                            break
-                    except:
-                        continue
+            if not found_link:
+                return {
+                    "success": False, 
+                    "error": "Link para fatura não encontrado na página da UC",
+                    "screenshot": f"{self.download_path}/uc_page.png"
+                }
+            
+            # Try to download the PDF
+            try:
+                async with self.page.expect_download(timeout=60000) as download_info:
+                    await found_link.click()
                 
-            download = await download_info.value
-            
-            # Save the file
-            filename = f"fatura_copel_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
-            filepath = os.path.join(self.download_path, filename)
-            await download.save_as(filepath)
-            
-            logger.info(f"COPEL invoice downloaded: {filepath}")
-            
-            return {
-                "success": True,
-                "filepath": filepath,
-                "filename": filename
-            }
+                download = await download_info.value
+                
+                # Save the file
+                filename = f"fatura_copel_{uc_number or 'unknown'}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+                filepath = os.path.join(self.download_path, filename)
+                await download.save_as(filepath)
+                
+                logger.info(f"COPEL invoice downloaded: {filepath}")
+                
+                return {
+                    "success": True,
+                    "filepath": filepath,
+                    "filename": filename
+                }
+            except PlaywrightTimeout:
+                # The link might open a new page instead of downloading
+                logger.info("Download timeout - link may have opened a new page")
+                await asyncio.sleep(2)
+                
+                # Take screenshot of result page
+                await self.page.screenshot(path=f"{self.download_path}/after_click.png")
+                
+                return {
+                    "success": False, 
+                    "error": "Fatura pode ter aberto em nova aba. Verifique screenshot.",
+                    "screenshot": f"{self.download_path}/after_click.png"
+                }
             
         except PlaywrightTimeout:
             return {"success": False, "error": "Timeout ao baixar a fatura"}
         except Exception as e:
             logger.error(f"Error downloading invoice: {str(e)}")
+            return {"success": False, "error": f"Erro ao baixar fatura: {str(e)}"}
             return {"success": False, "error": f"Erro ao baixar fatura: {str(e)}"}
     
     async def close(self):
