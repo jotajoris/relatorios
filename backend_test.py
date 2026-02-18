@@ -354,6 +354,7 @@ class SolarPlantAPITester:
             ("Get Current User", self.test_get_me),
             ("Dashboard Stats", self.test_dashboard_stats),
             ("Plants Summary", self.test_plants_summary),
+            ("Growatt Integration", self.test_growatt_integration),
             ("Clients CRUD", self.test_clients_crud),
             ("Plants CRUD", self.test_plants_crud),
             ("Consumer Units CRUD", self.test_consumer_units_crud),
