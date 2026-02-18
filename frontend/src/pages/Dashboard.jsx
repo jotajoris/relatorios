@@ -145,14 +145,14 @@ const Dashboard = () => {
       {/* Charts and Tables Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Generation Chart */}
-        <Card className="lg:col-span-2 border-neutral-100 shadow-sm">
-          <CardHeader className="pb-2">
+        <Card className="lg:col-span-2 border-neutral-100 shadow-sm bg-white">
+          <CardHeader className="pb-2 bg-white">
             <CardTitle className="text-lg font-semibold text-neutral-900 flex items-center gap-2">
               <TrendingUp className="h-5 w-5 text-[#FFD600]" />
               Geração dos Últimos 7 Dias
             </CardTitle>
           </CardHeader>
-          <CardContent>
+          <CardContent className="bg-white">
             <div className="h-[300px]">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
@@ -172,7 +172,7 @@ const Dashboard = () => {
                     ]}
                   />
                   <Bar dataKey="generation" fill="#FFD600" radius={[4, 4, 0, 0]} name="generation" />
-                  <Bar dataKey="prognosis" fill="#E5E5E5" radius={[4, 4, 0, 0]} name="prognosis" />
+                  <Bar dataKey="prognosis" fill="#D4D4D8" radius={[4, 4, 0, 0]} name="prognosis" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
