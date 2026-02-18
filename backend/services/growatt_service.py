@@ -15,7 +15,8 @@ class GrowattService:
     """Service class for Growatt API integration"""
     
     def __init__(self):
-        self.api = growattServer.GrowattApi()
+        # Use random User-Agent to avoid 403 errors from Growatt WAF
+        self.api = growattServer.GrowattApi(True, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
         self.user_id = None
         self.logged_in = False
     
