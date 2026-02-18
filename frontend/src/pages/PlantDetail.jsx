@@ -676,13 +676,42 @@ const PlantDetail = () => {
         <TabsContent value="reports" className="mt-6">
           <Card>
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-4">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex flex-wrap items-center gap-4">
                   <div className="bg-[#FFD600] text-[#1A1A1A] px-3 py-1 rounded font-medium">
                     Geração
                   </div>
-                  <Button variant="outline" size="sm">
-                    Gerar Relatório Personalizado
+                  
+                  {/* Upload Excel Growatt */}
+                  <input
+                    ref={excelInputRef}
+                    type="file"
+                    accept=".xls,.xlsx"
+                    onChange={handleExcelUpload}
+                    className="hidden"
+                  />
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => excelInputRef.current?.click()}
+                    disabled={uploadingExcel}
+                  >
+                    {uploadingExcel ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <FileSpreadsheet className="h-4 w-4 mr-2" />
+                    )}
+                    Importar Excel Growatt
+                  </Button>
+                  
+                  {/* Upload Invoice */}
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => setInvoiceDialogOpen(true)}
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    Enviar Fatura COPEL
                   </Button>
                 </div>
                 
