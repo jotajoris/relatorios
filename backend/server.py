@@ -258,6 +258,66 @@ class CopelCredential(BaseModel):
     last_sync: Optional[datetime] = None
     is_active: bool = True
 
+# Lista de Distribuição de Créditos
+class CreditDistributionUC(BaseModel):
+    consumer_unit_id: str
+    uc_number: str
+    address: str
+    classification: str  # A4-Comercial, B1-Residencial, B3-Comercial
+    percentage: float  # Porcentagem de compensação
+    is_generator: bool = False
+
+class CreditDistributionListBase(BaseModel):
+    plant_id: str
+    name: str  # Ex: "Vigência 12/2025 - Baseada em Lista de Porcentagem"
+    effective_date: str  # Data de vigência MM/YYYY
+    distribution_type: str = "percentage"  # percentage, kwh
+    units: List[CreditDistributionUC] = []
+
+class CreditDistributionListCreate(CreditDistributionListBase):
+    pass
+
+class CreditDistributionList(CreditDistributionListBase):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    is_active: bool = True
+
+# Relatórios Mensais
+class MonthlyReportBase(BaseModel):
+    plant_id: str
+    reference_month: str  # MM/YYYY
+    year: int
+    month: int
+    performance_percentage: float = 0  # Desempenho %
+    total_generation_kwh: float = 0
+    prognosis_kwh: float = 0
+    status: str = "pending"  # pending, generated, sent
+    pdf_url: Optional[str] = None
+    notes: Optional[str] = None
+
+class MonthlyReportCreate(MonthlyReportBase):
+    pass
+
+class MonthlyReport(MonthlyReportBase):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    generated_at: Optional[datetime] = None
+
+# Timeline de Atividades
+class ActivityLogBase(BaseModel):
+    plant_id: str
+    action: str  # edited_report, changed_prognosis, uploaded_invoice, etc
+    description: str
+    user_name: Optional[str] = None
+    details: Optional[Dict[str, Any]] = None
+
+class ActivityLog(ActivityLogBase):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
 # ==================== AUTH HELPERS ====================
 
 def hash_password(password: str) -> str:
