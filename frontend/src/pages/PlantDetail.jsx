@@ -1106,6 +1106,126 @@ const PlantDetail = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Dialog Growatt Integration */}
+      <Dialog open={growattDialogOpen} onOpenChange={setGrowattDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sun className="h-5 w-5 text-[#FFD600]" />
+              Integração Growatt
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-6">
+            {/* Login Section */}
+            <div className="space-y-4">
+              <h4 className="font-medium">1. Credenciais do Portal OSS Growatt</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Usuário</Label>
+                  <Input
+                    placeholder="Ex: BTAVB001"
+                    value={growattCredentials.username}
+                    onChange={(e) => setGrowattCredentials({...growattCredentials, username: e.target.value})}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Senha</Label>
+                  <Input
+                    type="password"
+                    value={growattCredentials.password}
+                    onChange={(e) => setGrowattCredentials({...growattCredentials, password: e.target.value})}
+                  />
+                </div>
+              </div>
+              <Button 
+                onClick={handleGrowattLogin}
+                disabled={growattLoading}
+                className="bg-[#1A1A1A] hover:bg-neutral-800 text-white"
+              >
+                {growattLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Conectando...
+                  </>
+                ) : (
+                  <>
+                    <Zap className="h-4 w-4 mr-2" />
+                    Buscar Usinas
+                  </>
+                )}
+              </Button>
+            </div>
+
+            {/* Plant Selection */}
+            {growattPlants.length > 0 && (
+              <div className="space-y-4">
+                <h4 className="font-medium">2. Selecione a usina na Growatt</h4>
+                <p className="text-sm text-neutral-500">
+                  Encontradas {growattPlants.length} usinas. Selecione qual corresponde a <strong>{data?.plant?.name}</strong>.
+                </p>
+                <div className="max-h-64 overflow-y-auto border rounded-lg">
+                  {growattPlants.map((gp, index) => (
+                    <div 
+                      key={index}
+                      onClick={() => setSelectedGrowattPlant(gp)}
+                      className={`p-3 border-b last:border-b-0 cursor-pointer hover:bg-neutral-50 transition-colors ${
+                        selectedGrowattPlant?.id === gp.id ? 'bg-[#FFD600]/10 border-l-4 border-l-[#FFD600]' : ''
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="font-medium">{gp.name}</p>
+                          <p className="text-sm text-neutral-500">{gp.city}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className={`text-sm font-medium ${
+                            gp.status === 'online' ? 'text-green-600' : 
+                            gp.status === 'abnormal' ? 'text-amber-600' : 'text-red-600'
+                          }`}>
+                            {gp.status === 'online' ? '● Online' : gp.status === 'abnormal' ? '● Alerta' : '● Offline'}
+                          </p>
+                          <p className="text-sm text-neutral-500">{gp.today_energy_kwh?.toLocaleString('pt-BR')} kWh hoje</p>
+                        </div>
+                      </div>
+                      <div className="mt-1 text-xs text-neutral-400">
+                        Capacidade: {gp.capacity_kwp} kWp | Total: {gp.total_energy_kwh?.toLocaleString('pt-BR')} kWh
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Sync Button */}
+            {selectedGrowattPlant && (
+              <div className="p-4 bg-[#FFD600]/10 rounded-lg">
+                <p className="text-sm mb-3">
+                  <strong>Usina selecionada:</strong> {selectedGrowattPlant.name}
+                </p>
+                <Button 
+                  onClick={handleSyncGrowatt}
+                  disabled={syncingGrowatt}
+                  className="w-full bg-[#FFD600] hover:bg-[#EAB308] text-[#1A1A1A]"
+                >
+                  {syncingGrowatt ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Sincronizando...
+                    </>
+                  ) : (
+                    <>
+                      <TrendingUp className="h-4 w-4 mr-2" />
+                      Vincular e Sincronizar Dados
+                    </>
+                  )}
+                </Button>
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
