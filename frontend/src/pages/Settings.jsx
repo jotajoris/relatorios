@@ -3,7 +3,7 @@ import api from '../services/api';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import {
   Select,
@@ -25,11 +25,13 @@ import {
   Key, 
   Zap, 
   Plus, 
-  Trash2,
   RefreshCw,
   Loader2,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Sun,
+  Download,
+  Link2
 } from 'lucide-react';
 
 const Settings = () => {
@@ -47,6 +49,18 @@ const Settings = () => {
     password: ''
   });
   const [savingInverter, setSavingInverter] = useState(false);
+
+  // Growatt test dialog
+  const [growattTestOpen, setGrowattTestOpen] = useState(false);
+  const [growattForm, setGrowattForm] = useState({
+    plant_id: '',
+    username: '',
+    password: ''
+  });
+  const [testingGrowatt, setTestingGrowatt] = useState(false);
+  const [growattPlants, setGrowattPlants] = useState([]);
+  const [selectedGrowattPlant, setSelectedGrowattPlant] = useState('');
+  const [syncing, setSyncing] = useState(false);
 
   // COPEL credential dialog
   const [copelDialogOpen, setCopelDialogOpen] = useState(false);
@@ -104,6 +118,66 @@ const Settings = () => {
     }
   };
 
+  const handleTestGrowatt = async () => {
+    if (!growattForm.username || !growattForm.password || !growattForm.plant_id) {
+      toast.error('Preencha todos os campos');
+      return;
+    }
+
+    setTestingGrowatt(true);
+    setGrowattPlants([]);
+    try {
+      const response = await api.post('/integrations/growatt/test-login', {
+        plant_id: growattForm.plant_id,
+        username: growattForm.username,
+        password: growattForm.password
+      });
+      
+      if (response.data.success) {
+        toast.success(`Conectado! Usuário: ${response.data.user_name}`);
+        setGrowattPlants(response.data.plants || []);
+      }
+    } catch (error) {
+      const msg = error.response?.data?.detail || 'Erro ao conectar ao Growatt';
+      toast.error(msg);
+    } finally {
+      setTestingGrowatt(false);
+    }
+  };
+
+  const handleSyncGrowatt = async () => {
+    if (!selectedGrowattPlant) {
+      toast.error('Selecione uma usina do Growatt');
+      return;
+    }
+
+    setSyncing(true);
+    try {
+      const response = await api.post('/integrations/growatt/fetch-data', null, {
+        params: {
+          plant_id: growattForm.plant_id,
+          growatt_plant_id: selectedGrowattPlant,
+          username: growattForm.username,
+          password: growattForm.password,
+          days: 30
+        }
+      });
+      
+      if (response.data.success) {
+        toast.success(`Sincronização concluída! ${response.data.total_synced} registros.`);
+        setGrowattTestOpen(false);
+        setGrowattForm({ plant_id: '', username: '', password: '' });
+        setGrowattPlants([]);
+        setSelectedGrowattPlant('');
+      }
+    } catch (error) {
+      const msg = error.response?.data?.detail || 'Erro ao sincronizar dados';
+      toast.error(msg);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
   const handleSaveCopelCredential = async () => {
     if (!copelForm.consumer_unit_id || !copelForm.cpf || !copelForm.password) {
       toast.error('Preencha todos os campos');
@@ -128,11 +202,6 @@ const Settings = () => {
     return plant?.name || 'Usina não encontrada';
   };
 
-  const getUnitInfo = (unitId) => {
-    const unit = consumerUnits.find(u => u.id === unitId);
-    return unit ? `${unit.contract_number} - ${unit.address}` : 'UC não encontrada';
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -152,39 +221,40 @@ const Settings = () => {
       <Tabs defaultValue="inverters" className="space-y-6">
         <TabsList className="bg-neutral-100">
           <TabsTrigger value="inverters">Inversores</TabsTrigger>
+          <TabsTrigger value="growatt">Growatt</TabsTrigger>
           <TabsTrigger value="copel">COPEL</TabsTrigger>
         </TabsList>
 
         {/* Inverters Tab */}
         <TabsContent value="inverters" className="space-y-6">
-          <Card className="border-neutral-100 shadow-sm">
-            <CardHeader>
+          <Card className="border-neutral-200 shadow-sm bg-white">
+            <CardHeader className="bg-white border-b border-neutral-100">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-lg flex items-center gap-2">
-                  <Key className="h-5 w-5 text-[#FFD600]" />
+                  <Key className="h-5 w-5 text-[#EAB308]" />
                   Credenciais de Inversores
                 </CardTitle>
                 <Button 
                   onClick={() => setInverterDialogOpen(true)}
-                  className="bg-[#FFD600] hover:bg-[#EAB308] text-[#1A1A1A]"
+                  className="bg-[#1A1A1A] hover:bg-neutral-800 text-white"
                 >
                   <Plus className="h-4 w-4 mr-2" />
-                  Adicionar Credencial
+                  Adicionar
                 </Button>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="bg-white pt-6">
               <p className="text-sm text-neutral-600 mb-6">
-                Configure as credenciais de acesso aos portais dos inversores para sincronização automática dos dados de geração.
+                Configure as credenciais de acesso aos portais dos inversores para sincronização automática.
               </p>
               
               {inverterCredentials.length > 0 ? (
                 <div className="space-y-4">
                   {inverterCredentials.map((cred, index) => (
-                    <div key={index} className="flex items-center justify-between p-4 bg-neutral-50 rounded-lg">
+                    <div key={index} className="flex items-center justify-between p-4 bg-neutral-50 rounded-lg border border-neutral-100">
                       <div className="flex items-center gap-4">
                         <div className="p-2 bg-white rounded-lg border border-neutral-200">
-                          <Zap className="h-5 w-5 text-amber-600" />
+                          <Sun className="h-5 w-5 text-amber-600" />
                         </div>
                         <div>
                           <p className="font-medium text-neutral-900">{getPlantName(cred.plant_id)}</p>
@@ -205,9 +275,6 @@ const Settings = () => {
                             Pendente
                           </div>
                         )}
-                        <Button variant="ghost" size="icon">
-                          <RefreshCw className="h-4 w-4" />
-                        </Button>
                       </div>
                     </div>
                   ))}
@@ -216,19 +283,57 @@ const Settings = () => {
                 <div className="text-center py-8 text-neutral-500">
                   <Key className="h-12 w-12 mx-auto text-neutral-300 mb-4" />
                   <p>Nenhuma credencial cadastrada</p>
-                  <p className="text-sm">Adicione credenciais para sincronizar dados automaticamente</p>
                 </div>
               )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-              {/* Supported Brands */}
-              <div className="mt-8 p-4 bg-blue-50 rounded-lg">
-                <h4 className="font-medium text-blue-900 mb-2">Marcas Suportadas</h4>
-                <div className="flex flex-wrap gap-2">
-                  {['Growatt', 'FusionSolar', 'Sungrow', 'Deye', 'Solis', 'SAJ', 'SolarMan', 'Livoltek'].map((brand) => (
-                    <span key={brand} className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-sm">
-                      {brand}
-                    </span>
-                  ))}
+        {/* Growatt Tab */}
+        <TabsContent value="growatt" className="space-y-6">
+          <Card className="border-neutral-200 shadow-sm bg-white">
+            <CardHeader className="bg-white border-b border-neutral-100">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Sun className="h-5 w-5 text-[#EAB308]" />
+                    Integração Growatt
+                  </CardTitle>
+                  <CardDescription className="mt-1">
+                    Sincronize dados de geração diretamente do portal Growatt OSS
+                  </CardDescription>
+                </div>
+                <Button 
+                  onClick={() => setGrowattTestOpen(true)}
+                  className="bg-[#1A1A1A] hover:bg-neutral-800 text-white"
+                >
+                  <Link2 className="h-4 w-4 mr-2" />
+                  Conectar
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="bg-white pt-6">
+              <div className="grid md:grid-cols-2 gap-6">
+                <div className="p-4 bg-emerald-50 rounded-lg border border-emerald-100">
+                  <h4 className="font-medium text-emerald-900 mb-2 flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4" />
+                    Funcionalidades Disponíveis
+                  </h4>
+                  <ul className="text-sm text-emerald-800 space-y-1">
+                    <li>• Login no portal Growatt OSS</li>
+                    <li>• Listagem de usinas</li>
+                    <li>• Sincronização de dados de geração</li>
+                    <li>• Histórico dos últimos 30 dias</li>
+                  </ul>
+                </div>
+                <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
+                  <h4 className="font-medium text-blue-900 mb-2">Como usar</h4>
+                  <ol className="text-sm text-blue-800 space-y-1 list-decimal list-inside">
+                    <li>Clique em "Conectar"</li>
+                    <li>Informe suas credenciais do Growatt</li>
+                    <li>Selecione a usina para sincronizar</li>
+                    <li>Clique em "Sincronizar Dados"</li>
+                  </ol>
                 </div>
               </div>
             </CardContent>
@@ -237,40 +342,34 @@ const Settings = () => {
 
         {/* COPEL Tab */}
         <TabsContent value="copel" className="space-y-6">
-          <Card className="border-neutral-100 shadow-sm">
-            <CardHeader>
+          <Card className="border-neutral-200 shadow-sm bg-white">
+            <CardHeader className="bg-white border-b border-neutral-100">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-lg flex items-center gap-2">
-                  <Zap className="h-5 w-5 text-[#FFD600]" />
+                  <Zap className="h-5 w-5 text-[#EAB308]" />
                   Credenciais COPEL
                 </CardTitle>
                 <Button 
                   onClick={() => setCopelDialogOpen(true)}
-                  className="bg-[#FFD600] hover:bg-[#EAB308] text-[#1A1A1A]"
+                  className="bg-[#1A1A1A] hover:bg-neutral-800 text-white"
                 >
                   <Plus className="h-4 w-4 mr-2" />
-                  Adicionar Credencial
+                  Adicionar
                 </Button>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="bg-white pt-6">
               <p className="text-sm text-neutral-600 mb-6">
-                Configure as credenciais de acesso ao portal da COPEL para download automático das faturas de energia.
+                Configure as credenciais de acesso ao portal da COPEL para download automático das faturas.
               </p>
               
-              <div className="text-center py-8 text-neutral-500">
-                <Zap className="h-12 w-12 mx-auto text-neutral-300 mb-4" />
-                <p>Automação COPEL em desenvolvimento</p>
-                <p className="text-sm">Em breve você poderá baixar faturas automaticamente</p>
-              </div>
-
-              <div className="mt-6 p-4 bg-amber-50 rounded-lg">
-                <h4 className="font-medium text-amber-900 mb-2">Funcionalidades Planejadas</h4>
+              <div className="p-4 bg-amber-50 rounded-lg border border-amber-100">
+                <h4 className="font-medium text-amber-900 mb-2">Em Desenvolvimento</h4>
                 <ul className="text-sm text-amber-800 space-y-1">
                   <li>• Login automático no portal da COPEL</li>
                   <li>• Download da segunda via da fatura (PDF)</li>
                   <li>• Extração automática dos dados da fatura</li>
-                  <li>• Sincronização programada (diária)</li>
+                  <li>• Sincronização programada</li>
                 </ul>
               </div>
             </CardContent>
@@ -280,7 +379,7 @@ const Settings = () => {
 
       {/* Inverter Credential Dialog */}
       <Dialog open={inverterDialogOpen} onOpenChange={setInverterDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md bg-white">
           <DialogHeader>
             <DialogTitle className="font-heading">Adicionar Credencial de Inversor</DialogTitle>
           </DialogHeader>
@@ -345,10 +444,6 @@ const Settings = () => {
                 placeholder="••••••••"
               />
             </div>
-
-            <div className="p-3 bg-blue-50 rounded-lg text-sm text-blue-700">
-              <strong>Nota:</strong> Suas credenciais são armazenadas de forma criptografada (AES-256).
-            </div>
           </div>
 
           <DialogFooter>
@@ -358,7 +453,7 @@ const Settings = () => {
             <Button 
               onClick={handleSaveInverterCredential} 
               disabled={savingInverter}
-              className="bg-[#FFD600] hover:bg-[#EAB308] text-[#1A1A1A]"
+              className="bg-[#1A1A1A] hover:bg-neutral-800 text-white"
             >
               {savingInverter ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar'}
             </Button>
@@ -366,9 +461,131 @@ const Settings = () => {
         </DialogContent>
       </Dialog>
 
+      {/* Growatt Test Dialog */}
+      <Dialog open={growattTestOpen} onOpenChange={setGrowattTestOpen}>
+        <DialogContent className="sm:max-w-lg bg-white">
+          <DialogHeader>
+            <DialogTitle className="font-heading flex items-center gap-2">
+              <Sun className="h-5 w-5 text-amber-500" />
+              Conectar ao Growatt
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Usina (no sistema) *</Label>
+              <Select
+                value={growattForm.plant_id}
+                onValueChange={(value) => setGrowattForm({ ...growattForm, plant_id: value })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a usina para vincular" />
+                </SelectTrigger>
+                <SelectContent>
+                  {plants.map((plant) => (
+                    <SelectItem key={plant.id} value={plant.id}>
+                      {plant.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Usuário Growatt *</Label>
+              <Input
+                value={growattForm.username}
+                onChange={(e) => setGrowattForm({ ...growattForm, username: e.target.value })}
+                placeholder="Seu login do Growatt OSS"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Senha Growatt *</Label>
+              <Input
+                type="password"
+                value={growattForm.password}
+                onChange={(e) => setGrowattForm({ ...growattForm, password: e.target.value })}
+                placeholder="••••••••"
+              />
+            </div>
+
+            <Button 
+              onClick={handleTestGrowatt}
+              disabled={testingGrowatt}
+              className="w-full bg-amber-500 hover:bg-amber-600 text-white"
+            >
+              {testingGrowatt ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Conectando...
+                </>
+              ) : (
+                <>
+                  <Link2 className="h-4 w-4 mr-2" />
+                  Testar Conexão
+                </>
+              )}
+            </Button>
+
+            {/* Growatt Plants List */}
+            {growattPlants.length > 0 && (
+              <div className="space-y-3 pt-4 border-t border-neutral-200">
+                <Label>Usinas encontradas no Growatt:</Label>
+                <Select
+                  value={selectedGrowattPlant}
+                  onValueChange={setSelectedGrowattPlant}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione para sincronizar" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {growattPlants.map((plant) => (
+                      <SelectItem key={plant.id} value={plant.id}>
+                        {plant.name} ({plant.capacity_kwp} kWp)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                {selectedGrowattPlant && (
+                  <Button 
+                    onClick={handleSyncGrowatt}
+                    disabled={syncing}
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                  >
+                    {syncing ? (
+                      <>
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                        Sincronizando...
+                      </>
+                    ) : (
+                      <>
+                        <Download className="h-4 w-4 mr-2" />
+                        Sincronizar Dados (30 dias)
+                      </>
+                    )}
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setGrowattTestOpen(false);
+              setGrowattPlants([]);
+              setSelectedGrowattPlant('');
+            }}>
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* COPEL Credential Dialog */}
       <Dialog open={copelDialogOpen} onOpenChange={setCopelDialogOpen}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md bg-white">
           <DialogHeader>
             <DialogTitle className="font-heading">Adicionar Credencial COPEL</DialogTitle>
           </DialogHeader>
@@ -411,10 +628,6 @@ const Settings = () => {
                 placeholder="••••••••"
               />
             </div>
-
-            <div className="p-3 bg-amber-50 rounded-lg text-sm text-amber-700">
-              <strong>Atenção:</strong> Use as mesmas credenciais do portal COPEL (agência virtual).
-            </div>
           </div>
 
           <DialogFooter>
@@ -424,7 +637,7 @@ const Settings = () => {
             <Button 
               onClick={handleSaveCopelCredential} 
               disabled={savingCopel}
-              className="bg-[#FFD600] hover:bg-[#EAB308] text-[#1A1A1A]"
+              className="bg-[#1A1A1A] hover:bg-neutral-800 text-white"
             >
               {savingCopel ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar'}
             </Button>
