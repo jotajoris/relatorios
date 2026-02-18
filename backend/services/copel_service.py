@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 COPEL_LOGIN_URL = "https://www.copel.com/avaweb/paginaLogin/login.jsf"
 COPEL_BASE_URL = "https://www.copel.com/avaweb"
 
+# Set Playwright browsers path
+os.environ['PLAYWRIGHT_BROWSERS_PATH'] = '/pw-browsers'
+
 
 class CopelService:
     """Service class for COPEL portal automation"""
