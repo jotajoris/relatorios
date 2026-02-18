@@ -144,24 +144,29 @@ class GrowattOSSService:
                                 
                                 rows.forEach((row) => {
                                     const cells = row.querySelectorAll('td');
-                                    if (cells.length >= 10) {
-                                        plants.push({
-                                            number: cells[0]?.innerText?.trim() || '',
-                                            group: cells[1]?.innerText?.trim() || '',
-                                            status: cells[2]?.innerText?.trim() || '',
-                                            plantName: cells[3]?.innerText?.trim() || '',
-                                            alias: cells[4]?.innerText?.trim() || '',
-                                            userName: cells[5]?.innerText?.trim() || '',
-                                            city: cells[6]?.innerText?.trim() || '',
-                                            revenue: cells[7]?.innerText?.trim() || '',
-                                            timezone: cells[8]?.innerText?.trim() || '',
-                                            installDate: cells[9]?.innerText?.trim() || '',
-                                            deviceCount: cells[10]?.innerText?.trim() || '',
-                                            pvPower: cells[11]?.innerText?.trim() || '',
-                                            dailyGen: cells[12]?.innerText?.trim() || '',
-                                            fullHours: cells[13]?.innerText?.trim() || '',
-                                            totalGen: cells[14]?.innerText?.trim() || ''
-                                        });
+                                    // Table has 21 cells per row, plant data starts at index 1
+                                    if (cells.length >= 15) {
+                                        const plantName = cells[4]?.innerText?.trim() || '';
+                                        // Only add if plantName is not empty and is a real plant row
+                                        if (plantName && !plantName.includes('*') && !plantName.includes('Type')) {
+                                            plants.push({
+                                                number: cells[1]?.innerText?.trim() || '',
+                                                group: cells[2]?.innerText?.trim() || '',
+                                                status: cells[3]?.innerText?.trim() || '',
+                                                plantName: plantName,
+                                                alias: cells[5]?.innerText?.trim() || '',
+                                                userName: cells[6]?.innerText?.trim() || '',
+                                                city: cells[7]?.innerText?.trim() || '',
+                                                revenue: cells[8]?.innerText?.trim() || '',
+                                                timezone: cells[9]?.innerText?.trim() || '',
+                                                installDate: cells[10]?.innerText?.trim() || '',
+                                                deviceCount: cells[11]?.innerText?.trim() || '',
+                                                pvPower: cells[12]?.innerText?.trim() || '',
+                                                dailyGen: cells[13]?.innerText?.trim() || '',
+                                                fullHours: cells[14]?.innerText?.trim() || '',
+                                                totalGen: cells[15]?.innerText?.trim() || ''
+                                            });
+                                        }
                                     }
                                 });
                                 
