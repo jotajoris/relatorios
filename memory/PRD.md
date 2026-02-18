@@ -1,156 +1,181 @@
 # PRD - Sistema de Gerenciamento de Usinas Solares
 
 ## Visão Geral
-Sistema web para gerenciamento de usinas de energia solar fotovoltaica, com foco na gestão de unidades consumidoras (UCs) e faturas de energia da COPEL.
+Sistema web para gerenciamento de usinas de energia solar fotovoltaica, com foco na gestão de unidades consumidoras (UCs), faturas de energia da COPEL e relatórios de desempenho.
 
 ## Stack Tecnológica
-- **Frontend:** React + Vite + TailwindCSS + shadcn/ui
+- **Frontend:** React + Vite + TailwindCSS + shadcn/ui + Recharts
 - **Backend:** FastAPI + Python
 - **Database:** MongoDB
 - **Autenticação:** JWT
 
-## Funcionalidades Implementadas
+---
 
-### ✅ Autenticação
+## ✅ Funcionalidades Implementadas
+
+### Autenticação
 - Login com email/senha
 - JWT com tokens de acesso e refresh
 - Proteção de rotas
 
-### ✅ Gestão de Clientes
+### Gestão de Clientes
 - CRUD completo
-- Associação com usinas
+- Upload de logo
+- Campos: nome, email, telefone, documento, endereço, responsável
 
-### ✅ Gestão de Usinas
+### Gestão de Usinas
 - CRUD completo
-- Dados: capacidade, localização, inversor, prognóstico mensal/anual
-- Associação com clientes
+- **Página de Detalhes com 4 Tabs:**
 
-### ✅ Gestão de Unidades Consumidoras (UCs) - **ATUALIZADO 18/02/2026**
-- CRUD completo com novos campos:
-  - `uc_number`: Número da UC na COPEL
-  - `tariff_group`: Grupo tarifário (A ou B)
-  - `tariff_modality`: Modalidade tarifária (Convencional, Horária Verde/Azul)
-  - `is_generator`: Indica se é UC geradora
-  - `compensation_percentage`: % de compensação para UCs beneficiárias
-  - `generator_uc_ids`: IDs das UCs geradoras que abastecem esta UC
-  - `contracted_demand_kw`: Demanda contratada (Grupo A)
-- Interface com badges visuais:
-  - Geradora (amarelo) / Beneficiária (azul)
-  - Grupo A (roxo) / Grupo B (verde)
-  - % de compensação
+#### Tab 1: Visão Geral
+- Header escuro com logo, nome, KPIs
+- Gráfico de geração diária (últimos 30 dias)
+- Linha de prognóstico
+- Timeline de atividades recentes
 
-### ✅ Upload de Faturas PDF - **NOVO 18/02/2026**
-- Upload manual de PDFs de faturas COPEL
-- Parser automático que extrai:
-  - Dados financeiros (valor total, economizado)
-  - Dados de energia (registrada, injetada, compensada)
-  - Créditos acumulados (Ponta e Fora Ponta)
-  - Demanda (Grupo A)
-  - Tributos (ICMS, Iluminação Pública)
-- Suporte a Grupo A e Grupo B
-- Interface para edição/validação antes de salvar
+#### Tab 2: Relatórios
+- Grid de 12 meses com cards de desempenho
+- Navegação por ano
+- Botão "Gerar Relatório Personalizado" (placeholder)
 
-### ✅ Integração COPEL - **PARCIAL**
-- Login automático no portal COPEL ✅
-- Listagem de UCs da conta ✅
-- Seleção de UC ✅
-- **Limitação:** reCAPTCHA pode bloquear automação em alguns casos
+#### Tab 3: Sistema de Crédito
+- Tabela de UCs geradoras e beneficiárias
+- Colunas: Denominação, Contrato, Classificação, Porcentagem, Ações
+- Suporte a múltiplas geradoras
+- Total de porcentagem distribuída
 
-### ⚠️ Integração Growatt - **PENDENTE**
-- Serviço implementado com suporte a múltiplos servidores
-- Credenciais fornecidas não funcionam ("User Does Not Exist")
-- Necessário verificar servidor correto para conta brasileira
+#### Tab 4: Configurações
+- Upload de logo da usina
+- Edição de cadastro (nome, potência, investimento, etc)
+- Preferências (alertas, notificações)
+- Link de compartilhamento público
+- Perda de eficiência por ano
 
-### ⚠️ Geração de PDF - **PLACEHOLDER**
-- Endpoint criado mas não implementado
-- Decisão pendente: usar `pyppeteer` ou microsserviço Node.js
+### Gestão de UCs
+- CRUD completo
+- Campos: número UC, endereço, cidade, estado
+- Grupo tarifário (A ou B)
+- Classificação (A4-Comercial, B1-Residencial, etc)
+- Porcentagem de compensação
+- Flag geradora/beneficiária
+- Suporte a múltiplas geradoras por usina
 
-## Estrutura de Dados
+### Upload de Faturas PDF
+- Upload manual de PDFs COPEL
+- Parser automático para Grupo A e B
+- Extração: valores, energia, créditos, demanda
+- Interface para edição antes de salvar
+
+### Integração COPEL
+- Login automático ✅
+- Listagem de UCs ✅
+- Download de faturas ⚠️ (limitado por CAPTCHA)
+
+---
+
+## 📋 Modelo de Dados
+
+### Plant (Usina)
+```json
+{
+  "name": "Usina FV",
+  "client_id": "uuid",
+  "capacity_kwp": 365.2,
+  "total_investment": 1450000,
+  "monthly_prognosis_kwh": 41941,
+  "annual_prognosis_kwh": 503290,
+  "efficiency_loss_year1": 2.5,
+  "efficiency_loss_year2": 1.5,
+  "efficiency_loss_other": 0.5,
+  "is_monitored": true,
+  "public_share_enabled": false,
+  "logo_url": "/api/logos/plant_xxx.png"
+}
+```
 
 ### ConsumerUnit (UC)
 ```json
 {
-  "id": "uuid",
   "plant_id": "uuid",
   "uc_number": "113577680",
   "address": "Rua...",
-  "city": "Curitiba",
-  "state": "PR",
   "tariff_group": "A" | "B",
-  "tariff_modality": "Convencional" | "Horária Verde" | "Horária Azul",
-  "is_generator": true | false,
-  "compensation_percentage": 100.0,
-  "contracted_demand_kw": 50.0,
+  "classification": "A4-Comercial",
+  "compensation_percentage": 50.0,
+  "is_generator": false,
   "generator_uc_ids": ["uuid1", "uuid2"]
 }
 ```
 
-### InvoiceData (Fatura)
+### CreditDistributionList
 ```json
 {
-  "id": "uuid",
-  "consumer_unit_id": "uuid",
   "plant_id": "uuid",
-  "reference_month": "02/2026",
-  "billing_cycle_start": "31/12/2025",
-  "billing_cycle_end": "31/01/2026",
-  "due_date": "01/03/2026",
-  "amount_total_brl": 3291.95,
-  "amount_saved_brl": 500.00,
-  "energy_registered_fp_kwh": 212.0,
-  "energy_injected_fp_kwh": 150.0,
-  "energy_compensated_fp_kwh": 100.0,
-  "credits_accumulated_fp_kwh": 50.0,
-  "tariff_group": "A",
-  "is_generator": true,
-  "source": "upload" | "copel_api" | "manual"
+  "name": "Vigência 02/2026 - Baseada em Lista de Porcentagem",
+  "effective_date": "02/2026",
+  "units": [
+    {"uc_number": "113577680", "percentage": 0, "is_generator": true},
+    {"uc_number": "102480958", "percentage": 50, "is_generator": false}
+  ]
 }
 ```
 
-## Endpoints API
+---
 
-### Autenticação
-- `POST /api/auth/login` - Login
-- `POST /api/auth/token` - Token de acesso
+## 🔌 Endpoints API
 
-### UCs
-- `GET /api/consumer-units` - Listar UCs
-- `POST /api/consumer-units` - Criar UC
-- `PUT /api/consumer-units/{id}` - Atualizar UC
-- `DELETE /api/consumer-units/{id}` - Remover UC
+### Plantas
+- `GET /api/plants/{id}/full-details` - Detalhes completos com UCs, relatórios, atividades
 
-### Faturas
-- `GET /api/invoices` - Listar faturas
-- `POST /api/invoices/upload-pdf/{uc_id}` - Upload de PDF
-- `POST /api/invoices/save-from-upload` - Salvar fatura após edição
+### Upload Logo
+- `POST /api/upload/logo/{type}/{id}` - Upload de logo (client/plant)
+- `GET /api/logos/{filename}` - Servir arquivo de logo
 
-### Integrações
-- `POST /api/integrations/copel/test-login` - Testar login COPEL
-- `POST /api/integrations/copel/list-ucs` - Listar UCs da conta COPEL
-- `POST /api/integrations/growatt/test-login` - Testar login Growatt
+### Distribuição de Créditos
+- `GET /api/credit-distribution/{plant_id}` - Listar listas de distribuição
+- `POST /api/credit-distribution` - Criar nova lista
+- `PUT /api/credit-distribution/{id}` - Atualizar lista
+- `DELETE /api/credit-distribution/{id}` - Remover lista
 
-## Tarefas Pendentes
+### Relatórios
+- `GET /api/reports/{plant_id}` - Listar relatórios
+- `POST /api/reports` - Criar/atualizar relatório
+- `GET /api/reports/{plant_id}/years` - Anos disponíveis
+
+### Timeline
+- `GET /api/activity/{plant_id}` - Atividades recentes
+- `POST /api/activity` - Registrar atividade
+
+---
+
+## 🚀 Tarefas Pendentes
 
 ### P0 - Alta Prioridade
-1. ~~Implementar upload de PDF de faturas~~ ✅
-2. ~~Atualizar modelo de UCs com campos de compensação~~ ✅
-3. Resolver problema de credenciais Growatt
+1. ~~Página de detalhes da usina com 4 tabs~~ ✅
+2. ~~Sistema de distribuição de créditos~~ ✅
+3. ~~Upload de logo~~ ✅
+4. Implementar geração de PDF de relatórios (aguardando papel timbrado)
 
 ### P1 - Média Prioridade
-1. Implementar geração de relatórios PDF
-2. Criar página de listagem/histórico de faturas
-3. Resolver problema de CAPTCHA da COPEL (usar serviço de terceiros ou aceitar limitação)
+1. Resolver problema Growatt (credenciais não funcionam)
+2. Implementar CAPTCHA solver para COPEL
+3. Página de histórico de faturas
 
 ### P2 - Baixa Prioridade
-1. Job agendado para sincronização automática de dados
-2. Integrar outras marcas de inversores (Solis, Fronius)
-3. Sistema de notificações de performance
-4. Finalizar CI/CD (aguarda credenciais FTP)
+1. Job agendado para sincronização automática
+2. Integrar outras marcas de inversores
+3. Sistema de notificações
+4. CI/CD para deploy
 
-## Credenciais de Teste
+---
+
+## 🔐 Credenciais de Teste
 - **App:** projetos.onsolucoes@gmail.com / on123456
 - **COPEL:** 77952604000162 / Portao62*
-- **Growatt:** BTAVB001 / Comercial2023 (não funciona - verificar servidor)
 
-## Preview URL
+## 🌐 Preview URL
 https://copel-sync.preview.emergentagent.com
+
+---
+
+*Última atualização: 18/02/2026*
