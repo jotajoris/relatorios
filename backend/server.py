@@ -74,7 +74,10 @@ class ClientBase(BaseModel):
     phone: Optional[str] = None
     document: Optional[str] = None  # CPF/CNPJ
     address: Optional[str] = None
+    city: Optional[str] = None
+    state: Optional[str] = "PR"
     logo_url: Optional[str] = None
+    contact_person: Optional[str] = None  # Responsável
 
 class ClientCreate(ClientBase):
     pass
