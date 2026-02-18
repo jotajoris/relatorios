@@ -9,6 +9,7 @@ import PlantDetail from "./pages/PlantDetail";
 import ConsumerUnits from "./pages/ConsumerUnits";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
+import Profile from "./pages/Profile";
 import Layout from "./components/Layout";
 
 const ProtectedRoute = ({ children }) => {
