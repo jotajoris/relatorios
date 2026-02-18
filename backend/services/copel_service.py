@@ -50,6 +50,9 @@ class CopelService:
     
     async def _init_browser(self):
         """Initialize Playwright browser"""
+        if not PLAYWRIGHT_AVAILABLE:
+            raise RuntimeError("Playwright não está disponível. A automação COPEL está desativada neste ambiente.")
+        
         playwright = await async_playwright().start()
         self.browser = await playwright.chromium.launch(
             headless=True,
