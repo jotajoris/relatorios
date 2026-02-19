@@ -1,10 +1,19 @@
 """
 Growatt Excel Parser Service
 Parses Excel reports exported from the Growatt portal
+
+Estrutura do Excel Growatt:
+- Cabeçalho: Nome da usina + "Monthly Report"
+- Linha 2: Período (YYYY-MM)
+- Linhas 6-12: KPIs (Energy, Income, CO2, PR)
+- Linha 15: Cabeçalho com dias (1-28/30/31) + Total
+- Linhas 16+: Dados dos inversores por dia
+- Seções adicionais: Storage Data, Hybrid Inverter, Wit, Microgrid
 """
 import pandas as pd
 from io import BytesIO
 from datetime import datetime
+import calendar
 import logging
 from typing import Dict, List, Any, Optional
 
@@ -15,13 +24,8 @@ def parse_growatt_excel(file_content: bytes, filename: str) -> Dict[str, Any]:
     """
     Parse a Growatt Excel report and extract generation data.
     
-    The Growatt Excel format has:
-    - Row 0-2: Header info (plant name, date range)
-    - Row 6: "Plant Data" section
-    - Row 8-14: Summary metrics (Energy this Month, Total, Income, CO2, PR)
-    - Row 15-19: "Inverter Data" section with daily generation per inverter
-    - Columns 3-33: Days 1-31 of the month
-    - Last column: Total
+    Handles variable month lengths (28, 29, 30, 31 days) automatically
+    by detecting which columns have actual data.
     
     Returns:
         Dictionary with parsed data and daily generation
@@ -39,25 +43,29 @@ def parse_growatt_excel(file_content: bytes, filename: str) -> Dict[str, Any]:
             'filename': filename,
             'plant_name': None,
             'month_year': None,
+            'days_in_month': None,
             'summary': {},
             'inverters': [],
             'daily_generation': [],
             'total_generation_kwh': 0
         }
         
-        # Extract plant name from first row (column 0)
+        # Extract plant name from first column header
         first_col = df.columns[0]
         if 'Monthly Report' in str(first_col):
             result['plant_name'] = str(first_col).replace(' Monthly Report', '').strip()
         
-        # Find month/year (usually in row 2)
+        # Find month/year (usually in row 2, column 0)
         for idx, row in df.head(5).iterrows():
             first_val = str(row.iloc[0]) if pd.notna(row.iloc[0]) else ''
-            if '-' in first_val and len(first_val) == 7:  # Format like "2026-01"
+            if '-' in first_val and len(first_val) == 7:  # Format like "2026-02"
                 result['month_year'] = first_val
+                # Calculate actual days in this month
+                year, month = map(int, first_val.split('-'))
+                result['days_in_month'] = calendar.monthrange(year, month)[1]
                 break
         
-        # Parse summary data (rows 8-14 based on pattern)
+        # Parse summary data (Plant Data section)
         summary_mapping = {
             'Energy this Month(kWh)': 'energy_this_month_kwh',
             'Energy Total(kWh)': 'energy_total_kwh',
@@ -73,40 +81,78 @@ def parse_growatt_excel(file_content: bytes, filename: str) -> Dict[str, Any]:
             for excel_key, result_key in summary_mapping.items():
                 if excel_key in first_val:
                     # Value is in column 5 (index 5)
-                    if pd.notna(row.iloc[5]):
-                        result['summary'][result_key] = float(row.iloc[5])
+                    if len(row) > 5 and pd.notna(row.iloc[5]):
+                        try:
+                            result['summary'][result_key] = float(row.iloc[5])
+                        except (ValueError, TypeError):
+                            pass
                     break
         
         # Find inverter data rows
-        # Look for rows starting with inverter serial numbers (like "FULCD5X001")
+        # Pattern: Serial number like "FULCD5X002(125k (inv 1))" or similar
         inverter_rows = []
         for idx, row in df.iterrows():
             first_val = str(row.iloc[0]) if pd.notna(row.iloc[0]) else ''
-            # Inverter serial numbers typically start with letters and contain alphanumeric
-            if first_val and '(' in first_val and any(c.isdigit() for c in first_val[:8]):
+            # Inverter rows have serial numbers with parentheses and alphanumeric chars
+            if first_val and '(' in first_val and 'inv' in first_val.lower():
                 inverter_rows.append((idx, row))
+            # Also catch format like "ABCD1234(125k)"
+            elif first_val and '(' in first_val and len(first_val) > 8:
+                # Check if it looks like a serial (alphanumeric start)
+                serial_part = first_val.split('(')[0]
+                if serial_part and any(c.isdigit() for c in serial_part) and any(c.isalpha() for c in serial_part):
+                    inverter_rows.append((idx, row))
+        
+        # Determine actual days with data by checking inverter rows
+        max_day_with_data = 0
+        if inverter_rows:
+            for idx, row in inverter_rows:
+                for day in range(1, 32):
+                    col_idx = day + 2  # Column index (day 1 is column 3)
+                    if col_idx < len(row) and pd.notna(row.iloc[col_idx]):
+                        try:
+                            val = float(row.iloc[col_idx])
+                            if val > 0:
+                                max_day_with_data = max(max_day_with_data, day)
+                        except (ValueError, TypeError):
+                            pass
+        
+        # Use detected days or fall back to calendar days
+        actual_days = max_day_with_data if max_day_with_data > 0 else (result['days_in_month'] or 31)
+        logger.info(f"Detected {actual_days} days with data in Excel")
         
         # Process each inverter
         for idx, row in inverter_rows:
             inverter_name = str(row.iloc[0])
             
-            # Extract daily values (columns 3-33 for days 1-31)
+            # Extract daily values only for days that have data
             daily_values = []
-            for day in range(1, 32):
-                col_idx = day + 2  # Column index (day 1 is column 3, etc.)
+            for day in range(1, actual_days + 1):
+                col_idx = day + 2  # Column index (day 1 is column 3)
                 if col_idx < len(row):
                     val = row.iloc[col_idx]
                     if pd.notna(val):
-                        daily_values.append({'day': day, 'generation_kwh': float(val)})
+                        try:
+                            gen_val = float(val)
+                            daily_values.append({'day': day, 'generation_kwh': gen_val})
+                        except (ValueError, TypeError):
+                            pass
             
-            # Get total from last column
-            total_col = df.columns[-1]
-            inverter_total = float(row.iloc[-1]) if pd.notna(row.iloc[-1]) else sum(d['generation_kwh'] for d in daily_values)
+            # Get total from last column (labeled "Total(kWh)")
+            inverter_total = 0
+            if pd.notna(row.iloc[-1]):
+                try:
+                    inverter_total = float(row.iloc[-1])
+                except (ValueError, TypeError):
+                    inverter_total = sum(d['generation_kwh'] for d in daily_values)
+            else:
+                inverter_total = sum(d['generation_kwh'] for d in daily_values)
             
             result['inverters'].append({
                 'serial': inverter_name,
                 'daily_values': daily_values,
-                'total_kwh': inverter_total
+                'total_kwh': round(inverter_total, 2),
+                'days_with_data': len(daily_values)
             })
         
         # Calculate combined daily generation (sum across all inverters)
@@ -138,18 +184,24 @@ def parse_growatt_excel(file_content: bytes, filename: str) -> Dict[str, Any]:
             
             result['total_generation_kwh'] = round(sum(d['generation_kwh'] for d in result['daily_generation']), 2)
         
-        # Use summary value if available and seems more accurate
+        # Use summary value if available (more accurate as it comes from Growatt)
         if 'energy_this_month_kwh' in result['summary']:
             summary_total = result['summary']['energy_this_month_kwh']
             if summary_total > 0:
                 result['total_generation_kwh'] = summary_total
         
-        logger.info(f"Parsed Growatt Excel: {result['plant_name']} - {result['month_year']} - {result['total_generation_kwh']} kWh - {len(result['inverters'])} inverters")
+        logger.info(
+            f"Parsed Growatt Excel: {result['plant_name']} - {result['month_year']} - "
+            f"{result['total_generation_kwh']} kWh - {len(result['inverters'])} inverters - "
+            f"{len(result['daily_generation'])} days"
+        )
         
         return result
         
     except Exception as e:
         logger.error(f"Error parsing Growatt Excel: {str(e)}")
+        import traceback
+        logger.error(traceback.format_exc())
         return {
             'success': False,
             'error': str(e),
