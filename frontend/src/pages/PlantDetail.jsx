@@ -1526,15 +1526,6 @@ const PlantDetail = () => {
               )}
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Estado</Label>
-                <Input
-                  value={plantFormData.state || ''}
-                  onChange={(e) => setPlantFormData({...plantFormData, state: e.target.value})}
-                />
-              </div>
-            </div>
             <div className="space-y-2">
               <Label>Marca do Inversor</Label>
               <Select
