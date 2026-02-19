@@ -1787,6 +1787,14 @@ async def get_monthly_summary(
 
 # ==================== IRRADIANCE / PROGNOSIS ====================
 
+@api_router.get("/irradiance/states")
+async def list_irradiance_states(current_user: dict = Depends(get_current_user)):
+    """List all available states."""
+    states = await db.irradiance_cities.distinct('state')
+    states.sort()
+    return states
+
+
 @api_router.get("/irradiance/cities")
 async def search_irradiance_cities(
     q: str = "",
