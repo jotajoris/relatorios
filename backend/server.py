@@ -2254,12 +2254,17 @@ async def download_pdf_report(
     
     # Get invoices for the month - match by reference_month (MM/YYYY format)
     ref_month = f"{mon:02d}/{year}"
+    # Find ALL consumer_unit IDs that share the same uc_numbers as this plant's UCs
     uc_numbers = [u.get('uc_number','') for u in units if u.get('uc_number')]
+    all_matching_ucs = await db.consumer_units.find(
+        {'uc_number': {'$in': uc_numbers}}, {'_id': 0, 'id': 1}
+    ).to_list(500)
+    all_uc_ids = list(set(unit_ids + [u['id'] for u in all_matching_ucs]))
+
     invoices = await db.invoices.find({
         '$or': [
-            {'consumer_unit_id': {'$in': unit_ids}, 'reference_month': ref_month},
+            {'consumer_unit_id': {'$in': all_uc_ids}, 'reference_month': ref_month},
             {'plant_id': plant_id, 'reference_month': ref_month},
-            {'uc_number': {'$in': uc_numbers}, 'reference_month': ref_month},
         ]
     }, {'_id': 0}).to_list(1000)
     
