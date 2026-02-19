@@ -2254,10 +2254,12 @@ async def download_pdf_report(
     
     # Get invoices for the month - match by reference_month (MM/YYYY format)
     ref_month = f"{mon:02d}/{year}"
+    uc_numbers = [u.get('uc_number','') for u in units if u.get('uc_number')]
     invoices = await db.invoices.find({
         '$or': [
             {'consumer_unit_id': {'$in': unit_ids}, 'reference_month': ref_month},
             {'plant_id': plant_id, 'reference_month': ref_month},
+            {'uc_number': {'$in': uc_numbers}, 'reference_month': ref_month},
         ]
     }, {'_id': 0}).to_list(1000)
     
