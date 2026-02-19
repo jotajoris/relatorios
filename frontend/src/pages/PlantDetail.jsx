@@ -1501,11 +1501,35 @@ const PlantDetail = () => {
             {/* Parsed Invoice Preview */}
             {parsedInvoice && (
               <div className="space-y-4 border rounded-lg p-4 bg-neutral-50">
+                {/* UC Info */}
+                {parsedInvoice.uc_info && (
+                  <div className="bg-[#FFD600]/20 p-3 rounded-md">
+                    <p className="text-sm font-medium">UC Identificada:</p>
+                    <p className="text-lg font-bold">{parsedInvoice.uc_info.uc_number}</p>
+                    <p className="text-sm text-neutral-600">{parsedInvoice.uc_info.plant_name}</p>
+                  </div>
+                )}
+                
+                {parsedInvoice.uc_not_found && (
+                  <div className="bg-red-100 p-3 rounded-md">
+                    <p className="text-sm font-medium text-red-600">UC não encontrada</p>
+                    <p className="text-sm">{parsedInvoice.uc_number}</p>
+                  </div>
+                )}
+                
                 <h4 className="font-medium text-neutral-900">Dados Extraídos</h4>
                 
                 <div className="grid grid-cols-2 gap-3 text-sm">
                   <div>
-                    <span className="text-neutral-500">Mês Referência:</span>
+                    <span className="text-neutral-500">Titular:</span>
+                    <span className="ml-2 font-medium">{parsedInvoice.holder_name || '-'}</span>
+                  </div>
+                  <div>
+                    <span className="text-neutral-500">Grupo:</span>
+                    <span className="ml-2 font-medium">{parsedInvoice.tariff_group} - {parsedInvoice.classification}</span>
+                  </div>
+                  <div>
+                    <span className="text-neutral-500">Referência:</span>
                     <span className="ml-2 font-medium">{parsedInvoice.reference_month}</span>
                   </div>
                   <div>
@@ -1519,28 +1543,67 @@ const PlantDetail = () => {
                     </span>
                   </div>
                   <div>
-                    <span className="text-neutral-500">Economia:</span>
+                    <span className="text-neutral-500">Economia Est.:</span>
                     <span className="ml-2 font-medium text-green-600">
                       R$ {parsedInvoice.amount_saved_brl?.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                     </span>
                   </div>
-                  <div>
-                    <span className="text-neutral-500">Consumo FP:</span>
-                    <span className="ml-2 font-medium">{parsedInvoice.energy_registered_fp_kwh?.toLocaleString()} kWh</span>
-                  </div>
-                  <div>
-                    <span className="text-neutral-500">Compensado FP:</span>
-                    <span className="ml-2 font-medium">{parsedInvoice.energy_compensated_fp_kwh?.toLocaleString()} kWh</span>
-                  </div>
-                  <div>
-                    <span className="text-neutral-500">Créditos Acum.:</span>
-                    <span className="ml-2 font-medium">{parsedInvoice.credits_accumulated_fp_kwh?.toLocaleString()} kWh</span>
-                  </div>
-                  <div>
-                    <span className="text-neutral-500">Grupo Tarifário:</span>
-                    <span className="ml-2 font-medium">{parsedInvoice.tariff_group}</span>
+                </div>
+                
+                <div className="border-t pt-3">
+                  <h5 className="text-sm font-medium mb-2">Energia (kWh)</h5>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-neutral-500">Registrado FP:</span>
+                      <span className="font-medium">{parsedInvoice.energy_registered_fp_kwh?.toLocaleString() || 0}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-neutral-500">Registrado P:</span>
+                      <span className="font-medium">{parsedInvoice.energy_registered_p_kwh?.toLocaleString() || 0}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-neutral-500">Injetado FP:</span>
+                      <span className="font-medium">{parsedInvoice.energy_injected_fp_kwh?.toLocaleString() || 0}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-neutral-500">Injetado P:</span>
+                      <span className="font-medium">{parsedInvoice.energy_injected_p_kwh?.toLocaleString() || 0}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-neutral-500">Compensado FP:</span>
+                      <span className="font-medium text-green-600">{parsedInvoice.energy_compensated_fp_kwh?.toLocaleString() || 0}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-neutral-500">Compensado P:</span>
+                      <span className="font-medium text-green-600">{parsedInvoice.energy_compensated_p_kwh?.toLocaleString() || 0}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-neutral-500">Faturado FP:</span>
+                      <span className="font-medium">{parsedInvoice.energy_billed_fp_kwh?.toLocaleString() || 0}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-neutral-500">Créditos Acum.:</span>
+                      <span className="font-medium">{parsedInvoice.credits_accumulated_fp_kwh?.toLocaleString() || 0}</span>
+                    </div>
                   </div>
                 </div>
+                
+                {/* Demand for Group A */}
+                {parsedInvoice.tariff_group === 'A' && (
+                  <div className="border-t pt-3">
+                    <h5 className="text-sm font-medium mb-2">Demanda (kW)</h5>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-neutral-500">Contratada:</span>
+                        <span className="font-medium">{parsedInvoice.demand_contracted_kw?.toLocaleString() || 0}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-neutral-500">Medida:</span>
+                        <span className="font-medium">{parsedInvoice.demand_measured_kw?.toLocaleString() || 0}</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div className="flex gap-2 pt-2">
                   <Button
@@ -1553,7 +1616,7 @@ const PlantDetail = () => {
                   <Button
                     className="flex-1 bg-[#FFD600] hover:bg-[#EAB308] text-[#1A1A1A]"
                     onClick={handleSaveInvoice}
-                    disabled={saving}
+                    disabled={saving || parsedInvoice.uc_not_found}
                   >
                     {saving ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
