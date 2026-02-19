@@ -106,60 +106,62 @@ class SolarReportGenerator:
         return r
 
     def _energy_flow_diagram(self, d):
-        """Visual energy flow using Drawing with shapes and arrows."""
+        """Energy flow using the provided background image with dynamic text overlay."""
         gen = d.get('total_generation_kwh',0) or 0
         inj_p = d.get('energy_injected_p',0) or 0
         inj_fp = d.get('energy_injected_fp',0) or 0
         cons_p = d.get('consumption_p',0) or 0
         cons_fp = d.get('consumption_fp',0) or 0
 
-        dw = Drawing(CW, 160)
-        dw.add(Rect(0,0,CW,160,fillColor=GL,strokeColor=colors.HexColor('#E0E0E0'),strokeWidth=0.5))
+        bg_path = '/app/backend/assets/energy_flow_bg.png'
+        # Image fills the content width, proportional height (image is square 1024x1024)
+        img_w = CW
+        img_h = CW * 0.62  # Crop ratio to fit nicely
 
-        cx = CW/2
-        # House (left) - UC Geradora
-        hx, hy = 60, 120
-        dw.add(Rect(hx-18,hy-20,36,25,fillColor=colors.HexColor('#E5E7EB'),strokeColor=GD,strokeWidth=0.5))
-        dw.add(Polygon(points=[hx-22,hy+5,hx,hy+22,hx+22,hy+5],fillColor=colors.HexColor('#D1D5DB'),strokeColor=GD,strokeWidth=0.5))
-        dw.add(String(hx,hy-30,'Unidade Geradora',fontSize=6,fillColor=GD,textAnchor='middle'))
-        dw.add(String(hx,hy-40,f'{_n(gen,0)} kWh',fontSize=8,fillColor=BK,textAnchor='middle',fontName='Helvetica-Bold'))
+        elements = []
+        if os.path.exists(bg_path):
+            elements.append(Image(bg_path, width=img_w, height=img_h))
 
-        # Tower (right) - Rede
-        tx, ty = CW-60, 120
-        dw.add(Rect(tx-3,ty-15,6,35,fillColor=colors.HexColor('#9CA3AF'),strokeColor=GD,strokeWidth=0.5))
-        dw.add(Rect(tx-18,ty+15,36,3,fillColor=colors.HexColor('#9CA3AF'),strokeColor=GD,strokeWidth=0.5))
-        dw.add(Rect(tx-12,ty+10,24,3,fillColor=colors.HexColor('#9CA3AF'),strokeColor=GD,strokeWidth=0.5))
+        # Overlay text values using a Drawing positioned on top
+        dw = Drawing(img_w, img_h)
 
-        # Solar panel (bottom center)
-        sx, sy = cx, 25
-        dw.add(Rect(sx-15,sy-10,30,20,fillColor=Y,strokeColor=BK,strokeWidth=0.5))
-        dw.add(Line(sx-15,sy,sx+15,sy,strokeColor=BK,strokeWidth=0.3))
-        dw.add(Line(sx-5,sy-10,sx-5,sy+10,strokeColor=BK,strokeWidth=0.3))
-        dw.add(Line(sx+5,sy-10,sx+5,sy+10,strokeColor=BK,strokeWidth=0.3))
-        dw.add(String(sx,sy-20,f'Geracao: {_n(gen,0)} kWh',fontSize=7,fillColor=BK,textAnchor='middle',fontName='Helvetica-Bold'))
+        # Positions based on image analysis (% of width/height converted to points)
+        def _t(x_pct, y_pct, text, bold=True, sz=8):
+            x = x_pct * img_w
+            y = img_h - (y_pct * img_h)  # flip Y for reportlab
+            fn = 'Helvetica-Bold' if bold else 'Helvetica'
+            dw.add(String(x, y, text, fontSize=sz, fillColor=BK, textAnchor='middle', fontName=fn))
 
-        # Top center text - C. Registrado
-        dw.add(String(cx,148,'C. Registrado Ponta',fontSize=6,fillColor=GD,textAnchor='middle'))
-        dw.add(String(cx,139,f'{_n(cons_p,0)} kWh',fontSize=8,fillColor=BK,textAnchor='middle',fontName='Helvetica-Bold'))
-        dw.add(String(cx,128,'C. Registrado Fora Ponta',fontSize=6,fillColor=GD,textAnchor='middle'))
-        dw.add(String(cx,119,f'{_n(cons_fp,0)} kWh',fontSize=8,fillColor=BK,textAnchor='middle',fontName='Helvetica-Bold'))
+        def _lv(x_pct, y_pct, label, value):
+            _t(x_pct, y_pct, label, bold=False, sz=7)
+            _t(x_pct, y_pct + 0.06, value, bold=True, sz=9)
 
-        # Right side text - Consumption & Injection
-        rx = CW-60
-        dw.add(String(rx,80,'Consumo F.Ponta',fontSize=6,fillColor=GD,textAnchor='middle'))
-        dw.add(String(rx,71,f'{_n(cons_fp,0)} kWh',fontSize=7,fillColor=BK,textAnchor='middle',fontName='Helvetica-Bold'))
-        dw.add(String(rx,58,'E. Injetada Ponta',fontSize=6,fillColor=GD,textAnchor='middle'))
-        dw.add(String(rx,49,f'{_n(inj_p,0)} kWh',fontSize=7,fillColor=BK,textAnchor='middle',fontName='Helvetica-Bold'))
-        dw.add(String(rx,36,'E. Injetada F.Ponta',fontSize=6,fillColor=GD,textAnchor='middle'))
-        dw.add(String(rx,27,f'{_n(inj_fp,0)} kWh',fontSize=7,fillColor=BK,textAnchor='middle',fontName='Helvetica-Bold'))
+        # Top center: C. Registrado
+        _t(0.47, 0.05, 'C. Registrado Ponta', False, 7)
+        _t(0.47, 0.11, f'{_n(cons_p,0)} kWh', True, 9)
+        _t(0.47, 0.18, 'C. Registrado Fora Ponta', False, 7)
+        _t(0.47, 0.24, f'{_n(cons_fp,0)} kWh', True, 9)
 
-        # Arrows (simple lines)
-        dw.add(Line(hx+22,hy,cx-40,hy,strokeColor=GM,strokeWidth=1))
-        dw.add(Line(cx+40,hy,tx-22,hy,strokeColor=GM,strokeWidth=1))
-        dw.add(Line(sx,sy+10,hx,hy-25,strokeColor=GM,strokeWidth=1))
-        dw.add(Line(sx+15,sy+10,tx,hy-25,strokeColor=GM,strokeWidth=1))
+        # Left: Unidade Geradora
+        _t(0.12, 0.44, 'Unidade Geradora', False, 7)
+        _t(0.12, 0.50, f'{_n(gen,0)} kWh', True, 9)
 
-        return dw
+        # Bottom left: Consumo Instantâneo
+        _t(0.14, 0.67, 'Consumo Instantaneo', False, 7)
+        _t(0.14, 0.73, f'{_n(cons_fp + cons_p,0)} kWh', True, 9)
+
+        # Right: E. Injetada
+        _t(0.78, 0.50, 'E. Injetada Ponta', False, 7)
+        _t(0.78, 0.56, f'{_n(inj_p,0)} kWh', True, 9)
+        _t(0.78, 0.63, 'E. Injetada Fora Ponta', False, 7)
+        _t(0.78, 0.69, f'{_n(inj_fp,0)} kWh', True, 9)
+
+        # Bottom center: Geração
+        _t(0.47, 0.84, 'Geracao', False, 7)
+        _t(0.47, 0.90, f'{_n(gen,0)} kWh', True, 10)
+
+        elements.append(dw)
+        return elements
 
     def _chart(self, daily, prog_daily):
         dw = Drawing(CW, 155)
