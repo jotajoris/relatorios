@@ -148,7 +148,7 @@ class SolarReportGenerator:
         return f"R$ {self._format_number(value, 2)}"
     
     def _create_header_with_logo(self, plant_name: str, month_year: str, company_name: str, logo_url: str = None) -> List:
-        """Create header with logo and title"""
+        """Create header with ON logo and client logo"""
         elements = []
         
         # Month names in Portuguese
@@ -169,58 +169,79 @@ class SolarReportGenerator:
         else:
             period_text = month_year
         
-        # Header table with logo and title
-        header_data = []
+        # Try to load ON logo
+        on_logo = None
+        on_logo_paths = [
+            '/app/frontend/public/logo192.png',
+            '/app/frontend/public/logo512.png',
+        ]
+        for path in on_logo_paths:
+            if os.path.exists(path):
+                try:
+                    on_logo = Image(path, width=35, height=35)
+                    break
+                except Exception:
+                    pass
         
-        # Try to load logo
-        logo_element = None
+        # Try to load client/plant logo
+        client_logo = None
         if logo_url:
             try:
-                # Handle local file path or URL
                 if logo_url.startswith('/api/logos/'):
                     logo_path = f"/app/backend/uploads/logos/{logo_url.split('/')[-1]}"
                     if os.path.exists(logo_path):
-                        logo_element = Image(logo_path, width=50, height=50)
+                        client_logo = Image(logo_path, width=45, height=45)
                 elif os.path.exists(logo_url):
-                    logo_element = Image(logo_url, width=50, height=50)
+                    client_logo = Image(logo_url, width=45, height=45)
             except Exception as e:
-                logger.warning(f"Could not load logo: {e}")
+                logger.warning(f"Could not load client logo: {e}")
         
         # Create yellow accent bar
-        accent_bar = Drawing(6, 60)
-        accent_bar.add(Rect(0, 0, 6, 60, fillColor=YELLOW_PRIMARY, strokeColor=None))
+        accent_bar = Drawing(6, 55)
+        accent_bar.add(Rect(0, 0, 6, 55, fillColor=YELLOW_PRIMARY, strokeColor=None))
         
-        # Title content
-        title_content = [
-            Paragraph(company_name.upper(), self.styles['CompanyName']),
-            Paragraph(f"<b>{period_text}</b>", ParagraphStyle(
-                name='PeriodText',
-                fontSize=11,
-                fontName='Helvetica',
-                textColor=GRAY_DARK,
-                spaceBefore=2
-            )),
-            Paragraph(plant_name.upper(), self.styles['ReportTitle'])
-        ]
+        # Build title content
+        title_content = []
+        title_content.append(Paragraph(
+            "<font color='#FFD600'><b>ON SOLUÇÕES ENERGÉTICAS</b></font>",
+            ParagraphStyle(name='ONBrand', fontSize=9, fontName='Helvetica-Bold')
+        ))
+        title_content.append(Paragraph(period_text, ParagraphStyle(
+            name='PeriodTxt', fontSize=10, fontName='Helvetica', textColor=GRAY_DARK, spaceBefore=2
+        )))
+        title_content.append(Paragraph(plant_name.upper(), ParagraphStyle(
+            name='PlantTtl', fontSize=18, fontName='Helvetica-Bold', textColor=BLACK_PRIMARY, spaceBefore=2
+        )))
+        if company_name and company_name.upper() != 'ON SOLUÇÕES ENERGÉTICAS':
+            title_content.append(Paragraph(company_name, ParagraphStyle(
+                name='CompSub', fontSize=9, fontName='Helvetica', textColor=GRAY_MEDIUM
+            )))
         
-        if logo_element:
-            header_data = [[accent_bar, logo_element, title_content]]
-            col_widths = [8, 55, A4[0] - 100*mm]
+        # Build table structure with both logos
+        if on_logo and client_logo:
+            header_data = [[accent_bar, on_logo, title_content, client_logo]]
+            col_widths = [8, 42, A4[0] - 135*mm, 50]
+        elif on_logo:
+            header_data = [[accent_bar, on_logo, title_content]]
+            col_widths = [8, 42, A4[0] - 75*mm]
+        elif client_logo:
+            header_data = [[accent_bar, title_content, client_logo]]
+            col_widths = [8, A4[0] - 85*mm, 50]
         else:
             header_data = [[accent_bar, title_content]]
-            col_widths = [8, A4[0] - 40*mm]
+            col_widths = [8, A4[0] - 35*mm]
         
         header_table = Table(header_data, colWidths=col_widths)
         header_table.setStyle(TableStyle([
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('LEFTPADDING', (0, 0), (0, 0), 0),
-            ('LEFTPADDING', (1, 0), (-1, -1), 8),
+            ('LEFTPADDING', (1, 0), (-1, -1), 6),
             ('TOPPADDING', (0, 0), (-1, -1), 0),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
         ]))
         
         elements.append(header_table)
-        elements.append(Spacer(1, 8*mm))
+        elements.append(Spacer(1, 6*mm))
         
         return elements
     
