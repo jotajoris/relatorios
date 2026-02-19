@@ -1480,25 +1480,40 @@ const PlantDetail = () => {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Estado</Label>
-                <Select value={selectedState || plantFormData.state || ''} onValueChange={handleStateSelect}>
-                  <SelectTrigger><SelectValue placeholder="Selecione o estado" /></SelectTrigger>
-                  <SelectContent className="max-h-60">
-                    {statesList.map(s => (
-                      <SelectItem key={s} value={s}>{s.replace(/_/g, ' ')}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <select
+                  className="w-full h-9 rounded-md border border-neutral-200 bg-white px-3 py-1 text-sm"
+                  value={plantFormData.state || ''}
+                  onChange={handleStateSelect}
+                >
+                  <option value="">Selecione o estado</option>
+                  {statesList.map(s => (
+                    <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
+                  ))}
+                </select>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-2 relative">
                 <Label>Cidade (Irradiancia)</Label>
-                <Select value={plantFormData.city || ''} onValueChange={handleCitySelect}>
-                  <SelectTrigger><SelectValue placeholder={filteredCities.length ? "Selecione a cidade" : "Escolha o estado primeiro"} /></SelectTrigger>
-                  <SelectContent className="max-h-60">
-                    {filteredCities.map(c => (
-                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                <Input
+                  value={citySearchText || plantFormData.city || ''}
+                  onChange={(e) => {
+                    setCitySearchText(e.target.value);
+                    setShowCityDropdown(true);
+                  }}
+                  onFocus={() => setShowCityDropdown(true)}
+                  placeholder={filteredCities.length ? "Digite para buscar..." : "Escolha o estado primeiro"}
+                  disabled={!filteredCities.length}
+                />
+                {showCityDropdown && cityMatches.length > 0 && (
+                  <div className="absolute z-[100] top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-xl max-h-52 overflow-y-auto">
+                    {cityMatches.map((c) => (
+                      <button key={c} type="button"
+                        className={`w-full text-left px-3 py-2 text-sm hover:bg-[#FFD600]/20 border-b last:border-0 ${plantFormData.city === c ? 'bg-[#FFD600]/10 font-semibold' : ''}`}
+                        onClick={() => handleCityClick(c)}>
+                        {c}
+                      </button>
                     ))}
-                  </SelectContent>
-                </Select>
+                  </div>
+                )}
               </div>
             </div>
             
