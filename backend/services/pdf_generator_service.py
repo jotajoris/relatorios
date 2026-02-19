@@ -113,10 +113,10 @@ class SolarReportGenerator:
         cons_p = d.get('consumption_p',0) or 0
         cons_fp = d.get('consumption_fp',0) or 0
 
-        bg_path = '/app/backend/assets/energy_flow_bg.png'
-        # Image fills the content width, proportional height (image is square 1024x1024)
+        bg_path = '/app/backend/assets/energy_flow_bg.jpg'
+        # Image fills the content width, proportional height
         img_w = CW
-        img_h = CW * 0.62  # Crop ratio to fit nicely
+        img_h = CW * 0.55  # Proportional to fit
 
         elements = []
         if os.path.exists(bg_path):
