@@ -122,26 +122,39 @@ const PlantDetail = () => {
   
   const [plantFormData, setPlantFormData] = useState({});
 
-  // City search for irradiance
-  const [citySearch, setCitySearch] = useState('');
-  const [citySuggestions, setCitySuggestions] = useState([]);
-  const [showCitySuggestions, setShowCitySuggestions] = useState(false);
+  // City/State selection for irradiance
+  const [statesList, setStatesList] = useState([]);
+  const [filteredCities, setFilteredCities] = useState([]);
+  const [selectedState, setSelectedState] = useState('');
   const [calculatingPrognosis, setCalculatingPrognosis] = useState(false);
   const [prognosisDetail, setPrognosisDetail] = useState(null);
 
-  const searchCities = async (query) => {
-    if (query.length < 2) { setCitySuggestions([]); return; }
+  const loadStates = async () => {
     try {
-      const res = await api.get(`/irradiance/cities?q=${encodeURIComponent(query)}`);
-      setCitySuggestions(res.data);
-      setShowCitySuggestions(true);
-    } catch { setCitySuggestions([]); }
+      const res = await api.get('/irradiance/states');
+      setStatesList(res.data);
+    } catch { }
   };
 
-  const selectCity = (city) => {
-    setPlantFormData({...plantFormData, city: city.city, state: city.state});
-    setCitySearch(city.city);
-    setShowCitySuggestions(false);
+  const loadCitiesByState = async (state) => {
+    if (!state) { setFilteredCities([]); return; }
+    try {
+      const res = await api.get(`/irradiance/cities?state=${encodeURIComponent(state)}&q=`);
+      // The API returns max 30, but for state filter we need all cities
+      // Use a broader query
+      const res2 = await api.get(`/irradiance/cities?state=${encodeURIComponent(state)}`);
+      setFilteredCities(res2.data.map(c => c.city).sort());
+    } catch { setFilteredCities([]); }
+  };
+
+  const handleStateSelect = (state) => {
+    setSelectedState(state);
+    setPlantFormData({...plantFormData, state: state});
+    loadCitiesByState(state);
+  };
+
+  const handleCitySelect = (city) => {
+    setPlantFormData({...plantFormData, city: city});
   };
 
   const calculatePrognosis = async () => {
