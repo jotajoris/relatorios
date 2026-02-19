@@ -248,9 +248,7 @@ class SolarReportGenerator:
         return t
 
     def _footer_text(self):
-        now = datetime.now(BRT)
-        return (f'Relatorio gerado em {now.strftime("%d/%m/%Y as %H:%M")} (Horario de Brasilia) | '
-                f'ON Solucoes Energeticas | onsolucoesenergeticas.com.br | @on.solucoes')
+        return 'ON Solucoes Energeticas | onsolucoesenergeticas.com.br | @on.solucoes'
 
     def generate_report(self, d):
         buf = io.BytesIO()
