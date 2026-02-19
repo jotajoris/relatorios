@@ -2311,6 +2311,28 @@ async def download_pdf_report(
         
         hist_total = sum(d['generation_kwh'] for d in hist_gen)
         
+        # Get invoices for this historical month
+        hist_ref = f"{hist_date.month:02d}/{hist_date.year}"
+        hist_invoices = await db.invoices.find({
+            '$or': [
+                {'consumer_unit_id': {'$in': all_uc_ids}, 'reference_month': hist_ref},
+                {'plant_id': plant_id, 'reference_month': hist_ref},
+            ]
+        }, {'_id': 0}).to_list(1000)
+        # Deduplicate
+        h_seen = set()
+        h_unique = []
+        for hi in hist_invoices:
+            hid = hi.get('id')
+            if hid not in h_seen:
+                h_seen.add(hid)
+                h_unique.append(hi)
+        
+        hist_cons_p = sum(hi.get('energy_registered_p_kwh', 0) or 0 for hi in h_unique)
+        hist_cons_fp = sum(hi.get('energy_registered_fp_kwh', 0) or 0 for hi in h_unique)
+        hist_eco = sum(hi.get('amount_saved_brl', 0) or 0 for hi in h_unique)
+        hist_fat = sum(hi.get('amount_total_brl', 0) or 0 for hi in h_unique)
+        
         # Format month as MMM/YYYY
         month_abbr = {1: 'JAN', 2: 'FEV', 3: 'MAR', 4: 'ABR', 5: 'MAI', 6: 'JUN',
                       7: 'JUL', 8: 'AGO', 9: 'SET', 10: 'OUT', 11: 'NOV', 12: 'DEZ'}
@@ -2319,7 +2341,11 @@ async def download_pdf_report(
             'month': f"{month_abbr[hist_date.month]}./{hist_date.year}",
             'month_year': hist_month,
             'generation_kwh': round(hist_total, 2),
-            'prognosis_kwh': prognosis
+            'prognosis_kwh': prognosis,
+            'consumption_p': round(hist_cons_p, 0),
+            'consumption_fp': round(hist_cons_fp, 0),
+            'economizado': round(hist_eco, 2),
+            'faturado': round(hist_fat, 2),
         })
     
     # Calculate environmental impact (last 12 months)
