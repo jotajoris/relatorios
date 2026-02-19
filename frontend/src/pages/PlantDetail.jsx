@@ -1452,20 +1452,73 @@ const PlantDetail = () => {
               </div>
             </div>
             <div className="space-y-2">
-              <Label>Endereço</Label>
+              <Label>Endereco</Label>
               <Input
                 value={plantFormData.address || ''}
                 onChange={(e) => setPlantFormData({...plantFormData, address: e.target.value})}
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Cidade</Label>
+              <div className="space-y-2 relative">
+                <Label>Cidade (Irradiancia)</Label>
                 <Input
-                  value={plantFormData.city || ''}
-                  onChange={(e) => setPlantFormData({...plantFormData, city: e.target.value})}
+                  value={citySearch || plantFormData.city || ''}
+                  onChange={(e) => {
+                    setCitySearch(e.target.value);
+                    setPlantFormData({...plantFormData, city: e.target.value});
+                    searchCities(e.target.value);
+                  }}
+                  onFocus={() => { if (citySuggestions.length) setShowCitySuggestions(true); }}
+                  placeholder="Digite o nome da cidade..."
                 />
+                {showCitySuggestions && citySuggestions.length > 0 && (
+                  <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                    {citySuggestions.map((c, i) => (
+                      <button key={i} className="w-full text-left px-3 py-2 hover:bg-[#FFD600]/10 text-sm border-b last:border-0"
+                        onClick={() => selectCity(c)}>
+                        <span className="font-medium">{c.city}</span>
+                        <span className="text-neutral-400 ml-2">- {c.state}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
+              <div className="space-y-2">
+                <Label>Estado</Label>
+                <Input value={plantFormData.state || ''} onChange={(e) => setPlantFormData({...plantFormData, state: e.target.value})} />
+              </div>
+            </div>
+            
+            {/* Prognosis Calculator */}
+            <div className="p-3 bg-[#FFD600]/10 border border-[#FFD600]/30 rounded-lg space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-semibold">Prognostico por Irradiancia</Label>
+                <Button size="sm" variant="outline" onClick={calculatePrognosis} disabled={calculatingPrognosis}
+                  className="bg-[#FFD600] hover:bg-[#EAB308] text-[#1A1A1A] text-xs h-7">
+                  {calculatingPrognosis ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Sun className="h-3 w-3 mr-1" />}
+                  Calcular
+                </Button>
+              </div>
+              {prognosisDetail && (
+                <div className="text-xs space-y-1">
+                  <p className="text-neutral-500">{prognosisDetail.city} - {prognosisDetail.state} | {prognosisDetail.capacity_kwp} kWp</p>
+                  <div className="grid grid-cols-4 gap-1">
+                    {prognosisDetail.months?.map((m, i) => (
+                      <div key={i} className="bg-white px-2 py-1 rounded text-center">
+                        <span className="text-neutral-400 uppercase">{m.month}</span>
+                        <p className="font-bold text-[10px]">{Number(m.monthly_kwh).toLocaleString('pt-BR',{maximumFractionDigits:0})}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="font-semibold text-center mt-1">
+                    Media: {Number(prognosisDetail.average_monthly_kwh).toLocaleString('pt-BR',{maximumFractionDigits:0})} kWh/mes | 
+                    Anual: {(prognosisDetail.total_annual_kwh/1000).toFixed(2)} MWh
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Estado</Label>
                 <Input
