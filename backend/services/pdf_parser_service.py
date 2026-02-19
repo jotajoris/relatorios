@@ -329,23 +329,32 @@ def _extract_group_a_data(text: str) -> Dict[str, Any]:
     else:
         data["demand_contracted_kw"] = 0
 
-    # Tariff values
+    # Tariff values - extract unit prices WITH taxes from extrato section
     tariffs = {}
-    # TE Ponta
-    m = re.search(r'ENERGIA\s+ELETRICA\s+TE\s+PONTA.*?([\d.,]+)\s+([\d.,]+)\s*$', text, re.MULTILINE)
-    if not m:
-        m = re.search(r'ENERGIA\s+INJETADA\s+P.*?TE.*?kWh\s+-?\d+\s+([\d.,]+)', text)
-    if m:
-        tariffs["te_ponta"] = _parse_br_number(m.group(1))
 
-    # TE FP
-    m = re.search(r'ENERGIA\s+ELETRICA\s+TE\s+F\s+PONTA.*?([\d.,]+)\s+([\d.,]+)\s*$', text, re.MULTILINE)
-    if not m:
-        m = re.search(r'ENERGIA\s+INJETADA\s+FP.*?TE.*?kWh\s+-?\d+\s+([\d.,]+)', text)
+    # From extrato: ENERGIA ELETRICA TE PONTA ... 38,00 38,00 0,562895 21,39
+    # The tariff is the second-to-last number (unit price with taxes)
+    m = re.search(r'ENERGIA\s+ELETRICA\s+TE\s+PONTA\s+\d+\s+\d+\s+[\d.,]+\s+[\d.,]+\s+([\d.,]+)\s+[\d.,]+', text)
     if m:
-        tariffs["te_fp"] = _parse_br_number(m.group(1))
+        tariffs["te_p_unit"] = _parse_br_number(m.group(1))
 
-    # From Informacoes Suplementares
+    m = re.search(r'ENERGIA\s+ELETRICA\s+USD\s+PONTA\s+\d+\s+\d+\s+[\d.,]+\s+[\d.,]+\s+([\d.,]+)\s+[\d.,]+', text)
+    if m:
+        tariffs["usd_p_unit"] = _parse_br_number(m.group(1))
+
+    m = re.search(r'ENERGIA\s+ELETRICA\s+TE\s+F\s+PONTA\s+\d+\s+\d+\s+[\d.,]+\s+[\d.,]+\s+([\d.,]+)\s+[\d.,]+', text)
+    if m:
+        tariffs["te_fp_unit"] = _parse_br_number(m.group(1))
+
+    m = re.search(r'ENERGIA\s+ELETRICA\s+USD\s+F\s+PONTA\s+\d+\s+\d+\s+[\d.,]+\s+[\d.,]+\s+([\d.,]+)\s+[\d.,]+', text)
+    if m:
+        tariffs["usd_fp_unit"] = _parse_br_number(m.group(1))
+
+    # Calculated totals: tariff_total = TE + USD
+    tariffs["tariff_total_p"] = tariffs.get("te_p_unit", 0) + tariffs.get("usd_p_unit", 0)
+    tariffs["tariff_total_fp"] = tariffs.get("te_fp_unit", 0) + tariffs.get("usd_fp_unit", 0)
+
+    # From Informacoes Suplementares - base tariffs
     m = re.search(r'CONSUMO\s+PTA\s+([\d.,]+)\s+([\d.,]+)', text)
     if m:
         tariffs["tusd_ponta"] = _parse_br_number(m.group(1))
