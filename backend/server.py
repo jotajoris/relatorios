@@ -1806,8 +1806,9 @@ async def search_irradiance_cities(
     if q:
         query['city'] = {'$regex': q, '$options': 'i'}
     if state:
-        query['state'] = {'$regex': state, '$options': 'i'}
-    cities = await db.irradiance_cities.find(query, {'_id': 0}).limit(30).to_list(30)
+        query['state'] = {'$regex': f'^{state}$', '$options': 'i'}
+    limit = 500 if state and not q else 30
+    cities = await db.irradiance_cities.find(query, {'_id': 0}).sort('city', 1).limit(limit).to_list(limit)
     return cities
 
 
