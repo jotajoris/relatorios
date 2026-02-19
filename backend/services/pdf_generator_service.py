@@ -106,62 +106,45 @@ class SolarReportGenerator:
         return r
 
     def _energy_flow_diagram(self, d):
-        """Energy flow using the provided background image with dynamic text overlay."""
+        """Energy flow as a clean structured table - no image."""
         gen = d.get('total_generation_kwh',0) or 0
         inj_p = d.get('energy_injected_p',0) or 0
         inj_fp = d.get('energy_injected_fp',0) or 0
         cons_p = d.get('consumption_p',0) or 0
         cons_fp = d.get('consumption_fp',0) or 0
 
-        bg_path = '/app/backend/assets/energy_flow_bg.jpg'
-        # Image fills the content width, proportional height
-        img_w = CW
-        img_h = CW * 0.55  # Proportional to fit
+        lbl = _ps('FL2',7,'Helvetica',GD,TA_CENTER,9)
+        val = _ps('FV2',9,'Helvetica-Bold',BK,TA_CENTER,11)
 
-        elements = []
-        if os.path.exists(bg_path):
-            elements.append(Image(bg_path, width=img_w, height=img_h))
+        def _cell(label, value):
+            return [Paragraph(label, lbl), Paragraph(f"<b>{value}</b>", val)]
 
-        # Overlay text values using a Drawing positioned on top
-        dw = Drawing(img_w, img_h)
+        left = _cell("Unidade Geradora", f"{_n(gen,0)} kWh")
+        left += [Spacer(1,2*mm)]
+        left += _cell("C. Registrado Ponta", f"{_n(cons_p,0)} kWh")
+        left += _cell("C. Registrado F.Ponta", f"{_n(cons_fp,0)} kWh")
 
-        # Positions based on image analysis (% of width/height converted to points)
-        def _t(x_pct, y_pct, text, bold=True, sz=8):
-            x = x_pct * img_w
-            y = img_h - (y_pct * img_h)  # flip Y for reportlab
-            fn = 'Helvetica-Bold' if bold else 'Helvetica'
-            dw.add(String(x, y, text, fontSize=sz, fillColor=BK, textAnchor='middle', fontName=fn))
+        mid = _cell("Consumo F.Ponta", f"{_n(cons_fp,0)} kWh")
+        mid += _cell("Consumo Ponta", f"{_n(cons_p,0)} kWh")
+        mid += [Spacer(1,2*mm)]
+        mid += _cell("Geracao Total", f"{_n(gen,0)} kWh")
 
-        def _lv(x_pct, y_pct, label, value):
-            _t(x_pct, y_pct, label, bold=False, sz=7)
-            _t(x_pct, y_pct + 0.06, value, bold=True, sz=9)
+        right = _cell("E. Injetada Ponta", f"{_n(inj_p,0)} kWh")
+        right += [Spacer(1,2*mm)]
+        right += _cell("E. Injetada F.Ponta", f"{_n(inj_fp,0)} kWh")
 
-        # Top center: C. Registrado
-        _t(0.47, 0.05, 'C. Registrado Ponta', False, 7)
-        _t(0.47, 0.11, f'{_n(cons_p,0)} kWh', True, 9)
-        _t(0.47, 0.18, 'C. Registrado Fora Ponta', False, 7)
-        _t(0.47, 0.24, f'{_n(cons_fp,0)} kWh', True, 9)
-
-        # Left: Unidade Geradora
-        _t(0.12, 0.44, 'Unidade Geradora', False, 7)
-        _t(0.12, 0.50, f'{_n(gen,0)} kWh', True, 9)
-
-        # Bottom left: Consumo Instantâneo
-        _t(0.14, 0.67, 'Consumo Instantaneo', False, 7)
-        _t(0.14, 0.73, f'{_n(cons_fp + cons_p,0)} kWh', True, 9)
-
-        # Right: E. Injetada
-        _t(0.78, 0.50, 'E. Injetada Ponta', False, 7)
-        _t(0.78, 0.56, f'{_n(inj_p,0)} kWh', True, 9)
-        _t(0.78, 0.63, 'E. Injetada Fora Ponta', False, 7)
-        _t(0.78, 0.69, f'{_n(inj_fp,0)} kWh', True, 9)
-
-        # Bottom center: Geração
-        _t(0.47, 0.84, 'Geracao', False, 7)
-        _t(0.47, 0.90, f'{_n(gen,0)} kWh', True, 10)
-
-        elements.append(dw)
-        return elements
+        data = [[left, mid, right]]
+        t = Table(data, colWidths=[CW/3]*3)
+        t.setStyle(TableStyle([
+            ('VALIGN',(0,0),(-1,-1),'TOP'),
+            ('BACKGROUND',(0,0),(-1,-1),GL),
+            ('BOX',(0,0),(-1,-1),1.5,Y),
+            ('LINEBEFORE',(1,0),(1,-1),0.5,colors.HexColor('#E5E7EB')),
+            ('LINEBEFORE',(2,0),(2,-1),0.5,colors.HexColor('#E5E7EB')),
+            ('TOPPADDING',(0,0),(-1,-1),8),('BOTTOMPADDING',(0,0),(-1,-1),8),
+            ('LEFTPADDING',(0,0),(-1,-1),10),
+        ]))
+        return [t]
 
     def _chart(self, daily, prog_daily):
         dw = Drawing(CW, 155)
