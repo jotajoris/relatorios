@@ -87,6 +87,7 @@ const PlantDetail = () => {
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(null);
   const [reportType, setReportType] = useState('basic');
+  const [monthlySummary, setMonthlySummary] = useState([]);
   
   // Excel Upload
   const [uploadingExcel, setUploadingExcel] = useState(false);
