@@ -400,9 +400,7 @@ class SolarReportGenerator:
             el.append(self._sec("INFORMACOES CONCESSIONARIA", dark=True))
             el.append(Spacer(1,3*mm))
 
-            hdr = ['UC','Endereco','Ciclo','(%)','Consumo\nRegistrado','Energia\nCompensada',
-                   'Energia\nFaturada','Credito\nAnterior','Credito\nAcumulado',
-                   'Faturado\n(R$)','Economia\n(R$)']
+            hdr = ['UC','Endereco','Ciclo','(%)','Consumo\nRegist.','Energ.\nComp.','Energ.\nFatur.','Cred.\nAnter.','Cred.\nAcum.','Faturado\n(R$)','Economia\n(R$)']
             rows = []
             tc=tp=tf=ta=tac=tb=ts2=0
             for c in cu:
