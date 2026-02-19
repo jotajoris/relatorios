@@ -1767,6 +1767,83 @@ async def get_monthly_summary(
     return result
 
 
+# ==================== IRRADIANCE / PROGNOSIS ====================
+
+@api_router.get("/irradiance/cities")
+async def search_irradiance_cities(
+    q: str = "",
+    state: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """Search cities by name for irradiance data."""
+    query = {}
+    if q:
+        query['city'] = {'$regex': q, '$options': 'i'}
+    if state:
+        query['state'] = {'$regex': state, '$options': 'i'}
+    cities = await db.irradiance_cities.find(query, {'_id': 0}).limit(30).to_list(30)
+    return cities
+
+
+@api_router.get("/irradiance/city/{city_name}")
+async def get_city_irradiance(city_name: str, current_user: dict = Depends(get_current_user)):
+    """Get irradiance data for a specific city."""
+    city = await db.irradiance_cities.find_one(
+        {'city': {'$regex': f'^{city_name}$', '$options': 'i'}},
+        {'_id': 0}
+    )
+    if not city:
+        raise HTTPException(status_code=404, detail="Cidade nao encontrada")
+    return city
+
+
+@api_router.post("/irradiance/calculate-prognosis")
+async def calculate_prognosis(
+    request: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Calculate monthly prognosis based on city irradiance and plant capacity.
+    Formula: kWp * 30 * ((irradiance/1000) - 0.1) * 0.75
+    """
+    city_name = request.get('city', '')
+    kwp = float(request.get('capacity_kwp', 0))
+
+    city = await db.irradiance_cities.find_one(
+        {'city': {'$regex': f'^{city_name}$', '$options': 'i'}},
+        {'_id': 0}
+    )
+    if not city:
+        raise HTTPException(status_code=404, detail="Cidade nao encontrada")
+
+    irr = city.get('irradiance', {})
+    months = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez']
+    result = []
+    total_annual = 0
+
+    for m in months:
+        irr_val = irr.get(m, 0)
+        daily = kwp * ((irr_val / 1000) - 0.1) * 0.75
+        monthly = daily * 30
+        total_annual += monthly
+        result.append({
+            'month': m,
+            'irradiance': irr_val,
+            'daily_kwh': round(daily, 2),
+            'monthly_kwh': round(monthly, 2),
+        })
+
+    avg_monthly = total_annual / 12
+
+    return {
+        'city': city['city'],
+        'state': city['state'],
+        'capacity_kwp': kwp,
+        'months': result,
+        'average_monthly_kwh': round(avg_monthly, 2),
+        'total_annual_kwh': round(total_annual, 2),
+    }
+
+
 # ==================== ROOT ROUTE ====================
 
 @api_router.get("/")
