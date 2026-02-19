@@ -764,39 +764,22 @@ const PlantDetail = () => {
                           {report ? `${report.performance_percentage.toFixed(2)}%` : '-'}
                         </p>
                         
-                        {/* Download buttons */}
-                        <div className="flex gap-1 mt-3 justify-center">
+                        {/* Download button */}
+                        <div className="mt-3">
                           <Button
                             variant="outline"
                             size="sm"
-                            className="text-xs h-7 px-2"
-                            onClick={() => handleDownloadPdf(month, 'basic')}
+                            className="w-full text-xs h-8"
+                            onClick={() => handleDownloadPdf(month)}
                             disabled={downloadingPdf === month}
-                            data-testid={`download-basic-${month}`}
+                            data-testid={`download-report-${month}`}
                           >
                             {downloadingPdf === month ? (
                               <Loader2 className="h-3 w-3 animate-spin" />
                             ) : (
                               <>
                                 <Download className="h-3 w-3 mr-1" />
-                                Básico
-                              </>
-                            )}
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="text-xs h-7 px-2"
-                            onClick={() => handleDownloadPdf(month, 'complete')}
-                            disabled={downloadingPdf === month}
-                            data-testid={`download-complete-${month}`}
-                          >
-                            {downloadingPdf === month ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : (
-                              <>
-                                <Download className="h-3 w-3 mr-1" />
-                                Completo
+                                Baixar PDF
                               </>
                             )}
                           </Button>
