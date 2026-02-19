@@ -2320,14 +2320,6 @@ async def download_pdf_report(
             'amount_billed': inv.get('amount_total_brl', 0) or 0,
             'amount_saved': inv.get('amount_saved_brl', 0) or 0,
         })
-                'consumption_registered': inv.get('energy_registered_fp_kwh', 0) + inv.get('energy_registered_p_kwh', 0),
-                'energy_compensated': inv.get('energy_compensated_fp_kwh', 0) + inv.get('energy_compensated_p_kwh', 0),
-                'energy_billed': inv.get('energy_billed_fp_kwh', 0),
-                'credit_previous': inv.get('credits_balance_fp_kwh', 0),
-                'credit_accumulated': inv.get('credits_accumulated_fp_kwh', 0),
-                'amount_billed': inv.get('amount_total_brl', 0),
-                'amount_saved': inv.get('amount_saved_brl', 0)
-            })
     
     report_data['consumer_units'] = consumer_units_data
     
