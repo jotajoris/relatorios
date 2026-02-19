@@ -1,0 +1,274 @@
+<analysis>**original_problem_statement:**
+O usuário solicitou a criação de uma aplicação web full-stack para gerenciamento e elaboração de relatórios de usinas de energia solar fotovoltaica.
+
+**PRODUCT REQUIREMENTS:**
+- **Stack:** Frontend com React, Vite e TailwindCSS; Backend com FastAPI; Banco de dados MongoDB.
+- **Autenticação:** JWT com tokens de acesso e atualização.
+- **Funcionalidades Principais:**
+    1.  **Gerenciamento de Entidades:** CRUD para Clientes, Usinas e Unidades Consumidoras (UCs). Upload de logo para cliente.
+    2.  **Sistema de Créditos:** Capacidade de definir UCs geradoras e beneficiárias, com percentuais de distribuição de créditos.
+    3.  **Entrada de Dados de Geração:**
+        - Upload manual de faturas em PDF (COPEL e Energisa MS), com extração automática dos dados.
+        - Upload de planilhas Excel da Growatt.
+        - Integração com API de inversores (Growatt via web scraping).
+    4.  **Automação COPEL:** Automação web para baixar faturas (atualmente bloqueada por reCAPTCHA).
+    5.  **Geração de Relatórios em PDF:** Um relatório unificado e completo por usina, com design personalizado (cores da ON, logo do cliente e da ON), KPIs e gráficos.
+    6.  **Página de Faturas:** Uma nova seção no menu lateral para upload de faturas, selecionando apenas a concessionária (ex: COPEL, Energisa MS).
+
+**User's preferred language**: pt-BR. O próximo agente DEVE responder em português do Brasil.
+
+**what currently exists?**
+Uma aplicação full-stack (React/FastAPI/MongoDB) com autenticação JWT. As principais funcionalidades implementadas na sessão incluem:
+1.  **Importação de Dados da Growatt via Excel:** Foi criado um parser de backend () que processa planilhas , lida com meses de durações variadas (28, 30, 31 dias) e extrai KPIs e a geração diária por inversor. A UI foi adicionada na aba Relatórios da usina.
+2.  **Geração de Relatório PDF:** Foi criado um serviço () usando  para gerar um relatório unificado com as cores da marca ON.
+3.  **Upload Manual de Fatura:** O fluxo de upload de fatura PDF foi alterado para detectar a Unidade Consumidora (UC) automaticamente, sem que o usuário precise selecioná-la.
+
+No entanto, a sessão terminou com o usuário reportando problemas críticos: o parser da fatura PDF está extraindo valores completamente errados, o layout do relatório PDF está desconfigurado, e foi solicitada a criação de uma nova página dedicada para o upload de faturas.
+
+**Last working item**:
+- **Last item agent was working**: O agente estava tentando corrigir o parser de faturas da COPEL e o layout do relatório em PDF, após o usuário reportar que os dados extraídos da fatura estavam incorretos e o relatório gerado estava desconfigurado. O usuário também solicitou a criação de uma nova página de Faturas.
+- **Status**: IN PROGRESS
+- **Agent Testing Done**: N (O agente implementou correções, mas o usuário as invalidou, provando que o teste foi insuficiente ou incorreto).
+- **Which testing method agent to use?**: backend testing agent. É crucial usar um agente de teste para validar o parser da fatura () contra os valores exatos destacados pelo usuário na imagem fornecida. Para o frontend, a ferramenta de screenshot deve ser usada para verificar a nova página Faturas e o layout do PDF corrigido.
+- **User Testing Done**: Y (O usuário testou e reportou que o parser de fatura está errado e o PDF está desconfigurado).
+
+**All Pending/In progress Issue list**:
+- **Issue 1**: Parser de fatura PDF extrai dados incorretos (P0)
+- **Issue 2**: Layout do relatório PDF está desconfigurado e o conteúdo está incompleto (P1)
+- **Issue 3**: Automação da COPEL Bloqueada por reCAPTCHA (P2)
+
+**Issues Detail:**
+- **Issue 1:** Parser de fatura PDF extrai dados incorretos
+    - **Attempted fixes**: O agente modificou o  para tentar extrair mais dados, mas o usuário confirmou com uma imagem () que os valores extraídos para campos como Energia Ativa Fornecida, Energia Injetada e totais estão completamente errados. A lógica de parsing atual é falha.
+    - **Next debug checklist**:
+        1.  Reanalisar a imagem fornecida pelo usuário () e as faturas PDF ( e a do ).
+        2.  Reescrever a lógica de extração em . Em vez de buscas genéricas, usar expressões regulares (regex) mais específicas ou a biblioteca usage: pdfplumber [-h] [--structure | --structure-text]
+                  [--format {csv,json,text}] [--types TYPES [TYPES ...]]
+                  [--include-attrs INCLUDE_ATTRS [INCLUDE_ATTRS ...]]
+                  [--exclude-attrs EXCLUDE_ATTRS [EXCLUDE_ATTRS ...]]
+                  [--laparams LAPARAMS] [--precision PRECISION]
+                  [--pages PAGES [PAGES ...]] [--indent INDENT]
+                  [infile]
+
+positional arguments:
+  infile
+
+options:
+  -h, --help            show this help message and exit
+  --structure           Write the structure tree as JSON. All other arguments
+                        except --pages, --laparams, and --indent will be
+                        ignored
+  --structure-text      Write the structure tree as JSON including text
+                        contents. All other arguments except --pages,
+                        --laparams, and --indent will be ignored
+  --format {csv,json,text}
+  --types TYPES [TYPES ...]
+  --include-attrs INCLUDE_ATTRS [INCLUDE_ATTRS ...]
+                        Include *only* these object attributes in output.
+  --exclude-attrs EXCLUDE_ATTRS [EXCLUDE_ATTRS ...]
+                        Exclude these object attributes from output.
+  --laparams LAPARAMS
+  --precision PRECISION
+  --pages PAGES [PAGES ...]
+  --indent INDENT       Indent level for JSON pretty-printing. para localizar o texto exato ao lado dos valores numéricos. Ex: .
+        3.  Criar um script de teste em  para rodar o parser contra os PDFs de exemplo e validar se o JSON de saída corresponde exatamente aos valores apontados pelo usuário.
+    - **Why fix this issue and what will be achieved with the fix?**: A extração correta de dados da fatura é a base para todos os cálculos financeiros e relatórios de crédito do sistema. Sem isso, a funcionalidade principal é inútil.
+    - **Status**: IN PROGRESS
+    - **Is recurring issue?**: Y
+    - **Should Test frontend/backend/both after fix?**: backend
+    - **Blocked on other issue**: Não
+
+- **Issue 2:** Layout do relatório PDF está desconfigurado e o conteúdo está incompleto
+    - **Attempted fixes**: O agente usou  no  para tentar corrigir a quebra de linha entre valores e unidades (ex: 100 em uma linha, kWh na outra). Também adicionou a logo do cliente.
+    - **Next debug checklist**:
+        1.  **Correção de Layout:** No , garantir que valor e unidade sejam uma única string () antes de passá-la para o .
+        2.  **Adicionar Logo da ON:** Adicionar a logo da ON no cabeçalho ou rodapé do PDF, ao lado da logo do cliente.
+        3.  **Adicionar Relatório por Beneficiária:** Implementar a lógica para iterar sobre as UCs beneficiárias e adicionar uma seção/tabela no PDF para cada uma, mostrando os detalhes de créditos recebidos, conforme o modelo original enviado pelo usuário.
+    - **Why fix this issue and what will be achieved with the fix?**: O relatório é um produto final para o cliente e precisa ser profissional, legível e completo.
+    - **Status**: IN PROGRESS
+    - **Is recurring issue?**: Y
+    - **Should Test frontend/backend/both after fix?**: backend
+    - **Blocked on other issue**: Não
+
+- **Issue 3:** Automação da COPEL Bloqueada por reCAPTCHA
+    - **Attempted fixes**: Implementação com Playwright que foi barrada pelo captcha.
+    - **Next debug checklist**: Pausar a automação e focar no upload manual, que é a prioridade atual. Discutir opções com o usuário (serviços de resolução de captcha, sessões persistentes) apenas após as outras tarefas P0/P1 serem concluídas.
+    - **Why fix this issue and what will be achieved with the fix?**: Automatizar a coleta de faturas da COPEL é um dos principais requisitos originais.
+    - **Status**: BLOCKED
+    - **Is recurring issue?**: N
+    - **Should Test frontend/backend/both after fix?**: backend
+    - **Blocked on other issue**: Não
+
+**In progress Task List**:
+- **Task 1**: Criar uma nova página de Faturas (P0)
+    - **Where to resume**:
+        1. Adicionar um novo link de navegação Faturas no menu lateral ().
+        2. Criar a rota  em .
+        3. Criar o componente da nova página em .
+        4. Na nova página, adicionar um dropdown para selecionar a concessionária (COPEL, Energisa Injetada e totais estão completamente errados. A lógica de parsing atual é falha.
+    - **Next debug checklist**:
+        1.  Reanalisar a imagem fornecida pelo usuário () e as faturas PDF ( e a do ).
+        2.  Reescrever a lógica de extração em . Em vez de buscas genéricas, usar expressões regulares (regex) mais específicas ou a biblioteca usage: pdfplumber [-h] [--structure | --structure-text]
+                  [--format {csv,json,text}] [--types TYPES [TYPES ...]]
+                  [--include-attrs INCLUDE_ATTRS [INCLUDE_ATTRS ...]]
+                  [--exclude-attrs EXCLUDE_ATTRS [EXCLUDE_ATTRS ...]]
+                  [--laparams LAPARAMS] [--precision PRECISION]
+                  [--pages PAGES [PAGES ...]] [--indent INDENT]
+                  [infile]
+
+positional arguments:
+  infile
+
+options:
+  -h, --help            show this help message and exit
+  --structure           Write the structure tree as JSON. All other arguments
+                        except --pages, --laparams, and --indent will be
+                        ignored
+  --structure-text      Write the structure tree as JSON including text
+                        contents. All other arguments except --pages,
+                        --laparams, and --indent will be ignored
+  --format {csv,json,text}
+  --types TYPES [TYPES ...]
+  --include-attrs INCLUDE_ATTRS [INCLUDE_ATTRS ...]
+                        Include *only* these object attributes in output.
+  --exclude-attrs EXCLUDE_ATTRS [EXCLUDE_ATTRS ...]
+                        Exclude these object attributes from output.
+  --laparams LAPARAMS
+  --precision PRECISION
+  --pages PAGES [PAGES ...]
+  --indent INDENT       Indent level for JSON pretty-printing. para localizar o texto exato ao lado dos valores numéricos. Ex: .
+        3.  Criar um script de teste em  para rodar o parser contra os PDFs de exemplo e validar se o JSON de saída corresponde exatamente aos valores apontados pelo usuário.
+    - **Why fix this issue and what will be achieved with the fix?**: A extração correta de dados da fatura é a base para todos os cálculos financeiros e relatórios de crédito do sistema. Sem isso, a funcionalidade principal é inútil.
+    - **Status**: IN PROGRESS
+    - **Is recurring issue?**: Y
+    - **Should Test frontend/backend/both after fix?**: backend
+    - **Blocked on other issue**: Não
+
+- **Issue 2:** Layout do relatório PDF está desconfigurado e o conteúdo está incompleto
+    - **Attempted fixes**: O agente usou  no  para tentar corrigir a quebra de linha entre valores e unidades (ex: 100 em uma linha, kWh na outra). Também adicionou a logo do cliente.
+    - **Next debug checklist**:
+        1.  **Correção de Layout:** No , garantir que valor e unidade sejam uma única string () antes de passá-la para o .
+        2.  **Adicionar Logo da ON:** Adicionar a logo da ON no cabeçalho ou rodapé do PDF, ao lado da logo do cliente.
+        3.  **Adicionar Relatório por Beneficiária:** Implementar a lógica para iterar sobre as UCs beneficiárias e adicionar uma seção/tabela no PDF para cada uma, mostrando os detalhes de créditos recebidos, conforme o modelo original enviado pelo usuário.
+    - **Why fix this issue and what will be achieved with the fix?**: O relatório é um produto final para o cliente e precisa ser profissional, legível e completo.
+    - **Status**: IN PROGRESS
+    - **Is recurring issue?**: Y
+    - **Should Test frontend/backend/both after fix?**: backend
+    - **Blocked on other issue**: Não
+
+- **Issue 3:** Automação da COPEL Bloqueada por reCAPTCHA
+    - **Attempted fixes**: Implementação com Playwright que foi barrada pelo captcha.
+    - **Next debug checklist**: Pausar a automação e focar no upload manual, que é a prioridade atual. Discutir opções com o usuário (serviços de resolução de captcha, sessões persistentes) apenas após as outras tarefas P0/P1 serem concluídas.
+    - **Why fix this issue and what will be achieved with the fix?**: Automatizar a coleta de faturas da COPEL é um dos principais requisitos originais.
+    - **Status**: BLOCKED
+    - **Is recurring issue?**: N
+    - **Should Test frontend/backend/both after fix?**: backend
+    - **Blocked on other issue**: Não
+
+**In progress Task List**:
+- **Task 1**: Criar uma nova página de Faturas (P0)
+    - **Where to resume**:
+        1. Adicionar um novo link de navegação Faturas no menu lateral ().
+        2. Criar a rota  em .
+        3. Criar o componente da nova página em .
+        4. Na nova página, adicionar um dropdown para selecionar a concessionária (COPEL, Energisa MS) e um componente de upload de arquivo.
+        5. Conectar o upload ao endpoint de auto-detecção da UC: .
+    - **What will be achieved with this?**: Atenderá a um requisito explícito do usuário para um fluxo de trabalho centralizado e mais intuitivo para o gerenciamento de faturas.
+    - **Status**: NOT STARTED
+    - **Should Test frontend/backend/both after fix?**: frontend
+    - **Blocked on something**: Não.
+
+**Upcoming and Future Tasks**
+**Upcoming Tasks:**
+- **(P1) Implementar Frontend para Gerenciamento do Sistema de Créditos:** A lógica para configurar a distribuição de créditos entre UCs geradoras e beneficiárias ainda precisa ser construída.
+- **(P1) Criar página de Gerenciamento de Clientes:** Implementar a UI para o CRUD de clientes e upload de suas logos.
+
+**Future Tasks:**
+- **(P2) Criar Job Agendado para Sincronização de Dados:** Usar  ou similar para automatizar a busca de dados da Growatt.
+- **(P2) Integrar Outras Marcas de Inversores.**
+
+**Completed work in this session**
+- **Implementação de Upload de Excel (Growatt)**: Criado um parser robusto () que lida com a variação de dias nos meses e extrai dados de geração. A UI para upload foi adicionada com sucesso.
+- **Geração de Relatório PDF (v1)**: Criado um serviço () que gera um relatório PDF unificado com as cores da marca ON.
+- **Fluxo de Upload de Fatura Aprimorado**: O backend foi modificado para detectar a UC automaticamente a partir do PDF, removendo a necessidade de seleção manual pelo usuário no frontend (embora o parser em si esteja incorreto).
+- **Correção do Bug da Página de Configurações**: O problema de Not Found na página  foi investigado e resolvido (o caminho correto era ).
+
+**Earlier issues found/mentioned but not fixed**
+- Nenhum. As questões anteriores foram abordadas, mas resultaram nos novos problemas pendentes.
+
+**Known issue recurrence from previous fork**
+- None.
+
+**Code Architecture**
+
+
+**Key Technical Concepts**
+- **Frontend:** React, Vite, TailwindCSS, shadcn/ui
+- **Backend:** FastAPI, Python, Playwright, PyPDF2, **openpyxl**, **reportlab**
+- **Database:** MongoDB
+- **Authentication:** JWT
+
+**key DB schema**
+- **users:** {username, email, hashed_password, role}
+- **clients:** {name, contact_info, logo_url}
+- **plants:** {name, client_id, capacity_kwp, inverter_brand}
+- **consumer_units:** {plant_id, uc_number, name, is_generator, credit_distribution_list_id}
+- **invoices:** {uc_number, reference_month, total_amount, energy_consumption_kwh, energy_injected_kwh, ...} (Representação dos dados extraídos)
+
+**All files of reference**
+- : **Arquivo crítico com o bug de parsing**. Precisa ser totalmente reescrito com base no feedback do usuário.
+- : Contém a lógica de geração de PDF com **problemas de layout e conteúdo incompleto**.
+- : Onde os endpoints de upload e geração de relatório estão definidos. O endpoint de upload de fatura talvez precise ser ajustado.
+- : Contém a UI atual para upload de faturas, que será substituída pela nova página Faturas.
+-  (fornecida pelo usuário): O guia visual essencial para corrigir o parser da fatura.
+
+**key api endpoints**
+-  (POST): Endpoint atual para upload de fatura, que usa o parser problemático.
+-  (POST): Endpoint funcional para upload do Excel da Growatt.
+-  (GET): Endpoint para gerar o relatório PDF, que usa o serviço com layout problemático.
+
+**Critical Info for New Agent**
+- **Idioma:** Toda a comunicação com o usuário e a UI devem ser em **Português do Brasil (pt-BR)**.
+- **Prioridade Máxima (P0):** Corrigir o parser de faturas em . Os dados extraídos estão **completamente errados**. Use a imagem  fornecida pelo usuário como a fonte da verdade para os valores corretos. A falha em corrigir isso invalida uma funcionalidade central.
+- **Segunda Prioridade (P0):** Criar a nova página de Faturas no menu lateral, conforme solicitado pelo usuário. Este é um novo requisito explícito.
+- **Terceira Prioridade (P1):** Consertar o relatório PDF. O layout está quebrado (unidades em outra linha), e o conteúdo está incompleto (falta a logo da ON e o detalhamento por UC beneficiária).
+
+**documents and test reports created in this job**
+- None
+
+**Last 10 User Messages and any pending HUMAN messages**
+1.  **User:**  - Reporta erro no download do PDF e pede melhorias no design.
+2.  **User:**  - Reporta que o parser da fatura está incorreto, pede para a detecção da UC ser automática.
+3.  **User:**  - Confirma que o design do PDF melhorou, mas o layout está quebrado e o conteúdo incompleto.
+4.  **User:**  - **Mensagem crítica.** O usuário confirma que a extração de dados da fatura está completamente errada e fornece uma imagem como guia para a correção.
+5.  **User:**  - Solicita a criação de uma nova página dedicada para o upload de faturas.
+
+**Project Health Check:**
+- **Broken**:
+    - O parser de faturas da COPEL () é o ponto mais crítico. Ele extrai dados incorretos, tornando a funcionalidade inutilizável.
+    - O layout do relatório gerado em PDF () está quebrado, com valores e unidades em linhas separadas.
+- **Mocked**:
+    - A geração de relatórios está incompleta, faltando a seção detalhada para cada unidade consumidora beneficiária.
+
+**3rd Party Integrations**
+- **Growatt**: **FUNCIONANDO** (via Web Scraping com Playwright e upload manual de Excel com ).
+- **COPEL**: **PARCIALMENTE FUNCIONAL/QUEBRADO**. A automação está bloqueada por reCAPTCHA. O upload manual de PDF está implementado, mas o parser () está extraindo dados incorretos.
+- **PDF Generation**: **FUNCIONANDO/QUEBRADO** (via ). O serviço gera um PDF, mas com layout e conteúdo incorretos.
+
+**Testing status**
+- **Testing agent used after significant changes**: NO
+- **Troubleshoot agent used after agent stuck in loop**: NO
+- **Test files created**: None
+- **Known regressions**: A funcionalidade de parsing de fatura, que pode ter funcionado em um nível básico antes, agora está confirmada como quebrada para faturas reais. O layout do PDF regrediu em qualidade.
+
+**Credentials to test flow:**
+- **Login na Aplicação:**
+    - **Admin:**  / 
+- **Integração Growatt (para web scraping):**
+    - **Login:** 
+    - **Senha:** 
+
+**What agent forgot to execute**
+- O agente não validou adequadamente a saída do parser de faturas contra os dados reais do PDF, levando a uma implementação incorreta que foi imediatamente notada pelo usuário.
+- O agente não implementou a seção de relatório para as unidades beneficiárias, um requisito mencionado anteriormente pelo usuário.
+- O agente declarou o problema de layout do PDF como corrigido, mas o usuário reportou que o problema persiste, indicando testes insuficientes.</analysis>

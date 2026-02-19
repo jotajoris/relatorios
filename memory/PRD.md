@@ -203,7 +203,7 @@ Sistema web para gerenciamento de usinas de energia solar fotovoltaica, com foco
 - **COPEL:** 77952604000162 / Portao62*
 
 ## 🌐 Preview URL
-https://on-usinas.preview.emergentagent.com
+https://energy-invoice-pro.preview.emergentagent.com
 
 ---
 
