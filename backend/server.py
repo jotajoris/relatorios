@@ -1727,6 +1727,46 @@ async def get_plant_report_data(
         'historical': list(reversed(historical))
     }
 
+
+@api_router.get("/plants/{plant_id}/monthly-summary")
+async def get_monthly_summary(
+    plant_id: str,
+    year: int,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get monthly generation summary for a plant for a given year."""
+    plant = await db.plants.find_one({'id': plant_id, 'is_active': True}, {'_id': 0})
+    if not plant:
+        raise HTTPException(status_code=404, detail="Usina nao encontrada")
+
+    prognosis = plant.get('monthly_prognosis_kwh', 0)
+    import calendar as cal_mod
+    result = []
+
+    for month in range(1, 13):
+        days = cal_mod.monthrange(year, month)[1]
+        start = f"{year}-{month:02d}-01"
+        end = f"{year}-{month:02d}-{days:02d}"
+
+        gen_docs = await db.generation_data.find(
+            {'plant_id': plant_id, 'date': {'$gte': start, '$lte': end}},
+            {'_id': 0, 'generation_kwh': 1}
+        ).to_list(100)
+
+        gen_total = sum(d.get('generation_kwh', 0) for d in gen_docs)
+        perf = (gen_total / prognosis * 100) if prognosis > 0 else 0
+
+        result.append({
+            'month': month,
+            'year': year,
+            'generation_kwh': round(gen_total, 2),
+            'prognosis_kwh': prognosis,
+            'performance_percent': round(perf, 1),
+        })
+
+    return result
+
+
 # ==================== ROOT ROUTE ====================
 
 @api_router.get("/")
