@@ -2300,11 +2300,26 @@ async def download_pdf_report(
     consumer_units_data = []
     for inv in invoices:
         unit = next((u for u in units if u['id'] == inv.get('consumer_unit_id')), None)
-        if unit:
-            consumer_units_data.append({
-                'name': unit.get('holder_name') or unit.get('address') or unit.get('uc_number') or '',
-                'uc_number': unit.get('uc_number', ''),
-                'cycle': f"{(inv.get('billing_cycle_start') or '')[:10]} a {(inv.get('billing_cycle_end') or '')[:10]}",
+        # Fallback: match by uc_number from parsed data
+        if not unit:
+            inv_uc = inv.get('uc_number') or ''
+            unit = next((u for u in units if u.get('uc_number') == inv_uc), None)
+        if not unit:
+            # Create a minimal unit from invoice data
+            unit = {'uc_number': inv.get('uc_number', '?'), 'holder_name': None, 'address': '', 'compensation_percentage': 0}
+        consumer_units_data.append({
+            'uc_number': unit.get('uc_number', ''),
+            'name': unit.get('holder_name') or unit.get('address') or '',
+            'cycle': f"{(inv.get('billing_cycle_start') or '')[:10]} a {(inv.get('billing_cycle_end') or '')[:10]}",
+            'percentage': unit.get('compensation_percentage', 0),
+            'consumption_registered': (inv.get('energy_registered_fp_kwh', 0) or 0) + (inv.get('energy_registered_p_kwh', 0) or 0),
+            'energy_compensated': (inv.get('energy_compensated_fp_kwh', 0) or 0) + (inv.get('energy_compensated_p_kwh', 0) or 0),
+            'energy_billed': inv.get('energy_billed_fp_kwh', 0) or 0,
+            'credit_previous': inv.get('credits_balance_fp_kwh', 0) or 0,
+            'credit_accumulated': inv.get('credits_accumulated_fp_kwh', 0) or 0,
+            'amount_billed': inv.get('amount_total_brl', 0) or 0,
+            'amount_saved': inv.get('amount_saved_brl', 0) or 0,
+        })
                 'consumption_registered': inv.get('energy_registered_fp_kwh', 0) + inv.get('energy_registered_p_kwh', 0),
                 'energy_compensated': inv.get('energy_compensated_fp_kwh', 0) + inv.get('energy_compensated_p_kwh', 0),
                 'energy_billed': inv.get('energy_billed_fp_kwh', 0),
