@@ -375,7 +375,7 @@ class SolarReportGenerator:
                 t_cred_ant += ca; t_cred_acc += cacc
                 t_bill += bill; t_sav += sav
                 rows.append([
-                    c.get('name', '')[:20],
+                    (c.get('name') or c.get('uc_number') or '')[:20],
                     c.get('cycle', ''),
                     _n(cons, 0),
                     _n(comp, 0),
