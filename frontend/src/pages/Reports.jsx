@@ -221,15 +221,27 @@ const Reports = () => {
           <CardContent className="p-6 bg-white">
             {/* KPIs Grid */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
-              <div className="p-4 bg-white rounded-lg border border-neutral-200 border-l-4 border-l-[#EAB308]">
-                <p className="text-sm text-neutral-500 uppercase tracking-wide">Geração</p>
+              <div className="p-4 bg-white rounded-lg border border-neutral-200 border-l-4 border-l-[#FFD600]">
+                <p className="text-sm text-neutral-500 uppercase tracking-wide">Prognostico</p>
+                <p className="text-2xl font-bold text-neutral-900">
+                  {formatNumber(previewData.generation?.prognosis_kwh)} kWh
+                </p>
+              </div>
+              <div className="p-4 bg-white rounded-lg border border-neutral-200 border-l-4 border-l-[#1A1A1A]">
+                <p className="text-sm text-neutral-500 uppercase tracking-wide">Geracao do Mes</p>
                 <p className="text-2xl font-bold text-neutral-900">
                   {formatNumber(previewData.generation?.total_kwh)} kWh
                 </p>
               </div>
               <div className="p-4 bg-white rounded-lg border border-neutral-200 border-l-4 border-l-emerald-500">
                 <p className="text-sm text-neutral-500 uppercase tracking-wide">Desempenho</p>
-                <p className="text-2xl font-bold text-neutral-900">
+                <p className={`text-2xl font-bold ${
+                  (previewData.generation?.performance_percent || 0) >= 100
+                    ? 'text-emerald-600'
+                    : (previewData.generation?.performance_percent || 0) >= 80
+                      ? 'text-amber-600'
+                      : 'text-red-600'
+                }`}>
                   {previewData.generation?.performance_percent}%
                 </p>
               </div>
@@ -237,12 +249,6 @@ const Reports = () => {
                 <p className="text-sm text-neutral-500 uppercase tracking-wide">Economia</p>
                 <p className="text-2xl font-bold text-neutral-900">
                   {formatCurrency(previewData.financial?.saved_brl)}
-                </p>
-              </div>
-              <div className="p-4 bg-white rounded-lg border border-neutral-200 border-l-4 border-l-neutral-400">
-                <p className="text-sm text-neutral-500 uppercase tracking-wide">CO₂ Evitado</p>
-                <p className="text-2xl font-bold text-neutral-900">
-                  {formatNumber(previewData.environmental?.co2_avoided_kg)} kg
                 </p>
               </div>
             </div>
