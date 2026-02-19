@@ -1,0 +1,83 @@
+{
+  "summary": "Completed testing of Invoices/PDF upload features and fixed critical PDF report generation bug. All backend APIs (12/12 tests) and frontend UI working correctly. Fixed reportlab Drawing-in-Table bug that was causing 520 errors on PDF report download.",
+  
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "Dashboard",
+        "issues": ["Console warning about chart width/height being -1 - minor rendering issue on initial load", "Hydration warning: span cannot be child of tbody in table"]
+      }
+    ]
+  },
+  
+  "passed_tests": [
+    "Backend: GET /api/invoices - List invoices returns 200 OK",
+    "Backend: GET /api/invoices unauthorized - Returns 401/403",
+    "Backend: POST /api/invoices/upload-pdf-auto with Group A PDF (UC 113577680) - Parses correctly",
+    "Backend: POST /api/invoices/upload-pdf-auto with Group B PDF (UC 102480958) - Parses correctly",
+    "Backend: POST /api/invoices/upload-pdf-auto with non-PDF file - Returns 400",
+    "Backend: POST /api/invoices/save-from-upload without consumer_unit_id - Returns 400",
+    "Backend: DELETE /api/invoices/{id} for non-existent - Returns 404",
+    "Backend: GET /api/plants - Lists plants for report",
+    "Backend: GET /api/reports/download-pdf/{plant_id}?month=2025-12 - Returns valid PDF",
+    "Backend: GET /api/reports/download-pdf with invalid month format - Returns 400",
+    "Backend: GET /api/reports/download-pdf for non-existent plant - Returns 404",
+    "Backend: E2E flow - Create UC, upload PDF, save invoice, delete invoice, cleanup UC",
+    "Frontend: Login page works",
+    "Frontend: Faturas page accessible via sidebar navigation",
+    "Frontend: Concessionaria dropdown shows COPEL and Energisa MS",
+    "Frontend: 'Enviar PDF' upload button present and functional",
+    "Frontend: Search input for invoices present"
+  ],
+  
+  "test_report_links": [
+    "/app/backend/tests/test_invoices_and_reports.py",
+    "/app/test_reports/pytest/pytest_results_invoices.xml"
+  ],
+  
+  "action_items": [],
+  
+  "critical_code_review_comments": [
+    "Dashboard hydration warning: span element wrapping dynamic table rows - not a blocking issue but should be fixed for clean React hydration"
+  ],
+  
+  "updated_files": [
+    "/app/backend/tests/test_invoices_and_reports.py",
+    "/app/backend/services/pdf_generator_service.py",
+    "/app/backend/server.py"
+  ],
+  
+  "success_rate": {
+    "backend": "100% (12/12 tests passed)",
+    "frontend": "100% (all critical flows working)"
+  },
+  
+  "test_credentials": {
+    "email": "projetos.onsolucoes@gmail.com",
+    "password": "on123456"
+  },
+  
+  "seed_data_creation": "Test UC 102480958 created and cleaned up during E2E test",
+  
+  "retest_needed": false,
+  
+  "should_main_agent_self_test": false,
+  
+  "context_for_next_testing_agent": "PDF report generation now works after fixing reportlab Drawing-in-Table compatibility issue. The pdf_generator_service.py was modified to use table border styling instead of Drawing objects in table cells. Test PDFs available at /tmp/113577680_geradora.pdf (Group A) and /tmp/102480958.pdf (Group B). All invoice upload and parsing features functional.",
+  
+  "bugs_fixed_by_testing_agent": [
+    {
+      "file": "/app/backend/services/pdf_generator_service.py",
+      "issue": "PDF report generation failing with 'int() argument must be a string, a bytes-like object or a real number, not NoneType'",
+      "root_cause": "reportlab 4.4.10 has compatibility issues when Drawing objects are placed directly in Table cells. The error occurred in Table.identity() when trying to calculate row heights",
+      "fix": "Replaced Drawing-based accent bars with TableStyle LINEBEFORE styling. Also added None-value handling for trees_saved and consumer unit data fields"
+    }
+  ]
+}
