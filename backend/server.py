@@ -2297,11 +2297,29 @@ async def download_pdf_report(
         'total_savings': total_savings_all_time
     }
     
-    # Energy flow from invoices
-    report_data['energy_injected_p'] = sum(i.get('energy_injected_p_kwh', 0) for i in invoices)
-    report_data['energy_injected_fp'] = sum(i.get('energy_injected_fp_kwh', 0) for i in invoices)
-    report_data['consumption_p'] = sum(i.get('energy_registered_p_kwh', 0) for i in invoices)
-    report_data['consumption_fp'] = sum(i.get('energy_registered_fp_kwh', 0) for i in invoices)
+    # Energy flow from GENERATOR UC invoice only (not sum of all)
+    generator_inv = None
+    for inv in invoices:
+        uc = next((u for u in units if u['id'] == inv.get('consumer_unit_id') and u.get('is_generator')), None)
+        if not uc:
+            inv_cu_id = inv.get('consumer_unit_id', '')
+            inv_uc_doc = await db.consumer_units.find_one({'id': inv_cu_id}, {'_id': 0, 'uc_number': 1})
+            if inv_uc_doc:
+                uc = next((u for u in units if u.get('uc_number') == inv_uc_doc.get('uc_number') and u.get('is_generator')), None)
+        if uc:
+            generator_inv = inv
+            break
+
+    if generator_inv:
+        report_data['energy_injected_p'] = generator_inv.get('energy_injected_p_kwh', 0) or 0
+        report_data['energy_injected_fp'] = generator_inv.get('energy_injected_fp_kwh', 0) or 0
+        report_data['consumption_p'] = generator_inv.get('energy_registered_p_kwh', 0) or 0
+        report_data['consumption_fp'] = generator_inv.get('energy_registered_fp_kwh', 0) or 0
+    else:
+        report_data['energy_injected_p'] = 0
+        report_data['energy_injected_fp'] = 0
+        report_data['consumption_p'] = 0
+        report_data['consumption_fp'] = 0
     
     # Consumer units with invoice data - deduplicate by uc_number
     consumer_units_data = []
