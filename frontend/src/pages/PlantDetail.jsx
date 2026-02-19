@@ -130,11 +130,12 @@ const PlantDetail = () => {
     if (data?.plant) {
       loadChartData();
     }
-  }, [data?.plant]);
+  }, [data?.plant, chartMonth]);
 
   useEffect(() => {
     if (plantId && selectedYear) {
       loadMonthlySummary();
+      loadUcInvoiceStatus();
     }
   }, [plantId, selectedYear]);
 
