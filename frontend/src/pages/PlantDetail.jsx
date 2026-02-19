@@ -206,6 +206,7 @@ const PlantDetail = () => {
       const response = await api.get(`/plants/${plantId}/full-details`);
       setData(response.data);
       setPlantFormData(response.data.plant || {});
+      loadStates();
       
       // Load available years for reports
       try {
