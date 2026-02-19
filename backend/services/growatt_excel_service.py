@@ -122,12 +122,14 @@ def parse_growatt_excel(file_content: bytes, filename: str) -> Dict[str, Any]:
                     inverter_rows.append((idx, row))
         
         # Determine actual days with data by checking inverter rows
+        # But exclude the "Total" column (last column)
         max_day_with_data = 0
         if inverter_rows:
             for idx, row in inverter_rows:
                 for day in range(1, 32):
                     col_idx = day + 2  # Column index (day 1 is column 3)
-                    if col_idx < len(row) and pd.notna(row.iloc[col_idx]):
+                    # Stop before the last column which is "Total(kWh)"
+                    if col_idx < len(row) - 1 and pd.notna(row.iloc[col_idx]):
                         try:
                             val = float(row.iloc[col_idx])
                             if val > 0:
