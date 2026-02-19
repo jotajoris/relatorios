@@ -294,19 +294,20 @@ def _extract_group_a_data(text: str) -> Dict[str, Any]:
         else:
             data["energy_injected_fp_kwh"] = 0
 
-    # Energy compensated = what was actually offset in billing
-    # For generators, it equals the energy registered (all consumption is offset)
+    # Energy compensated
     reg_p = data.get("energy_registered_p_kwh", 0)
     inj_p = data.get("energy_injected_p_kwh", 0)
-    data["energy_compensated_p_kwh"] = min(reg_p, inj_p) if inj_p > 0 else 0
-
     reg_fp = data.get("energy_registered_fp_kwh", 0)
     inj_fp = data.get("energy_injected_fp_kwh", 0)
-    data["energy_compensated_fp_kwh"] = min(reg_fp, inj_fp) if inj_fp > 0 else 0
 
-    # Energy billed = registered - compensated
-    data["energy_billed_p_kwh"] = max(0, reg_p - data["energy_compensated_p_kwh"])
-    data["energy_billed_fp_kwh"] = max(0, reg_fp - data["energy_compensated_fp_kwh"])
+    # For FP: compensated = what was offset locally = min(registered, injected)
+    data["energy_compensated_fp_kwh"] = min(reg_fp, inj_fp) if inj_fp > 0 else 0
+    # For P: compensated = total injected at ponta (used across all UCs in SCEE)
+    data["energy_compensated_p_kwh"] = inj_p if inj_p > 0 else 0
+
+    # Energy billed = registered - compensated (can be negative for generators)
+    data["energy_billed_p_kwh"] = reg_p - data["energy_compensated_p_kwh"]
+    data["energy_billed_fp_kwh"] = reg_fp - data["energy_compensated_fp_kwh"]
 
     # Demand
     m = re.search(r'DEMANDA\s+USD\s+(?:kW\s+)?(?:\d+\s+\d+\s+)?([\d.,]+)\s+[\d.,]+\s+([\d.,]+)', text)
