@@ -71,7 +71,7 @@ const Reports = () => {
 
     setGenerating(true);
     try {
-      const response = await api.get(`/reports/generate-pdf/${selectedPlant}?month=${selectedMonth}`, {
+      const response = await api.get(`/reports/download-pdf/${selectedPlant}?month=${selectedMonth}`, {
         responseType: 'blob'
       });
       
