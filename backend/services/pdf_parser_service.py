@@ -435,25 +435,28 @@ def _extract_group_b_data(text: str) -> Dict[str, Any]:
 
     # Tariff values
     tariffs = {}
-    # The first page text can be garbled by "Segunda Via" watermark
-    # Look for 6-decimal tariff values near energy consumption items
-    # ENERGIA ELET CONSUMO ... kWh 13.579 0,375131 ...
-    m = re.search(r'ENERGIA\s+ELET\s+CONSUMO.*?kWh.*?[\d.,]+\s+\w?\s*(0,\d{5,6})', text, re.DOTALL)
+    # From ENERGIA INJ. OUC lines (cleaner text, always available for beneficiaries)
+    m = re.search(r'ENERGIA\s+INJ\.\s+OUC\s+OPT\s+TE.*?kWh\s+-?[\d.,]+\s+(0,\d{5,6})', text)
     if m:
         tariffs["te_fp"] = _parse_br_number(m.group(1))
-    # ENERGIA ELET USO SISTEMA ... kWh 13.579 0,498820 ...
-    m = re.search(r'ENERGIA\s+ELET\s+USO\s+SISTEMA.*?kWh.*?[\d.,]+\s+\w?\s*(0,\d{5,6})', text, re.DOTALL)
+        tariffs["te_fp_unit"] = tariffs["te_fp"]
+    m = re.search(r'ENERGIA\s+INJ\.\s+OUC\s+OPT\s+TUS.*?kWh\s+-?[\d.,]+\s+(0,\d{5,6})', text)
     if m:
         tariffs["tusd_fp"] = _parse_br_number(m.group(1))
-    # Also try from ENERGIA INJ. OUC lines which have cleaner text
+        tariffs["usd_fp_unit"] = tariffs["tusd_fp"]
+    # Fallback: garbled first page text
     if "te_fp" not in tariffs:
-        m = re.search(r'ENERGIA\s+INJ\.\s+OUC\s+OPT\s+TE.*?kWh\s+-?[\d.,]+\s+(0,\d{5,6})', text)
+        m = re.search(r'ENERGIA\s+ELET\s+CONSUMO.*?kWh.*?[\d.,]+\s+\w?\s*(0,\d{5,6})', text, re.DOTALL)
         if m:
             tariffs["te_fp"] = _parse_br_number(m.group(1))
+            tariffs["te_fp_unit"] = tariffs["te_fp"]
     if "tusd_fp" not in tariffs:
-        m = re.search(r'ENERGIA\s+INJ\.\s+OUC\s+OPT\s+TUS.*?kWh\s+-?[\d.,]+\s+(0,\d{5,6})', text)
+        m = re.search(r'ENERGIA\s+ELET\s+USO\s+SISTEMA.*?kWh.*?[\d.,]+\s+\w?\s*(0,\d{5,6})', text, re.DOTALL)
         if m:
             tariffs["tusd_fp"] = _parse_br_number(m.group(1))
+            tariffs["usd_fp_unit"] = tariffs["tusd_fp"]
+    # Calculate tariff_total_fp = TE + TUSD
+    tariffs["tariff_total_fp"] = tariffs.get("te_fp", 0) + tariffs.get("tusd_fp", 0)
     data["tariff_values"] = tariffs
 
     return data
