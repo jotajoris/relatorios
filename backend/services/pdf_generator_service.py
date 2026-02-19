@@ -52,8 +52,11 @@ def _fmt(value, decimals=2):
     """Format number with Brazilian locale."""
     if value is None:
         return "0"
-    s = f"{value:,.{decimals}f}"
-    return s.replace(',', 'X').replace('.', ',').replace('X', '.')
+    try:
+        s = f"{value:,.{decimals}f}"
+        return s.replace(',', 'X').replace('.', ',').replace('X', '.')
+    except (ValueError, TypeError):
+        return "0"
 
 
 def _brl(value):
