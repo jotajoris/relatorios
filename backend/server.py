@@ -2297,9 +2297,9 @@ async def download_pdf_report(
         unit = next((u for u in units if u['id'] == inv.get('consumer_unit_id')), None)
         if unit:
             consumer_units_data.append({
-                'name': unit.get('holder_name', unit.get('address', '')),
+                'name': unit.get('holder_name') or unit.get('address') or unit.get('uc_number') or '',
                 'uc_number': unit.get('uc_number', ''),
-                'cycle': f"{inv.get('billing_cycle_start', '')[:5]} a {inv.get('billing_cycle_end', '')[:5]}",
+                'cycle': f"{(inv.get('billing_cycle_start') or '')[:10]} a {(inv.get('billing_cycle_end') or '')[:10]}",
                 'consumption_registered': inv.get('energy_registered_fp_kwh', 0) + inv.get('energy_registered_p_kwh', 0),
                 'energy_compensated': inv.get('energy_compensated_fp_kwh', 0) + inv.get('energy_compensated_p_kwh', 0),
                 'energy_billed': inv.get('energy_billed_fp_kwh', 0),
