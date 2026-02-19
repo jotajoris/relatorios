@@ -120,6 +120,8 @@ const PlantDetail = () => {
     is_generator: false
   });
   
+  const [plantFormData, setPlantFormData] = useState({});
+
   // City search for irradiance
   const [citySearch, setCitySearch] = useState('');
   const [citySuggestions, setCitySuggestions] = useState([]);
