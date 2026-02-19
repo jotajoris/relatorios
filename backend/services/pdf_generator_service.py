@@ -228,12 +228,15 @@ class SolarReportGenerator:
         """Create a single KPI card with yellow accent"""
         style = self.styles['KPIValueHighlight'] if highlight else self.styles['KPIValue']
         
+        # Keep value on single line by using nobr
+        value_para = Paragraph(f"<nobr>{value}</nobr>", style)
+        
         data = [
             [Paragraph(label, self.styles['KPILabel'])],
-            [Paragraph(value, style)]
+            [value_para]
         ]
         
-        card = Table(data, colWidths=[80])
+        card = Table(data, colWidths=[95])
         card.setStyle(TableStyle([
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
