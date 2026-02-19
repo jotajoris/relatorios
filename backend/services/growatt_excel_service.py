@@ -90,17 +90,35 @@ def parse_growatt_excel(file_content: bytes, filename: str) -> Dict[str, Any]:
         
         # Find inverter data rows
         # Pattern: Serial number like "FULCD5X002(125k (inv 1))" or similar
+        # Must be in the "Inverter Data" section and have alphanumeric serial
         inverter_rows = []
+        in_inverter_section = False
+        
         for idx, row in df.iterrows():
             first_val = str(row.iloc[0]) if pd.notna(row.iloc[0]) else ''
-            # Inverter rows have serial numbers with parentheses and alphanumeric chars
-            if first_val and '(' in first_val and 'inv' in first_val.lower():
-                inverter_rows.append((idx, row))
-            # Also catch format like "ABCD1234(125k)"
-            elif first_val and '(' in first_val and len(first_val) > 8:
-                # Check if it looks like a serial (alphanumeric start)
-                serial_part = first_val.split('(')[0]
-                if serial_part and any(c.isdigit() for c in serial_part) and any(c.isalpha() for c in serial_part):
+            
+            # Detect section markers
+            if 'Inverter Data' in first_val:
+                in_inverter_section = True
+                continue
+            elif 'Storage Data' in first_val or 'Hybrid Inverter' in first_val or 'Wit Data' in first_val:
+                in_inverter_section = False
+                continue
+            
+            # Only process rows in the inverter section
+            if not in_inverter_section:
+                continue
+            
+            # Skip header row
+            if 'Serial Number' in first_val:
+                continue
+            
+            # Inverter rows have serial numbers like "FULCD5X002(125k (inv 1))"
+            # Must start with alphanumeric and contain parentheses
+            if first_val and '(' in first_val:
+                serial_part = first_val.split('(')[0].strip()
+                # Valid serial: alphanumeric, typically 8+ chars
+                if serial_part and len(serial_part) >= 6 and any(c.isdigit() for c in serial_part) and any(c.isalpha() for c in serial_part):
                     inverter_rows.append((idx, row))
         
         # Determine actual days with data by checking inverter rows
