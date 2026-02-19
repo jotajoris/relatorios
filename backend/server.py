@@ -2255,16 +2255,21 @@ async def download_pdf_report(
     # Get invoices for the month - match by reference_month (MM/YYYY format)
     ref_month = f"{mon:02d}/{year}"
     invoices = await db.invoices.find({
-        'consumer_unit_id': {'$in': unit_ids},
-        'reference_month': ref_month
+        '$or': [
+            {'consumer_unit_id': {'$in': unit_ids}, 'reference_month': ref_month},
+            {'plant_id': plant_id, 'reference_month': ref_month},
+        ]
     }, {'_id': 0}).to_list(1000)
     
-    # Fallback: also try matching by billing_cycle_end date range
-    if not invoices:
-        invoices = await db.invoices.find({
-            'consumer_unit_id': {'$in': unit_ids},
-            'billing_cycle_end': {'$gte': start_date, '$lte': end_date}
-        }, {'_id': 0}).to_list(1000)
+    # Deduplicate by invoice id
+    seen = set()
+    unique_invoices = []
+    for inv in invoices:
+        iid = inv.get('id')
+        if iid not in seen:
+            seen.add(iid)
+            unique_invoices.append(inv)
+    invoices = unique_invoices
     
     total_saved = sum(i.get('amount_saved_brl', 0) for i in invoices)
     total_billed = sum(i.get('amount_total_brl', 0) for i in invoices)
