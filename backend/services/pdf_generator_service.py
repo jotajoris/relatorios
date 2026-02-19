@@ -372,14 +372,7 @@ class SolarReportGenerator:
         if hist:
             el.append(self._sec("Meses Anteriores"))
             el.append(Spacer(1,2*mm))
-            rows = []
-            for h in hist[:6]:
-                my = h.get('month',h.get('month_year',''))
-                gk = h.get('generation_kwh',0)
-                pk = h.get('prognosis_kwh',0)
-                pf = f"{gk/pk*100:.0f}%" if pk>0 else "-"
-                rows.append([my, f"{_n(gk,0)} kWh", pf])
-            el.append(self._hist_table(['Mes/Ano','Geracao','Desempenho'], rows))
+            el.append(self._hist_table(hist[:6]))
 
         # ═══ PAGE 2: CHART + PROGNOSIS + ENVIRONMENTAL ═══
         el.append(PageBreak())
