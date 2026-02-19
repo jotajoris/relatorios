@@ -130,6 +130,12 @@ const PlantDetail = () => {
     }
   }, [data?.plant]);
 
+  useEffect(() => {
+    if (plantId && selectedYear) {
+      loadMonthlySummary();
+    }
+  }, [plantId, selectedYear]);
+
   const loadData = async () => {
     try {
       setLoading(true);
