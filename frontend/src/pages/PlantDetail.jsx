@@ -1473,33 +1473,27 @@ const PlantDetail = () => {
               />
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2 relative">
-                <Label>Cidade (Irradiancia)</Label>
-                <Input
-                  value={citySearch || plantFormData.city || ''}
-                  onChange={(e) => {
-                    setCitySearch(e.target.value);
-                    setPlantFormData({...plantFormData, city: e.target.value});
-                    searchCities(e.target.value);
-                  }}
-                  onFocus={() => { if (citySuggestions.length) setShowCitySuggestions(true); }}
-                  placeholder="Digite o nome da cidade..."
-                />
-                {showCitySuggestions && citySuggestions.length > 0 && (
-                  <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                    {citySuggestions.map((c, i) => (
-                      <button key={i} className="w-full text-left px-3 py-2 hover:bg-[#FFD600]/10 text-sm border-b last:border-0"
-                        onClick={() => selectCity(c)}>
-                        <span className="font-medium">{c.city}</span>
-                        <span className="text-neutral-400 ml-2">- {c.state}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
               <div className="space-y-2">
                 <Label>Estado</Label>
-                <Input value={plantFormData.state || ''} onChange={(e) => setPlantFormData({...plantFormData, state: e.target.value})} />
+                <Select value={selectedState || plantFormData.state || ''} onValueChange={handleStateSelect}>
+                  <SelectTrigger><SelectValue placeholder="Selecione o estado" /></SelectTrigger>
+                  <SelectContent className="max-h-60">
+                    {statesList.map(s => (
+                      <SelectItem key={s} value={s}>{s.replace(/_/g, ' ')}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Cidade (Irradiancia)</Label>
+                <Select value={plantFormData.city || ''} onValueChange={handleCitySelect}>
+                  <SelectTrigger><SelectValue placeholder={filteredCities.length ? "Selecione a cidade" : "Escolha o estado primeiro"} /></SelectTrigger>
+                  <SelectContent className="max-h-60">
+                    {filteredCities.map(c => (
+                      <SelectItem key={c} value={c}>{c}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
             
