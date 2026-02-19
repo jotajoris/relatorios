@@ -496,30 +496,37 @@ def _extract_scee_credits(text: str) -> Dict[str, Any]:
     return data
 
 
-def _extract_billing_deductions(text: str) -> float:
+def _extract_billing_deductions(text: str, is_beneficiary: bool) -> float:
     """
-    Calculate 'Economizado' = sum of all ENERGIA INJETADA billing line R$ amounts.
-    These are negative values that represent deductions from the invoice total.
-    Note: Some lines have garbled 'kWh' as 'kIIWh' due to PDF watermark.
+    Calculate 'Economizado' = sum of injection billing deductions.
+    - For generators: sum ALL ENERGIA INJETADA + ENERGIA INJ. BAND lines
+    - For beneficiaries: sum only ENERGIA INJ. OUC lines (exclude bandeira)
     """
     total = 0.0
-    # Match INJETADA lines with their negative R$ value (Valor column)
-    # Pattern: ENERGIA INJETADA ... -QUANTITY UNIT_PRICE -VALOR
-    # Handle both kWh and garbled kIIWh
-    inj_lines = re.findall(
-        r'ENERGIA\s+INJETAD[A].*?k\w+h\s+-?[\d.,]+\s+[\d.,]+\s+(-[\d.,]+)',
-        text
-    )
-    for val in inj_lines:
-        total += abs(_parse_br_number(val))
 
-    # Also match ENERGIA INJ. BAND. AMARELA lines
-    band_lines = re.findall(
-        r'ENERGIA\s+INJ\.\s+BAND\..*?k\w+h\s+-?[\d.,]+\s+[\d.,]+\s+(-[\d.,]+)',
-        text
-    )
-    for val in band_lines:
-        total += abs(_parse_br_number(val))
+    if is_beneficiary:
+        # Beneficiary: sum only OUC injection lines (TE + TUS)
+        ouc_lines = re.findall(
+            r'ENERGIA\s+INJ\.\s+OUC\s+OPT\s+TE?\w*.*?k\w+h\s+-?[\d.,]+\s+[\d.,]+\s+(-[\d.,]+)',
+            text
+        )
+        for val in ouc_lines:
+            total += abs(_parse_br_number(val))
+    else:
+        # Generator: sum ALL INJETADA lines including bandeira
+        inj_lines = re.findall(
+            r'ENERGIA\s+INJETAD[A].*?k\w+h\s+-?[\d.,]+\s+[\d.,]+\s+(-[\d.,]+)',
+            text
+        )
+        for val in inj_lines:
+            total += abs(_parse_br_number(val))
+
+        band_lines = re.findall(
+            r'ENERGIA\s+INJ\.\s+BAND\..*?k\w+h\s+-?[\d.,]+\s+[\d.,]+\s+(-[\d.,]+)',
+            text
+        )
+        for val in band_lines:
+            total += abs(_parse_br_number(val))
 
     return round(total, 2)
 
