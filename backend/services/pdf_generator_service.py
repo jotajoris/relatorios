@@ -11,253 +11,163 @@ from typing import Dict, Any, List, Optional
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.lib.units import mm, cm
-from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+from reportlab.lib.units import mm
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle,
-    Image, PageBreak, KeepTogether, HRFlowable
+    Image, PageBreak, HRFlowable
 )
 from reportlab.graphics.shapes import Drawing, Rect, Line, String
 from reportlab.graphics.charts.barcharts import VerticalBarChart
-from reportlab.pdfbase import pdfmetrics
-from reportlab.pdfbase.ttfonts import TTFont
 
 logger = logging.getLogger(__name__)
 
 # ON Soluções brand colors
-YELLOW_PRIMARY = colors.HexColor('#FFD600')
+YELLOW = colors.HexColor('#FFD600')
 YELLOW_LIGHT = colors.HexColor('#FFF3B0')
 YELLOW_DARK = colors.HexColor('#E5C100')
-BLACK_PRIMARY = colors.HexColor('#1A1A1A')
+BLACK = colors.HexColor('#1A1A1A')
 BLACK_SOFT = colors.HexColor('#2D2D2D')
 GRAY_LIGHT = colors.HexColor('#F4F4F5')
-GRAY_MEDIUM = colors.HexColor('#9CA3AF')
+GRAY_MED = colors.HexColor('#9CA3AF')
 GRAY_DARK = colors.HexColor('#4B5563')
-GREEN_SUCCESS = colors.HexColor('#10B981')
-RED_ALERT = colors.HexColor('#EF4444')
+GREEN = colors.HexColor('#10B981')
 WHITE = colors.white
+
+PAGE_W, PAGE_H = A4
+MARGIN = 12 * mm
+CONTENT_W = PAGE_W - 2 * MARGIN
+
+ON_LOGO_PATH = '/app/backend/assets/logo_on_fundo_preto.png'
+ON_LOGO_LIGHT = '/app/backend/assets/logo_on_sem_fundo.png'
+
+MONTH_NAMES = {
+    '01': 'JANEIRO', '02': 'FEVEREIRO', '03': 'MARCO', '04': 'ABRIL',
+    '05': 'MAIO', '06': 'JUNHO', '07': 'JULHO', '08': 'AGOSTO',
+    '09': 'SETEMBRO', '10': 'OUTUBRO', '11': 'NOVEMBRO', '12': 'DEZEMBRO'
+}
+
+
+def _fmt(value, decimals=2):
+    """Format number with Brazilian locale."""
+    if value is None:
+        return "0"
+    s = f"{value:,.{decimals}f}"
+    return s.replace(',', 'X').replace('.', ',').replace('X', '.')
+
+
+def _brl(value):
+    return f"R$ {_fmt(value, 2)}"
+
+
+def _load_image(path, w, h):
+    """Safely load an image."""
+    if path and os.path.exists(path):
+        try:
+            return Image(path, width=w, height=h)
+        except Exception:
+            pass
+    return None
 
 
 class SolarReportGenerator:
-    """Generates PDF reports for solar plants with ON Soluções branding"""
-    
-    def __init__(self, logo_path: Optional[str] = None):
-        self.logo_path = logo_path
+    def __init__(self):
         self.styles = getSampleStyleSheet()
-        self._setup_custom_styles()
-    
-    def _setup_custom_styles(self):
-        """Setup custom paragraph styles for ON branding"""
-        # Main title - Big and bold
-        self.styles.add(ParagraphStyle(
-            name='ReportTitle',
-            fontSize=24,
-            fontName='Helvetica-Bold',
-            textColor=BLACK_PRIMARY,
-            spaceAfter=4,
-            alignment=TA_LEFT
-        ))
-        
-        # Section headers with yellow accent
-        self.styles.add(ParagraphStyle(
-            name='SectionTitle',
-            fontSize=12,
-            fontName='Helvetica-Bold',
-            textColor=BLACK_PRIMARY,
-            spaceBefore=12,
-            spaceAfter=6,
-            borderPadding=4,
-            borderColor=YELLOW_PRIMARY,
-            borderWidth=0,
-            leftIndent=0
-        ))
-        
-        # Subtitle / Company name
-        self.styles.add(ParagraphStyle(
-            name='CompanyName',
-            fontSize=10,
-            fontName='Helvetica-Bold',
-            textColor=YELLOW_PRIMARY,
-            spaceAfter=2
-        ))
-        
-        # KPI Labels
-        self.styles.add(ParagraphStyle(
-            name='KPILabel',
-            fontSize=8,
-            fontName='Helvetica',
-            textColor=GRAY_MEDIUM,
-            alignment=TA_CENTER
-        ))
-        
-        # KPI Values - Large and bold
-        self.styles.add(ParagraphStyle(
-            name='KPIValue',
-            fontSize=16,
-            fontName='Helvetica-Bold',
-            textColor=BLACK_PRIMARY,
-            alignment=TA_CENTER
-        ))
-        
-        # KPI Values highlighted (yellow)
-        self.styles.add(ParagraphStyle(
-            name='KPIValueHighlight',
-            fontSize=16,
-            fontName='Helvetica-Bold',
-            textColor=YELLOW_DARK,
-            alignment=TA_CENTER
-        ))
-        
-        # Body text custom
-        self.styles.add(ParagraphStyle(
-            name='BodyCustom',
-            fontSize=9,
-            fontName='Helvetica',
-            textColor=BLACK_PRIMARY,
-            leading=12
-        ))
-        
-        # Small text for details
-        self.styles.add(ParagraphStyle(
-            name='SmallText',
-            fontSize=7,
-            fontName='Helvetica',
-            textColor=GRAY_DARK,
-            leading=9
-        ))
-        
-        # Footer style
-        self.styles.add(ParagraphStyle(
-            name='FooterStyle',
-            fontSize=7,
-            fontName='Helvetica',
-            textColor=GRAY_MEDIUM,
-            alignment=TA_CENTER
-        ))
-    
-    def _format_number(self, value: float, decimals: int = 2) -> str:
-        """Format number with Brazilian locale"""
-        if value is None:
-            return "0"
-        formatted = f"{value:,.{decimals}f}"
-        formatted = formatted.replace(',', 'X').replace('.', ',').replace('X', '.')
-        return formatted
-    
-    def _format_currency(self, value: float) -> str:
-        """Format currency in BRL"""
-        return f"R$ {self._format_number(value, 2)}"
-    
-    def _create_header_with_logo(self, plant_name: str, month_year: str, company_name: str, logo_url: str = None) -> List:
-        """Create header with ON logo and client logo"""
-        elements = []
-        
-        # Month names in Portuguese
-        month_names = {
-            '01': 'JANEIRO', '02': 'FEVEREIRO', '03': 'MARÇO', '04': 'ABRIL',
-            '05': 'MAIO', '06': 'JUNHO', '07': 'JULHO', '08': 'AGOSTO',
-            '09': 'SETEMBRO', '10': 'OUTUBRO', '11': 'NOVEMBRO', '12': 'DEZEMBRO'
-        }
-        
+        self._add_styles()
+
+    def _add_styles(self):
+        defs = [
+            ('ON_Brand', 9, 'Helvetica-Bold', YELLOW, TA_LEFT),
+            ('Period', 10, 'Helvetica', GRAY_DARK, TA_LEFT),
+            ('PlantTitle', 18, 'Helvetica-Bold', BLACK, TA_LEFT),
+            ('CompSub', 9, 'Helvetica', GRAY_MED, TA_LEFT),
+            ('SectTitle', 12, 'Helvetica-Bold', BLACK, TA_LEFT),
+            ('KPILabel', 8, 'Helvetica', GRAY_MED, TA_CENTER),
+            ('KPIVal', 14, 'Helvetica-Bold', BLACK, TA_CENTER),
+            ('KPIHigh', 14, 'Helvetica-Bold', YELLOW_DARK, TA_CENTER),
+            ('Body', 9, 'Helvetica', BLACK, TA_LEFT),
+            ('Small', 7, 'Helvetica', GRAY_DARK, TA_LEFT),
+            ('Footer', 7, 'Helvetica', GRAY_MED, TA_CENTER),
+        ]
+        for name, size, font, color, align in defs:
+            self.styles.add(ParagraphStyle(
+                name=name, fontSize=size, fontName=font,
+                textColor=color, alignment=align, leading=size * 1.3
+            ))
+
+    def _header(self, plant_name, month_year, company_name, logo_url=None):
+        """Build header with ON logo + yellow accent bar + plant title + client logo."""
         parts = month_year.split('-') if '-' in month_year else month_year.split('/')
         if len(parts) == 2:
-            if len(parts[0]) == 4:
-                year, month = parts[0], parts[1]
-            else:
-                month, year = parts[0], parts[1]
-            month_name = month_names.get(month, month)
-            period_text = f"{month_name} {year}"
+            y, m = (parts[0], parts[1]) if len(parts[0]) == 4 else (parts[1], parts[0])
+            period = f"{MONTH_NAMES.get(m, m)} {y}"
         else:
-            period_text = month_year
-        
-        # Try to load ON logo
-        on_logo = None
-        on_logo_paths = [
-            '/app/frontend/public/logo192.png',
-            '/app/frontend/public/logo512.png',
-        ]
-        for path in on_logo_paths:
-            if os.path.exists(path):
-                try:
-                    on_logo = Image(path, width=35, height=35)
-                    break
-                except Exception:
-                    pass
-        
-        # Try to load client/plant logo
+            period = month_year
+
+        on_logo = _load_image(ON_LOGO_LIGHT, 32, 32)
+
         client_logo = None
         if logo_url:
-            try:
-                if logo_url.startswith('/api/logos/'):
-                    logo_path = f"/app/backend/uploads/logos/{logo_url.split('/')[-1]}"
-                    if os.path.exists(logo_path):
-                        client_logo = Image(logo_path, width=45, height=45)
-                elif os.path.exists(logo_url):
-                    client_logo = Image(logo_url, width=45, height=45)
-            except Exception as e:
-                logger.warning(f"Could not load client logo: {e}")
-        
-        # Create yellow accent bar
-        accent_bar = Drawing(6, 55)
-        accent_bar.add(Rect(0, 0, 6, 55, fillColor=YELLOW_PRIMARY, strokeColor=None))
-        
-        # Build title content
-        title_content = []
-        title_content.append(Paragraph(
-            "<font color='#FFD600'><b>ON SOLUÇÕES ENERGÉTICAS</b></font>",
-            ParagraphStyle(name='ONBrand', fontSize=9, fontName='Helvetica-Bold')
-        ))
-        title_content.append(Paragraph(period_text, ParagraphStyle(
-            name='PeriodTxt', fontSize=10, fontName='Helvetica', textColor=GRAY_DARK, spaceBefore=2
-        )))
-        title_content.append(Paragraph(plant_name.upper(), ParagraphStyle(
-            name='PlantTtl', fontSize=18, fontName='Helvetica-Bold', textColor=BLACK_PRIMARY, spaceBefore=2
-        )))
-        if company_name and company_name.upper() != 'ON SOLUÇÕES ENERGÉTICAS':
-            title_content.append(Paragraph(company_name, ParagraphStyle(
-                name='CompSub', fontSize=9, fontName='Helvetica', textColor=GRAY_MEDIUM
-            )))
-        
-        # Build table structure with both logos
-        if on_logo and client_logo:
-            header_data = [[accent_bar, on_logo, title_content, client_logo]]
-            col_widths = [8, 42, A4[0] - 135*mm, 50]
-        elif on_logo:
-            header_data = [[accent_bar, on_logo, title_content]]
-            col_widths = [8, 42, A4[0] - 75*mm]
-        elif client_logo:
-            header_data = [[accent_bar, title_content, client_logo]]
-            col_widths = [8, A4[0] - 85*mm, 50]
+            if logo_url.startswith('/api/logos/'):
+                lpath = f"/tmp/logos/{logo_url.split('/')[-1]}"
+                client_logo = _load_image(lpath, 40, 40)
+            else:
+                client_logo = _load_image(logo_url, 40, 40)
+
+        accent = Drawing(5, 50)
+        accent.add(Rect(0, 0, 5, 50, fillColor=YELLOW, strokeColor=None))
+
+        title_parts = [
+            Paragraph("ON SOLUCOES ENERGETICAS", self.styles['ON_Brand']),
+            Paragraph(period, self.styles['Period']),
+            Paragraph(plant_name.upper(), self.styles['PlantTitle']),
+        ]
+        if company_name and company_name.upper() != 'ON SOLUCOES ENERGETICAS':
+            title_parts.append(Paragraph(company_name, self.styles['CompSub']))
+
+        cells = [accent]
+        widths = [8]
+        if on_logo:
+            cells.append(on_logo)
+            widths.append(38)
+
+        cells.append(title_parts)
+        remaining = CONTENT_W - sum(widths) - 6
+        if client_logo:
+            widths.append(remaining - 50)
+            cells.append(client_logo)
+            widths.append(50)
         else:
-            header_data = [[accent_bar, title_content]]
-            col_widths = [8, A4[0] - 35*mm]
-        
-        header_table = Table(header_data, colWidths=col_widths)
-        header_table.setStyle(TableStyle([
+            widths.append(remaining)
+
+        tbl = Table([cells], colWidths=widths)
+        tbl.setStyle(TableStyle([
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('LEFTPADDING', (0, 0), (0, 0), 0),
-            ('LEFTPADDING', (1, 0), (-1, -1), 6),
+            ('LEFTPADDING', (0, 0), (-1, -1), 4),
             ('TOPPADDING', (0, 0), (-1, -1), 0),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
         ]))
-        
-        elements.append(header_table)
-        elements.append(Spacer(1, 6*mm))
-        
-        return elements
-    
-    def _create_kpi_card(self, label: str, value: str, highlight: bool = False) -> Table:
-        """Create a single KPI card with yellow accent"""
-        style = self.styles['KPIValueHighlight'] if highlight else self.styles['KPIValue']
-        
-        # Keep value on single line by using nobr
-        value_para = Paragraph(f"<nobr>{value}</nobr>", style)
-        
+        return [tbl, Spacer(1, 5 * mm)]
+
+    def _section(self, title):
+        accent = Drawing(4, 14)
+        accent.add(Rect(0, 0, 4, 14, fillColor=YELLOW, strokeColor=None))
+        tbl = Table([[accent, Paragraph(title, self.styles['SectTitle'])]],
+                    colWidths=[8, CONTENT_W - 12])
+        tbl.setStyle(TableStyle([
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('LEFTPADDING', (0, 0), (0, 0), 0),
+            ('LEFTPADDING', (1, 0), (1, 0), 6),
+        ]))
+        return tbl
+
+    def _kpi_card(self, label, value, highlight=False):
+        style = self.styles['KPIHigh'] if highlight else self.styles['KPIVal']
         data = [
             [Paragraph(label, self.styles['KPILabel'])],
-            [value_para]
+            [Paragraph(f"<nobr>{value}</nobr>", style)]
         ]
-        
-        card = Table(data, colWidths=[95])
+        card = Table(data, colWidths=[90])
         card.setStyle(TableStyle([
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
@@ -265,279 +175,147 @@ class SolarReportGenerator:
             ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
             ('BACKGROUND', (0, 0), (-1, -1), WHITE),
             ('BOX', (0, 0), (-1, -1), 1, GRAY_LIGHT),
-            ('LINEABOVE', (0, 0), (-1, 0), 2, YELLOW_PRIMARY if highlight else GRAY_LIGHT),
+            ('LINEABOVE', (0, 0), (-1, 0), 2, YELLOW if highlight else GRAY_LIGHT),
         ]))
-        
         return card
-    
-    def _create_kpi_row(self, kpis: List[Dict], highlight_indices: List[int] = None) -> Table:
-        """Create a row of KPI cards"""
-        if highlight_indices is None:
-            highlight_indices = []
-        
-        cards = []
-        for i, kpi in enumerate(kpis):
-            is_highlight = i in highlight_indices
-            card = self._create_kpi_card(kpi['label'], kpi['value'], is_highlight)
-            cards.append(card)
-        
-        row = Table([cards], colWidths=[(A4[0] - 30*mm) / len(kpis)] * len(kpis))
-        row.setStyle(TableStyle([
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ]))
-        
+
+    def _kpi_row(self, kpis, highlights=None):
+        if highlights is None:
+            highlights = []
+        cards = [self._kpi_card(k['label'], k['value'], i in highlights) for i, k in enumerate(kpis)]
+        w = CONTENT_W / len(kpis)
+        row = Table([cards], colWidths=[w] * len(kpis))
+        row.setStyle(TableStyle([('ALIGN', (0, 0), (-1, -1), 'CENTER')]))
         return row
-    
-    def _create_section_header(self, title: str) -> Table:
-        """Create a section header with yellow accent bar"""
-        accent = Drawing(4, 16)
-        accent.add(Rect(0, 0, 4, 16, fillColor=YELLOW_PRIMARY, strokeColor=None))
-        
-        data = [[accent, Paragraph(title, self.styles['SectionTitle'])]]
-        table = Table(data, colWidths=[8, A4[0] - 40*mm])
-        table.setStyle(TableStyle([
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('LEFTPADDING', (0, 0), (0, 0), 0),
-            ('LEFTPADDING', (1, 0), (1, 0), 6),
-        ]))
-        
-        return table
-    
-    def _create_generation_chart(self, daily_data: List[Dict], prognosis_daily: float) -> Drawing:
-        """Create daily generation bar chart with ON branding"""
-        drawing = Drawing(480, 150)
-        
-        # Background
-        drawing.add(Rect(0, 0, 480, 150, fillColor=GRAY_LIGHT, strokeColor=None))
-        
-        generation_values = [d.get('generation_kwh', 0) for d in daily_data[:31]]
-        
-        if not generation_values:
+
+    def _chart(self, daily_data, prognosis_daily):
+        drawing = Drawing(CONTENT_W, 140)
+        drawing.add(Rect(0, 0, CONTENT_W, 140, fillColor=GRAY_LIGHT, strokeColor=None))
+        vals = [d.get('generation_kwh', 0) for d in daily_data[:31]]
+        if not vals:
             return drawing
-        
-        # Create bar chart
+
         bc = VerticalBarChart()
         bc.x = 35
-        bc.y = 25
-        bc.width = 430
-        bc.height = 105
-        bc.data = [generation_values]
+        bc.y = 22
+        bc.width = CONTENT_W - 50
+        bc.height = 100
+        bc.data = [vals]
         bc.strokeColor = colors.transparent
         bc.valueAxis.valueMin = 0
-        max_val = max(max(generation_values) if generation_values else 100, prognosis_daily)
-        bc.valueAxis.valueMax = max_val * 1.15
+        mx = max(max(vals) if vals else 100, prognosis_daily)
+        bc.valueAxis.valueMax = mx * 1.15
         bc.valueAxis.valueStep = bc.valueAxis.valueMax / 4
-        bc.valueAxis.labels.fontSize = 7
-        bc.valueAxis.labels.fontName = 'Helvetica'
-        bc.valueAxis.strokeColor = GRAY_MEDIUM
-        bc.valueAxis.gridStrokeColor = colors.Color(0.9, 0.9, 0.9)
+        bc.valueAxis.labels.fontSize = 6
+        bc.valueAxis.strokeColor = GRAY_MED
+        bc.valueAxis.gridStrokeColor = colors.Color(0.92, 0.92, 0.92)
         bc.valueAxis.visibleGrid = True
-        bc.categoryAxis.labels.fontSize = 7
-        bc.categoryAxis.labels.fontName = 'Helvetica'
-        bc.categoryAxis.categoryNames = [str(i+1) for i in range(len(generation_values))]
-        bc.categoryAxis.strokeColor = GRAY_MEDIUM
+        bc.categoryAxis.labels.fontSize = 6
+        bc.categoryAxis.categoryNames = [str(i + 1) for i in range(len(vals))]
+        bc.categoryAxis.strokeColor = GRAY_MED
         bc.bars[0].fillColor = BLACK_SOFT
         bc.bars[0].strokeColor = None
-        
         drawing.add(bc)
-        
-        # Add prognosis line (dashed yellow)
+
         if prognosis_daily > 0:
-            line_y = bc.y + (prognosis_daily / bc.valueAxis.valueMax) * bc.height
-            line = Line(bc.x, line_y, bc.x + bc.width, line_y)
-            line.strokeColor = YELLOW_PRIMARY
-            line.strokeWidth = 2
-            line.strokeDashArray = [6, 3]
+            ly = bc.y + (prognosis_daily / bc.valueAxis.valueMax) * bc.height
+            line = Line(bc.x, ly, bc.x + bc.width, ly)
+            line.strokeColor = YELLOW
+            line.strokeWidth = 1.5
+            line.strokeDashArray = [5, 3]
             drawing.add(line)
-            
-            # Label for prognosis line
-            label = String(bc.x + bc.width + 5, line_y - 3, f'Meta: {self._format_number(prognosis_daily, 0)}',
-                          fontSize=6, fillColor=YELLOW_DARK)
-            drawing.add(label)
-        
+            drawing.add(String(bc.x + bc.width + 3, ly - 3,
+                               f'Meta: {_fmt(prognosis_daily, 0)}',
+                               fontSize=5, fillColor=YELLOW_DARK))
         return drawing
-    
-    def _create_historical_table(self, historical_data: List[Dict]) -> Table:
-        """Create historical data table with ON styling"""
-        data = [['Mês/Ano', 'Prognóstico', 'Geração', 'Desempenho']]
-        
-        for hist in historical_data[:6]:
-            month_year = hist.get('month', hist.get('month_year', ''))
-            prognosis = f"{self._format_number(hist.get('prognosis_kwh', 0), 0)} kWh"
-            generation = f"{self._format_number(hist.get('generation_kwh', 0), 0)} kWh"
-            
-            prognosis_val = hist.get('prognosis_kwh', 0)
-            generation_val = hist.get('generation_kwh', 0)
-            if prognosis_val > 0:
-                perf = generation_val / prognosis_val * 100
-                performance = f"{perf:.1f}%"
-            else:
-                performance = "-"
-            
-            data.append([month_year, prognosis, generation, performance])
-        
-        table = Table(data, colWidths=[70, 100, 100, 70])
-        table.setStyle(TableStyle([
-            # Header row - black background with yellow text
-            ('BACKGROUND', (0, 0), (-1, 0), BLACK_PRIMARY),
-            ('TEXTCOLOR', (0, 0), (-1, 0), YELLOW_PRIMARY),
+
+    def _styled_table(self, headers, rows, col_widths=None):
+        data = [headers] + rows
+        if not col_widths:
+            col_widths = [CONTENT_W / len(headers)] * len(headers)
+        tbl = Table(data, colWidths=col_widths)
+        tbl.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, 0), BLACK),
+            ('TEXTCOLOR', (0, 0), (-1, 0), YELLOW),
             ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 8),
-            # Data rows
-            ('FONTSIZE', (0, 1), (-1, -1), 8),
-            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('TOPPADDING', (0, 0), (-1, -1), 5),
-            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
-            # Alternating row colors
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [WHITE, GRAY_LIGHT]),
-            # Grid
-            ('GRID', (0, 0), (-1, -1), 0.5, GRAY_MEDIUM),
-        ]))
-        
-        return table
-    
-    def _create_consumer_table(self, consumer_data: List[Dict]) -> Table:
-        """Create consumer units table with ON styling"""
-        headers = [
-            'Contrato', 'Ciclo', 'Consumo\nRegistrado', 'Energia\nCompensada',
-            'Energia\nFaturada', 'Crédito\nAnterior', 'Crédito\nAcumulado',
-            'Faturado\n(R$)', 'Economizado\n(R$)'
-        ]
-        data = [headers]
-        
-        for consumer in consumer_data:
-            data.append([
-                consumer.get('name', '')[:16],
-                consumer.get('cycle', ''),
-                self._format_number(consumer.get('consumption_registered', 0), 0),
-                self._format_number(consumer.get('energy_compensated', 0), 0),
-                self._format_number(consumer.get('energy_billed', 0), 0),
-                self._format_number(consumer.get('credit_previous', 0), 0),
-                self._format_number(consumer.get('credit_accumulated', 0), 0),
-                self._format_number(consumer.get('amount_billed', 0), 2),
-                self._format_number(consumer.get('amount_saved', 0), 2),
-            ])
-        
-        table = Table(data, colWidths=[62, 36, 46, 46, 46, 44, 46, 46, 50])
-        table.setStyle(TableStyle([
-            # Header - black with yellow
-            ('BACKGROUND', (0, 0), (-1, 0), BLACK_PRIMARY),
-            ('TEXTCOLOR', (0, 0), (-1, 0), YELLOW_PRIMARY),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('FONTSIZE', (0, 0), (-1, 0), 6),
-            # Data
+            ('FONTSIZE', (0, 0), (-1, 0), 7),
             ('FONTSIZE', (0, 1), (-1, -1), 7),
-            ('ALIGN', (0, 0), (0, -1), 'LEFT'),
-            ('ALIGN', (1, 0), (-1, -1), 'CENTER'),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
             ('TOPPADDING', (0, 0), (-1, -1), 4),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-            # Alternating rows
-            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [WHITE, YELLOW_LIGHT]),
-            # Grid
-            ('GRID', (0, 0), (-1, -1), 0.5, GRAY_MEDIUM),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [WHITE, GRAY_LIGHT]),
+            ('GRID', (0, 0), (-1, -1), 0.5, GRAY_MED),
         ]))
-        
-        return table
-    
-    def _create_footer(self) -> Paragraph:
-        """Create footer with timestamp"""
+        return tbl
+
+    def _footer(self):
         return Paragraph(
-            f"Relatório gerado em {datetime.now().strftime('%d/%m/%Y às %H:%M')} | "
-            f"<b>ON Soluções Energéticas</b> | www.onsolucoes.com.br",
-            self.styles['FooterStyle']
+            f"Relatorio gerado em {datetime.now().strftime('%d/%m/%Y as %H:%M')} | "
+            f"<b>ON Solucoes Energeticas</b> | www.onsolucoes.com.br",
+            self.styles['Footer']
         )
-    
+
     def generate_report(self, data: Dict[str, Any]) -> bytes:
-        """Generate complete unified report with ON branding"""
-        buffer = io.BytesIO()
-        doc = SimpleDocTemplate(
-            buffer,
-            pagesize=A4,
-            rightMargin=12*mm,
-            leftMargin=12*mm,
-            topMargin=12*mm,
-            bottomMargin=12*mm
-        )
-        
-        elements = []
-        
-        # ==================== PAGE 1 ====================
-        
-        # Header with logo
-        elements.extend(self._create_header_with_logo(
+        buf = io.BytesIO()
+        doc = SimpleDocTemplate(buf, pagesize=A4,
+                                rightMargin=MARGIN, leftMargin=MARGIN,
+                                topMargin=MARGIN, bottomMargin=MARGIN)
+        el = []
+
+        # ============ PAGE 1 ============
+        el.extend(self._header(
             data.get('plant_name', 'Usina FV'),
             data.get('month_year', ''),
-            data.get('company_name', 'ON Soluções Energéticas'),
+            data.get('company_name', 'ON Solucoes Energeticas'),
             data.get('logo_url')
         ))
-        
-        # Calculate metrics
+
         prognosis = data.get('prognosis_kwh', 0)
         generation = data.get('total_generation_kwh', 0)
-        performance = (generation / prognosis * 100) if prognosis > 0 else 0
-        financial = data.get('financial', {})
-        
-        # Row 1: Main KPIs
-        kpis1 = [
-            {'label': 'Potência Instalada', 'value': f"{self._format_number(data.get('capacity_kwp', 0), 2)} kWp"},
-            {'label': 'Geração do Mês', 'value': f"{self._format_number(generation, 0)} kWh"},
-            {'label': 'Desempenho', 'value': f"{self._format_number(performance, 1)} %"},
-        ]
-        elements.append(self._create_kpi_row(kpis1, [1]))  # Highlight generation
-        elements.append(Spacer(1, 4*mm))
-        
-        # Row 2: Financial KPIs (if available)
-        if financial.get('saved_brl', 0) > 0 or financial.get('billed_brl', 0) > 0:
-            kpis2 = [
-                {'label': 'Economia do Mês', 'value': self._format_currency(financial.get('saved_brl', 0))},
-                {'label': 'Faturado do Mês', 'value': self._format_currency(financial.get('billed_brl', 0))},
-                {'label': 'Retorno Financeiro', 'value': f"{self._format_number(financial.get('roi_monthly', 0), 2)} %"},
-            ]
-            elements.append(self._create_kpi_row(kpis2, [0]))  # Highlight savings
-            elements.append(Spacer(1, 4*mm))
-            
-            # Row 3: Accumulated
-            if financial.get('total_savings', 0) > 0:
-                kpis3 = [
-                    {'label': 'Economia Acumulada', 'value': self._format_currency(financial.get('total_savings', 0))},
-                    {'label': 'Retorno Total', 'value': f"{self._format_number(financial.get('roi_total', 0), 2)} %"},
-                    {'label': 'Prognóstico Anual', 'value': f"{self._format_number(data.get('prognosis_annual_kwh', 0)/1000, 1)} MWh"},
-                ]
-                elements.append(self._create_kpi_row(kpis3, [0]))
-                elements.append(Spacer(1, 6*mm))
-        
-        # Generation Chart
-        elements.append(self._create_section_header("Geração Diária"))
-        elements.append(Spacer(1, 2*mm))
-        
-        daily_data = data.get('daily_generation', [])
-        days_in_month = len(daily_data) if daily_data else 30
-        daily_prognosis = prognosis / days_in_month if days_in_month > 0 else 0
-        
-        chart = self._create_generation_chart(daily_data, daily_prognosis)
-        elements.append(chart)
-        
-        # Legend
-        elements.append(Paragraph(
-            "<font color='#2D2D2D'>■</font> Geração Real &nbsp;&nbsp;&nbsp;&nbsp;"
-            "<font color='#FFD600'>- - -</font> Prognóstico Diário",
-            self.styles['SmallText']
+        perf = (generation / prognosis * 100) if prognosis > 0 else 0
+        fin = data.get('financial', {})
+
+        # KPI Row 1
+        el.append(self._kpi_row([
+            {'label': 'Potencia Instalada', 'value': f"{_fmt(data.get('capacity_kwp', 0), 2)} kWp"},
+            {'label': 'Geracao do Mes', 'value': f"{_fmt(generation, 0)} kWh"},
+            {'label': 'Desempenho', 'value': f"{_fmt(perf, 1)} %"},
+        ], [1]))
+        el.append(Spacer(1, 3 * mm))
+
+        # KPI Row 2 - Financial
+        if fin.get('saved_brl', 0) > 0 or fin.get('billed_brl', 0) > 0:
+            el.append(self._kpi_row([
+                {'label': 'Economia do Mes', 'value': _brl(fin.get('saved_brl', 0))},
+                {'label': 'Faturado do Mes', 'value': _brl(fin.get('billed_brl', 0))},
+                {'label': 'Retorno Mensal', 'value': f"{_fmt(fin.get('roi_monthly', 0), 2)} %"},
+            ], [0]))
+            el.append(Spacer(1, 3 * mm))
+
+        # Daily Generation Chart
+        el.append(self._section("Geracao Diaria"))
+        el.append(Spacer(1, 2 * mm))
+        daily = data.get('daily_generation', [])
+        days = len(daily) if daily else 30
+        dp = prognosis / days if days > 0 else 0
+        el.append(self._chart(daily, dp))
+        el.append(Paragraph(
+            "<font color='#2D2D2D'>&#9632;</font> Geracao Real &nbsp;&nbsp;"
+            "<font color='#FFD600'>- - -</font> Prognostico Diario",
+            self.styles['Small']
         ))
-        elements.append(Spacer(1, 5*mm))
-        
-        # Prognosis Info
-        elements.append(self._create_section_header("Prognóstico"))
-        elements.append(Spacer(1, 2*mm))
-        
-        prognosis_data = [
-            ['Geração Acordada Mensal', f"{self._format_number(prognosis, 0)} kWh", 
-             'Geração Acordada Anual', f"{self._format_number(data.get('prognosis_annual_kwh', prognosis * 12), 0)} kWh"],
-        ]
-        prog_table = Table(prognosis_data, colWidths=[110, 90, 110, 90])
-        prog_table.setStyle(TableStyle([
+        el.append(Spacer(1, 4 * mm))
+
+        # Prognosis
+        el.append(self._section("Prognostico"))
+        el.append(Spacer(1, 2 * mm))
+        prog_data = [[
+            'Geracao Mensal Acordada', f"{_fmt(prognosis, 0)} kWh",
+            'Geracao Anual Acordada', f"{_fmt(data.get('prognosis_annual_kwh', prognosis * 12), 0)} kWh"
+        ]]
+        ptbl = Table(prog_data, colWidths=[110, 90, 110, 90])
+        ptbl.setStyle(TableStyle([
             ('FONTSIZE', (0, 0), (-1, -1), 9),
             ('TEXTCOLOR', (0, 0), (0, -1), GRAY_DARK),
             ('TEXTCOLOR', (2, 0), (2, -1), GRAY_DARK),
@@ -546,58 +324,64 @@ class SolarReportGenerator:
             ('TOPPADDING', (0, 0), (-1, -1), 3),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 3),
         ]))
-        elements.append(prog_table)
-        elements.append(Spacer(1, 5*mm))
-        
-        # Environmental Impact
+        el.append(ptbl)
+        el.append(Spacer(1, 4 * mm))
+
+        # Environmental
         env = data.get('environmental', {})
-        co2_tons = env.get('co2_avoided_kg', 0) / 1000
+        co2t = env.get('co2_avoided_kg', 0) / 1000
         trees = env.get('trees_saved', 0)
-        
-        elements.append(self._create_section_header("Impacto Ambiental (12 meses)"))
-        elements.append(Spacer(1, 2*mm))
-        
-        env_kpis = [
-            {'label': 'CO₂ Evitado', 'value': f"{self._format_number(co2_tons, 2)} t"},
-            {'label': 'Árvores Salvas', 'value': f"{int(trees)}"},
+        el.append(self._section("Impacto Ambiental (12 meses)"))
+        el.append(Spacer(1, 2 * mm))
+        el.append(self._kpi_row([
+            {'label': 'CO2 Evitado', 'value': f"{_fmt(co2t, 2)} t"},
+            {'label': 'Arvores Salvas', 'value': f"{int(trees)}"},
             {'label': 'Equivalente a', 'value': f"{int(trees * 12)} km rodados"},
-        ]
-        elements.append(self._create_kpi_row(env_kpis, [0, 1]))
-        elements.append(Spacer(1, 5*mm))
-        
-        # Historical Data
+        ], [0, 1]))
+        el.append(Spacer(1, 4 * mm))
+
+        # Historical
         historical = data.get('historical', [])
         if historical:
-            elements.append(self._create_section_header("Histórico de Meses Anteriores"))
-            elements.append(Spacer(1, 2*mm))
-            elements.append(self._create_historical_table(historical))
-        
-        # ==================== PAGE 2: Consumer Details ====================
-        
+            el.append(self._section("Historico de Meses Anteriores"))
+            el.append(Spacer(1, 2 * mm))
+            rows = []
+            for h in historical[:6]:
+                my = h.get('month', h.get('month_year', ''))
+                pg = f"{_fmt(h.get('prognosis_kwh', 0), 0)} kWh"
+                gn = f"{_fmt(h.get('generation_kwh', 0), 0)} kWh"
+                pv = h.get('prognosis_kwh', 0)
+                gv = h.get('generation_kwh', 0)
+                pf = f"{gv / pv * 100:.1f}%" if pv > 0 else "-"
+                rows.append([my, pg, gn, pf])
+            el.append(self._styled_table(
+                ['Mes/Ano', 'Prognostico', 'Geracao', 'Desempenho'],
+                rows, [70, 100, 100, 70]
+            ))
+
+        # ============ PAGE 2: Consumer Units Detail ============
         consumer_units = data.get('consumer_units', [])
         if consumer_units:
-            elements.append(PageBreak())
-            
-            # Page 2 Header
-            elements.extend(self._create_header_with_logo(
+            el.append(PageBreak())
+            el.extend(self._header(
                 data.get('plant_name', 'Usina FV'),
                 data.get('month_year', ''),
-                data.get('company_name', 'ON Soluções Energéticas'),
+                data.get('company_name', 'ON Solucoes Energeticas'),
                 data.get('logo_url')
             ))
-            
+
             # Energy Flow
-            elements.append(self._create_section_header("Fluxo de Energia"))
-            elements.append(Spacer(1, 2*mm))
-            
-            energy_data = [
-                ['Energia Injetada Ponta', f"{self._format_number(data.get('energy_injected_p', 0), 0)} kWh",
-                 'Energia Injetada Fora Ponta', f"{self._format_number(data.get('energy_injected_fp', 0), 0)} kWh"],
-                ['Consumo Total Ponta', f"{self._format_number(data.get('consumption_p', 0), 0)} kWh",
-                 'Consumo Total Fora Ponta', f"{self._format_number(data.get('consumption_fp', 0), 0)} kWh"],
-            ]
-            energy_table = Table(energy_data, colWidths=[120, 80, 140, 80])
-            energy_table.setStyle(TableStyle([
+            el.append(self._section("Fluxo de Energia"))
+            el.append(Spacer(1, 2 * mm))
+            ef_data = [[
+                'Injetada Ponta', f"{_fmt(data.get('energy_injected_p', 0), 0)} kWh",
+                'Injetada F.Ponta', f"{_fmt(data.get('energy_injected_fp', 0), 0)} kWh"
+            ], [
+                'Consumo Ponta', f"{_fmt(data.get('consumption_p', 0), 0)} kWh",
+                'Consumo F.Ponta', f"{_fmt(data.get('consumption_fp', 0), 0)} kWh"
+            ]]
+            ef_tbl = Table(ef_data, colWidths=[100, 80, 120, 80])
+            ef_tbl.setStyle(TableStyle([
                 ('FONTSIZE', (0, 0), (-1, -1), 9),
                 ('TEXTCOLOR', (0, 0), (0, -1), GRAY_DARK),
                 ('TEXTCOLOR', (2, 0), (2, -1), GRAY_DARK),
@@ -606,46 +390,58 @@ class SolarReportGenerator:
                 ('TOPPADDING', (0, 0), (-1, -1), 4),
                 ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
             ]))
-            elements.append(energy_table)
-            elements.append(Spacer(1, 5*mm))
-            
+            el.append(ef_tbl)
+            el.append(Spacer(1, 4 * mm))
+
             # Consumer Units Table
-            elements.append(self._create_section_header("Detalhamento por Unidade Consumidora"))
-            elements.append(Spacer(1, 2*mm))
-            elements.append(self._create_consumer_table(consumer_units))
-            
+            el.append(self._section("Detalhamento por Unidade Consumidora"))
+            el.append(Spacer(1, 2 * mm))
+
+            cu_headers = ['Contrato', 'Ciclo', 'Consumo\nRegistrado', 'Energia\nCompensada',
+                          'Energia\nFaturada', 'Cred.\nAnterior', 'Cred.\nAcumulado',
+                          'Faturado\n(R$)', 'Economizado\n(R$)']
+            cu_rows = []
+            for c in consumer_units:
+                cu_rows.append([
+                    c.get('name', '')[:16],
+                    c.get('cycle', ''),
+                    _fmt(c.get('consumption_registered', 0), 0),
+                    _fmt(c.get('energy_compensated', 0), 0),
+                    _fmt(c.get('energy_billed', 0), 0),
+                    _fmt(c.get('credit_previous', 0), 0),
+                    _fmt(c.get('credit_accumulated', 0), 0),
+                    _fmt(c.get('amount_billed', 0), 2),
+                    _fmt(c.get('amount_saved', 0), 2),
+                ])
+            el.append(self._styled_table(cu_headers, cu_rows,
+                                          [62, 40, 46, 46, 46, 42, 44, 48, 48]))
+
             # Totals
-            totals = {
-                'consumption': sum(c.get('consumption_registered', 0) for c in consumer_units),
-                'compensated': sum(c.get('energy_compensated', 0) for c in consumer_units),
-                'billed': sum(c.get('amount_billed', 0) for c in consumer_units),
-                'saved': sum(c.get('amount_saved', 0) for c in consumer_units),
-            }
-            
-            elements.append(Spacer(1, 3*mm))
-            totals_text = (
-                f"<b>TOTAIS:</b> Consumo: {self._format_number(totals['consumption'], 0)} kWh | "
-                f"Compensado: {self._format_number(totals['compensated'], 0)} kWh | "
-                f"Faturado: {self._format_currency(totals['billed'])} | "
-                f"<font color='#10B981'><b>Economizado: {self._format_currency(totals['saved'])}</b></font>"
-            )
-            elements.append(Paragraph(totals_text, self.styles['BodyCustom']))
-        
+            totals_cons = sum(c.get('consumption_registered', 0) for c in consumer_units)
+            totals_comp = sum(c.get('energy_compensated', 0) for c in consumer_units)
+            totals_bill = sum(c.get('amount_billed', 0) for c in consumer_units)
+            totals_save = sum(c.get('amount_saved', 0) for c in consumer_units)
+            el.append(Spacer(1, 2 * mm))
+            el.append(Paragraph(
+                f"<b>TOTAIS:</b> Consumo: {_fmt(totals_cons, 0)} kWh | "
+                f"Compensado: {_fmt(totals_comp, 0)} kWh | "
+                f"Faturado: {_brl(totals_bill)} | "
+                f"<font color='#10B981'><b>Economizado: {_brl(totals_save)}</b></font>",
+                self.styles['Body']
+            ))
+
         # Footer
-        elements.append(Spacer(1, 10*mm))
-        elements.append(HRFlowable(width="100%", thickness=1, color=YELLOW_PRIMARY))
-        elements.append(Spacer(1, 2*mm))
-        elements.append(self._create_footer())
-        
-        # Build PDF
-        doc.build(elements)
-        pdf_bytes = buffer.getvalue()
-        buffer.close()
-        
-        return pdf_bytes
+        el.append(Spacer(1, 8 * mm))
+        el.append(HRFlowable(width="100%", thickness=1, color=YELLOW))
+        el.append(Spacer(1, 2 * mm))
+        el.append(self._footer())
+
+        doc.build(el)
+        result = buf.getvalue()
+        buf.close()
+        return result
 
 
 def generate_plant_report(data: Dict[str, Any], report_type: str = 'complete') -> bytes:
-    """Generate a PDF report for a solar plant."""
-    generator = SolarReportGenerator()
-    return generator.generate_report(data)
+    gen = SolarReportGenerator()
+    return gen.generate_report(data)
