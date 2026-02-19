@@ -74,7 +74,7 @@ const InvoicesPage = () => {
           amount_saved_brl: pd.amount_saved_brl || 0,
           // FP
           energy_registered_fp_kwh: pd.energy_registered_fp_kwh || 0,
-          tariff_total_fp: tv.tariff_total_fp || 0,
+          tariff_total_fp: parseFloat((tv.tariff_total_fp || 0).toFixed(6)),
           energy_billed_fp_kwh: pd.energy_billed_fp_kwh || 0,
           energy_injected_fp_kwh: pd.energy_injected_fp_kwh || 0,
           energy_compensated_fp_kwh: pd.energy_compensated_fp_kwh || 0,
@@ -82,7 +82,7 @@ const InvoicesPage = () => {
           tariff_te_fp: tv.te_fp_unit || tv.te_fp || 0,
           // P
           energy_registered_p_kwh: pd.energy_registered_p_kwh || 0,
-          tariff_total_p: tv.tariff_total_p || 0,
+          tariff_total_p: parseFloat((tv.tariff_total_p || 0).toFixed(6)),
           energy_billed_p_kwh: pd.energy_billed_p_kwh || 0,
           energy_injected_p_kwh: pd.energy_injected_p_kwh || 0,
           energy_compensated_p_kwh: pd.energy_compensated_p_kwh || 0,
