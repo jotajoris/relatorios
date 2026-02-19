@@ -792,49 +792,66 @@ const PlantDetail = () => {
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                 {Array.from({ length: 12 }, (_, i) => {
                   const month = i + 1;
-                  const report = reports?.find(r => r.month === month && r.year === selectedYear);
+                  const summary = monthlySummary.find(s => s.month === month) || {};
                   const monthNames = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+                  const hasData = summary.generation_kwh > 0;
+                  const perf = summary.performance_percent || 0;
                   
                   return (
                     <Card 
                       key={month} 
                       className={`transition-all hover:shadow-md ${
-                        report ? 'border-[#FFD600]' : 'border-neutral-200'
+                        hasData ? 'border-[#FFD600]' : 'border-neutral-200'
                       }`}
                     >
-                      <CardContent className="p-4 text-center">
-                        <div className="flex items-center justify-center gap-2 mb-2">
-                          <FileText className={`h-4 w-4 ${report ? 'text-[#FFD600]' : 'text-neutral-400'}`} />
-                          <span className="text-sm font-medium">{monthNames[i]}/{selectedYear}</span>
+                      <CardContent className="p-4">
+                        <div className="flex items-center gap-2 mb-3">
+                          <FileText className={`h-4 w-4 ${hasData ? 'text-[#FFD600]' : 'text-neutral-400'}`} />
+                          <span className="text-sm font-semibold">{monthNames[i]}/{selectedYear}</span>
                         </div>
-                        <p className="text-xs text-neutral-500">Desempenho</p>
-                        <p className={`text-lg font-bold ${
-                          report?.performance_percentage >= 100 ? 'text-green-600' : 
-                          report?.performance_percentage >= 80 ? 'text-yellow-600' : 'text-red-600'
-                        }`}>
-                          {report ? `${report.performance_percentage.toFixed(2)}%` : '-'}
-                        </p>
+
+                        <div className="space-y-2 mb-3">
+                          <div>
+                            <p className="text-[10px] text-neutral-400 uppercase">Geracao</p>
+                            <p className="text-sm font-bold text-[#1A1A1A]">
+                              {hasData ? `${(summary.generation_kwh / 1000).toFixed(2)} MWh` : '-'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-neutral-400 uppercase">Prognostico</p>
+                            <p className="text-sm text-neutral-600">
+                              {summary.prognosis_kwh ? `${(summary.prognosis_kwh / 1000).toFixed(2)} MWh` : '-'}
+                            </p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-neutral-400 uppercase">Desempenho</p>
+                            <p className={`text-lg font-bold ${
+                              !hasData ? 'text-neutral-300' :
+                              perf >= 100 ? 'text-emerald-600' : 
+                              perf >= 80 ? 'text-amber-500' : 'text-red-500'
+                            }`}>
+                              {hasData ? `${perf.toFixed(1)}%` : '-'}
+                            </p>
+                          </div>
+                        </div>
                         
-                        {/* Download button */}
-                        <div className="mt-3">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="w-full text-xs h-8"
-                            onClick={() => handleDownloadPdf(month)}
-                            disabled={downloadingPdf === month}
-                            data-testid={`download-report-${month}`}
-                          >
-                            {downloadingPdf === month ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                            ) : (
-                              <>
-                                <Download className="h-3 w-3 mr-1" />
-                                Baixar PDF
-                              </>
-                            )}
-                          </Button>
-                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="w-full text-xs h-8"
+                          onClick={() => handleDownloadPdf(month)}
+                          disabled={downloadingPdf === month}
+                          data-testid={`download-report-${month}`}
+                        >
+                          {downloadingPdf === month ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <>
+                              <Download className="h-3 w-3 mr-1" />
+                              Baixar PDF
+                            </>
+                          )}
+                        </Button>
                       </CardContent>
                     </Card>
                   );
