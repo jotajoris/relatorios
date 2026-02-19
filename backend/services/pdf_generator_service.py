@@ -67,12 +67,31 @@ class SolarReportGenerator:
         parts = d.get('month_year','').split('-')
         period = f"{MESES.get(parts[1],parts[1])} {parts[0]}" if len(parts)==2 else d.get('month_year','')
         logo = _img(LOGO, 48, 48)
+        # Client logo
+        cl_logo = None
+        lu = d.get('logo_url')
+        if lu:
+            lp = f"/tmp/logos/{lu.split('/')[-1]}" if lu.startswith('/api/') else lu
+            cl_logo = _img(lp, 40, 40)
+
         title = []
         title.append(Paragraph("ON SOLUCOES ENERGETICAS", _ps('HB',11,'Helvetica-Bold',Y,TA_LEFT)))
         title.append(Paragraph(f"{d.get('plant_name','')} - {period}", _ps('HP',17,'Helvetica-Bold',W,TA_LEFT)))
         title.append(Paragraph(f"{d.get('company_name','')} | {_n(d.get('capacity_kwp',0),2)} kWp", _ps('HS',9,'Helvetica',colors.HexColor('#BBBBBB'),TA_LEFT)))
-        cells = [logo, title] if logo else [title]
-        ws = [56, CW-60] if logo else [CW]
+
+        cells = []
+        ws = []
+        if logo:
+            cells.append(logo); ws.append(56)
+        cells.append(title)
+        remaining = CW - sum(ws) - 4
+        if cl_logo:
+            ws.append(remaining - 48)
+            cells.append(cl_logo)
+            ws.append(48)
+        else:
+            ws.append(remaining)
+
         t = Table([cells], colWidths=ws)
         t.setStyle(TableStyle([('VALIGN',(0,0),(-1,-1),'MIDDLE'),('LEFTPADDING',(0,0),(-1,-1),8),
             ('BACKGROUND',(0,0),(-1,-1),BK),('TOPPADDING',(0,0),(-1,-1),8),('BOTTOMPADDING',(0,0),(-1,-1),8)]))
