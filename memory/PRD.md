@@ -72,6 +72,8 @@ Aplicação web full-stack para gerenciamento e elaboração de relatórios de u
 
 - [x] Parser Grupo B corrigido: UC 7 dígitos, Economizado = soma INJ OUC, Tarifa TUSD do CONSUMO (19/02/2026)
 
+- [x] Relatório PDF unificado reescrito: Dashboard + Tabela de UCs (19/02/2026)
+
 ## P1 - Upcoming
 - [ ] Frontend para gerenciamento do Sistema de Créditos (distribuição entre UCs)
 - [ ] Página de Gerenciamento de Clientes (CRUD + upload de logo)
