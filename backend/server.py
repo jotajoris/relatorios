@@ -2065,65 +2065,66 @@ async def download_pdf_report(
         'environmental': {
             'co2_avoided_kg': co2_avoided,
             'trees_saved': trees_saved
-        }
+        },
+        # Include logo URL (plant logo or client logo)
+        'logo_url': plant.get('logo_url') or (client.get('logo_url') if client else None)
     }
     
-    # For complete report, add financial and consumer data
-    if report_type == 'complete':
-        # Get consumer units
-        units = await db.consumer_units.find({'plant_id': plant_id, 'is_active': True}, {'_id': 0}).to_list(100)
-        unit_ids = [u['id'] for u in units]
-        
-        # Get invoices
-        invoices = await db.invoices.find({
-            'consumer_unit_id': {'$in': unit_ids},
-            'billing_cycle_end': {'$gte': start_date, '$lte': end_date}
-        }, {'_id': 0}).to_list(1000)
-        
-        total_saved = sum(i.get('amount_saved_brl', 0) for i in invoices)
-        total_billed = sum(i.get('amount_total_brl', 0) for i in invoices)
-        
-        # Get all-time savings for ROI
-        all_invoices = await db.invoices.find({'plant_id': plant_id}, {'_id': 0, 'amount_saved_brl': 1}).to_list(10000)
-        total_savings_all_time = sum(i.get('amount_saved_brl', 0) for i in all_invoices)
-        
-        total_investment = plant.get('total_investment', 0)
-        roi_monthly = (total_saved / total_investment * 100) if total_investment > 0 else 0
-        roi_total = (total_savings_all_time / total_investment * 100) if total_investment > 0 else 0
-        
-        report_data['financial'] = {
-            'saved_brl': total_saved,
-            'billed_brl': total_billed,
-            'roi_monthly': roi_monthly,
-            'roi_total': roi_total,
-            'total_savings': total_savings_all_time
-        }
-        
-        # Energy flow
-        report_data['energy_injected_p'] = sum(i.get('energy_injected_p_kwh', 0) for i in invoices)
-        report_data['energy_injected_fp'] = sum(i.get('energy_injected_fp_kwh', 0) for i in invoices)
-        report_data['consumption_p'] = sum(i.get('energy_registered_p_kwh', 0) for i in invoices)
-        report_data['consumption_fp'] = sum(i.get('energy_registered_fp_kwh', 0) for i in invoices)
-        
-        # Consumer units with invoice data
-        consumer_units_data = []
-        for inv in invoices:
-            unit = next((u for u in units if u['id'] == inv.get('consumer_unit_id')), None)
-            if unit:
-                consumer_units_data.append({
-                    'name': unit.get('holder_name', unit.get('address', '')),
-                    'uc_number': unit.get('uc_number', ''),
-                    'cycle': f"{inv.get('billing_cycle_start', '')[:5]} a {inv.get('billing_cycle_end', '')[:5]}",
-                    'consumption_registered': inv.get('energy_registered_fp_kwh', 0) + inv.get('energy_registered_p_kwh', 0),
-                    'energy_compensated': inv.get('energy_compensated_fp_kwh', 0) + inv.get('energy_compensated_p_kwh', 0),
-                    'energy_billed': inv.get('energy_billed_fp_kwh', 0),
-                    'credit_previous': inv.get('credits_balance_fp_kwh', 0),
-                    'credit_accumulated': inv.get('credits_accumulated_fp_kwh', 0),
-                    'amount_billed': inv.get('amount_total_brl', 0),
-                    'amount_saved': inv.get('amount_saved_brl', 0)
-                })
-        
-        report_data['consumer_units'] = consumer_units_data
+    # Always include financial and consumer data (unified report)
+    # Get consumer units
+    units = await db.consumer_units.find({'plant_id': plant_id, 'is_active': True}, {'_id': 0}).to_list(100)
+    unit_ids = [u['id'] for u in units]
+    
+    # Get invoices for the month
+    invoices = await db.invoices.find({
+        'consumer_unit_id': {'$in': unit_ids},
+        'billing_cycle_end': {'$gte': start_date, '$lte': end_date}
+    }, {'_id': 0}).to_list(1000)
+    
+    total_saved = sum(i.get('amount_saved_brl', 0) for i in invoices)
+    total_billed = sum(i.get('amount_total_brl', 0) for i in invoices)
+    
+    # Get all-time savings for ROI
+    all_invoices = await db.invoices.find({'plant_id': plant_id}, {'_id': 0, 'amount_saved_brl': 1}).to_list(10000)
+    total_savings_all_time = sum(i.get('amount_saved_brl', 0) for i in all_invoices)
+    
+    total_investment = plant.get('total_investment', 0)
+    roi_monthly = (total_saved / total_investment * 100) if total_investment > 0 else 0
+    roi_total = (total_savings_all_time / total_investment * 100) if total_investment > 0 else 0
+    
+    report_data['financial'] = {
+        'saved_brl': total_saved,
+        'billed_brl': total_billed,
+        'roi_monthly': roi_monthly,
+        'roi_total': roi_total,
+        'total_savings': total_savings_all_time
+    }
+    
+    # Energy flow from invoices
+    report_data['energy_injected_p'] = sum(i.get('energy_injected_p_kwh', 0) for i in invoices)
+    report_data['energy_injected_fp'] = sum(i.get('energy_injected_fp_kwh', 0) for i in invoices)
+    report_data['consumption_p'] = sum(i.get('energy_registered_p_kwh', 0) for i in invoices)
+    report_data['consumption_fp'] = sum(i.get('energy_registered_fp_kwh', 0) for i in invoices)
+    
+    # Consumer units with invoice data
+    consumer_units_data = []
+    for inv in invoices:
+        unit = next((u for u in units if u['id'] == inv.get('consumer_unit_id')), None)
+        if unit:
+            consumer_units_data.append({
+                'name': unit.get('holder_name', unit.get('address', '')),
+                'uc_number': unit.get('uc_number', ''),
+                'cycle': f"{inv.get('billing_cycle_start', '')[:5]} a {inv.get('billing_cycle_end', '')[:5]}",
+                'consumption_registered': inv.get('energy_registered_fp_kwh', 0) + inv.get('energy_registered_p_kwh', 0),
+                'energy_compensated': inv.get('energy_compensated_fp_kwh', 0) + inv.get('energy_compensated_p_kwh', 0),
+                'energy_billed': inv.get('energy_billed_fp_kwh', 0),
+                'credit_previous': inv.get('credits_balance_fp_kwh', 0),
+                'credit_accumulated': inv.get('credits_accumulated_fp_kwh', 0),
+                'amount_billed': inv.get('amount_total_brl', 0),
+                'amount_saved': inv.get('amount_saved_brl', 0)
+            })
+    
+    report_data['consumer_units'] = consumer_units_data
     
     # Generate PDF
     try:
