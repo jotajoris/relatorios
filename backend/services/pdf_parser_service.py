@@ -488,6 +488,23 @@ def _extract_scee_credits(text: str) -> Dict[str, Any]:
     return data
 
 
+def _extract_billing_deductions(text: str) -> float:
+    """
+    Calculate 'Economizado' = sum of all ENERGIA INJETADA billing line R$ amounts.
+    These are negative values that represent deductions from the invoice total.
+    """
+    total = 0.0
+    # Find all negative R$ amounts on INJETADA/INJ lines from the NF3e section
+    # Pattern: ... -21,39 ... (the Valor column, which is the 4th number after kWh quantity and unit price)
+    inj_amounts = re.findall(
+        r'(?:ENERGIA\s+INJETADA|ENERGIA\s+INJ\.).*?kWh\s+-?[\d.,]+\s+[\d.,]+\s+(-[\d.,]+)',
+        text
+    )
+    for val in inj_amounts:
+        total += abs(_parse_br_number(val))
+    return round(total, 2)
+
+
 def _calculate_savings(data: Dict[str, Any]) -> float:
     """Calculate estimated savings from solar compensation."""
     comp_p = data.get("energy_compensated_p_kwh", 0)
@@ -495,19 +512,17 @@ def _calculate_savings(data: Dict[str, Any]) -> float:
     tariffs = data.get("tariff_values", {})
 
     savings = 0.0
-    # Peak savings
     te_p = tariffs.get("te_ponta", 0)
     tusd_p = tariffs.get("tusd_ponta", 0)
     if te_p > 0:
         savings += comp_p * (te_p + tusd_p)
 
-    # Off-peak savings
     te_fp = tariffs.get("te_fp", 0)
     tusd_fp = tariffs.get("tusd_fp", 0)
     if te_fp > 0:
         savings += comp_fp * (te_fp + tusd_fp)
     elif comp_fp > 0:
-        savings += comp_fp * 0.50  # fallback estimate
+        savings += comp_fp * 0.50
 
     return round(savings, 2)
 
