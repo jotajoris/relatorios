@@ -895,9 +895,62 @@ const PlantDetail = () => {
               </div>
             </CardContent>
           </Card>
-        </TabsContent>
 
-        {/* Tab 3: Sistema de Crédito */}
+          {/* UC Invoice Status Table */}
+          {ucInvoiceStatus.length > 0 && (
+            <Card className="mt-4">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Status de Faturas por UC - {selectedYear}</CardTitle>
+                <p className="text-xs text-neutral-500">Clique no relogio para adicionar a fatura que esta faltando</p>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-[#1A1A1A] text-[#FFD600]">
+                        <th className="text-left py-2 px-2 font-medium rounded-tl-md">UC</th>
+                        <th className="text-left py-2 px-2 font-medium">Tipo</th>
+                        {['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'].map((m,i) => (
+                          <th key={i} className={`text-center py-2 px-1 font-medium ${i===11?'rounded-tr-md':''}`}>{m}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ucInvoiceStatus.map((uc, idx) => (
+                        <tr key={uc.id} className={idx % 2 === 0 ? 'bg-white' : 'bg-neutral-50'}>
+                          <td className="py-1.5 px-2 font-medium text-[#1A1A1A]">{uc.uc_number}</td>
+                          <td className="py-1.5 px-2">
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${uc.is_generator ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`}>
+                              {uc.is_generator ? 'GER' : 'BEN'}
+                            </span>
+                          </td>
+                          {Array.from({length:12}, (_,m) => {
+                            const has = uc.invoiceMonths?.[m+1];
+                            return (
+                              <td key={m} className="text-center py-1.5 px-1">
+                                {has ? (
+                                  <CheckCircle className="h-4 w-4 text-green-500 mx-auto" />
+                                ) : (
+                                  <button
+                                    onClick={() => navigate('/faturas')}
+                                    className="mx-auto block hover:scale-110 transition-transform"
+                                    title={`Adicionar fatura ${['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][m]}/${selectedYear}`}
+                                  >
+                                    <Clock className="h-4 w-4 text-amber-400" />
+                                  </button>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
         <TabsContent value="credits" className="mt-6">
           <Card>
             <CardHeader>
