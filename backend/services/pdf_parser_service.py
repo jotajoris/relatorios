@@ -139,11 +139,12 @@ class CopelInvoiceParser:
         # Clean text for better matching
         text_clean = re.sub(r'\s+', ' ', text)
         
-        # Pattern 1: Explicit UC label
+        # Pattern 1: UC in address line (very common in COPEL invoices)
+        # Format: "Endereço: ... - XXXXXXXXX" or after "Rod Br 116"
         patterns = [
-            r'(?:UNIDADE\s*CONSUMIDORA|UC)\s*[:\s]*(\d{9})',
-            r'(?:UC\s+UC\s*)?(\d{9})\s+NF',  # Pattern in COPEL invoices
-            r'(\d{9})\s+(?:Nota\s+Fiscal|NOTA\s+FISCAL)',
+            r'Endereço[:\s]*[^-]*-[^-]*-\s*(\d{9})',  # UC number at end of address
+            r'(?:UC\s+UC\s*)?(\d{9})\s+(?:NF|Nota|NOTA)',  # Before "NF"
+            r'(?:UNIDADE\s*CONSUMIDORA|UC)\s*[:\s]*(\d{9})',  # Explicit UC label
         ]
         
         for pattern in patterns:
@@ -151,15 +152,18 @@ class CopelInvoiceParser:
             if match:
                 return match.group(1)
         
-        # Pattern 2: Look for 9-digit numbers that appear to be UC numbers
-        # Usually near the top of the document
-        first_500 = text[:500]
-        numbers = re.findall(r'\b(\d{9})\b', first_500)
-        if numbers:
-            return numbers[0]
+        # Pattern 2: Look for 9-digit numbers in the first 800 chars
+        # Skip invoice numbers (usually start with 21XXXXXXX for NF)
+        first_section = text[:800]
+        numbers = re.findall(r'\b(\d{9})\b', first_section)
         
-        # Pattern 3: Any 9-digit number in the document
-        numbers = re.findall(r'\b(\d{9})\b', text)
+        # Filter out NF numbers (series 210, etc)
+        valid_ucs = [n for n in numbers if not n.startswith('210') and not n.startswith('310')]
+        
+        if valid_ucs:
+            return valid_ucs[0]
+        
+        # Fallback: any 9-digit number
         if numbers:
             return numbers[0]
         
