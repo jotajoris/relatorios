@@ -2376,9 +2376,20 @@ async def download_pdf_report(
     total_saved = sum(i.get('amount_saved_brl', 0) for i in invoices)
     total_billed = sum(i.get('amount_total_brl', 0) for i in invoices)
     
-    # Get all-time savings for ROI
-    all_invoices = await db.invoices.find({'plant_id': plant_id}, {'_id': 0, 'amount_saved_brl': 1}).to_list(10000)
-    total_savings_all_time = sum(i.get('amount_saved_brl', 0) for i in all_invoices)
+    # Get all-time savings for ROI - use expanded UC matching (same as monthly)
+    all_invoices = await db.invoices.find({
+        '$or': [
+            {'consumer_unit_id': {'$in': all_uc_ids}},
+            {'plant_id': plant_id},
+        ]
+    }, {'_id': 0, 'amount_saved_brl': 1, 'id': 1}).to_list(10000)
+    seen_all = set()
+    total_savings_all_time = 0
+    for inv in all_invoices:
+        iid = inv.get('id')
+        if iid not in seen_all:
+            seen_all.add(iid)
+            total_savings_all_time += inv.get('amount_saved_brl', 0) or 0
     
     total_investment = plant.get('total_investment', 0)
     roi_monthly = (total_saved / total_investment * 100) if total_investment > 0 else 0
