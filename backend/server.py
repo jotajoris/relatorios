@@ -2252,11 +2252,19 @@ async def download_pdf_report(
     units = await db.consumer_units.find({'plant_id': plant_id, 'is_active': True}, {'_id': 0}).to_list(100)
     unit_ids = [u['id'] for u in units]
     
-    # Get invoices for the month
+    # Get invoices for the month - match by reference_month (MM/YYYY format)
+    ref_month = f"{mon:02d}/{year}"
     invoices = await db.invoices.find({
         'consumer_unit_id': {'$in': unit_ids},
-        'billing_cycle_end': {'$gte': start_date, '$lte': end_date}
+        'reference_month': ref_month
     }, {'_id': 0}).to_list(1000)
+    
+    # Fallback: also try matching by billing_cycle_end date range
+    if not invoices:
+        invoices = await db.invoices.find({
+            'consumer_unit_id': {'$in': unit_ids},
+            'billing_cycle_end': {'$gte': start_date, '$lte': end_date}
+        }, {'_id': 0}).to_list(1000)
     
     total_saved = sum(i.get('amount_saved_brl', 0) for i in invoices)
     total_billed = sum(i.get('amount_total_brl', 0) for i in invoices)
