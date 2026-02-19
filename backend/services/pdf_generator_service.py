@@ -154,14 +154,13 @@ class SolarReportGenerator:
         return [tbl, Spacer(1, 5 * mm)]
 
     def _section(self, title):
-        accent = Drawing(4, 14)
-        accent.add(Rect(0, 0, 4, 14, fillColor=YELLOW, strokeColor=None))
-        tbl = Table([[accent, Paragraph(title, self.styles['SectTitle'])]],
-                    colWidths=[8, CONTENT_W - 12])
+        # Use just a paragraph with yellow line style (no Drawing in table)
+        tbl = Table([[Paragraph(title, self.styles['SectTitle'])]],
+                    colWidths=[CONTENT_W])
         tbl.setStyle(TableStyle([
             ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-            ('LEFTPADDING', (0, 0), (0, 0), 0),
-            ('LEFTPADDING', (1, 0), (1, 0), 6),
+            ('LEFTPADDING', (0, 0), (-1, -1), 10),
+            ('LINEBEFORE', (0, 0), (0, -1), 4, YELLOW),
         ]))
         return tbl
 
