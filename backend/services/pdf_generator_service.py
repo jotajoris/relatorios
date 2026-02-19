@@ -266,20 +266,25 @@ class SolarReportGenerator:
             # Yellow bottom bar
             canvas.setFillColor(Y)
             canvas.rect(0, 0, PW, 14*mm, fill=1, stroke=0)
-            # Footer text
-            canvas.setFont('Helvetica', 6)
-            canvas.setFillColor(BK)
-            canvas.drawCentredString(PW/2, 8*mm, footer_text)
-            # Page number
+            # Footer text with clickable links
             canvas.setFont('Helvetica-Bold', 7)
             canvas.setFillColor(BK)
-            page_num = f"Pagina {doc_obj.page}"
-            canvas.drawRightString(PW - MG, 8*mm, page_num)
-            # ON logo small in footer
-            logo = LOGO
-            if os.path.exists(logo):
+            canvas.drawString(MG + 22, 8*mm, "ON Solucoes Energeticas")
+            canvas.setFont('Helvetica', 7)
+            canvas.drawString(MG + 22, 4*mm, "onsolucoesenergeticas.com.br | @on.solucoes")
+            # Clickable link areas
+            canvas.linkURL("https://onsolucoesenergeticas.com.br",
+                          (MG + 22, 3*mm, MG + 160, 6*mm))
+            canvas.linkURL("https://instagram.com/on.solucoes",
+                          (MG + 165, 3*mm, MG + 250, 6*mm))
+            # Page number
+            canvas.setFont('Helvetica-Bold', 7)
+            page_text = f"Pagina {doc_obj.page}"
+            canvas.drawRightString(PW - MG, 6*mm, page_text)
+            # ON logo in footer
+            if os.path.exists(LOGO):
                 try:
-                    canvas.drawImage(logo, MG, 4*mm, width=18, height=18, preserveAspectRatio=True, mask='auto')
+                    canvas.drawImage(LOGO, MG, 3*mm, width=18, height=18, preserveAspectRatio=True, mask='auto')
                 except: pass
             canvas.restoreState()
 
