@@ -1464,30 +1464,12 @@ const PlantDetail = () => {
           </DialogHeader>
           
           <div className="space-y-4 py-4">
-            {/* Select UC */}
-            <div className="space-y-2">
-              <Label>Selecione a Unidade Consumidora *</Label>
-              <Select
-                value={selectedUcForInvoice}
-                onValueChange={setSelectedUcForInvoice}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Selecione uma UC" />
-                </SelectTrigger>
-                <SelectContent>
-                  {[...(data?.generators || []), ...(data?.beneficiaries || [])].map((uc) => (
-                    <SelectItem key={uc.id} value={uc.id}>
-                      {uc.uc_number} - {uc.address || uc.holder_name || 'Sem endereço'}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Upload PDF */}
-            {selectedUcForInvoice && !parsedInvoice && (
-              <div className="space-y-2">
-                <Label>Arquivo PDF da Fatura</Label>
+            {/* Direct PDF Upload - no UC selection needed */}
+            {!parsedInvoice && (
+              <div className="space-y-3">
+                <p className="text-sm text-neutral-500">
+                  O sistema identificará automaticamente a UC pela fatura.
+                </p>
                 <input
                   ref={invoiceInputRef}
                   type="file"
@@ -1497,20 +1479,20 @@ const PlantDetail = () => {
                 />
                 <Button 
                   variant="outline" 
-                  className="w-full"
+                  className="w-full h-24 border-dashed border-2"
                   onClick={() => invoiceInputRef.current?.click()}
                   disabled={uploadingInvoice}
                 >
                   {uploadingInvoice ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Processando...
-                    </>
+                    <div className="flex flex-col items-center gap-2">
+                      <Loader2 className="h-6 w-6 animate-spin text-[#FFD600]" />
+                      <span className="text-sm">Processando fatura...</span>
+                    </div>
                   ) : (
-                    <>
-                      <Upload className="h-4 w-4 mr-2" />
-                      Selecionar PDF
-                    </>
+                    <div className="flex flex-col items-center gap-2">
+                      <Upload className="h-6 w-6 text-neutral-400" />
+                      <span className="text-sm">Clique para selecionar o PDF</span>
+                    </div>
                   )}
                 </Button>
               </div>
