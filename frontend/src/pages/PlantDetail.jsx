@@ -163,11 +163,8 @@ const PlantDetail = () => {
 
   const loadChartData = async () => {
     try {
-      const endDate = new Date().toISOString().split('T')[0];
-      const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-      
       const response = await api.get(`/dashboard/generation-chart/${plantId}`, {
-        params: { start_date: startDate, end_date: endDate }
+        params: { month: chartMonth }
       });
       setChartData(response.data);
     } catch (error) {
@@ -181,6 +178,28 @@ const PlantDetail = () => {
       setMonthlySummary(res.data);
     } catch (error) {
       console.error('Error loading monthly summary:', error);
+    }
+  };
+
+  const loadUcInvoiceStatus = async () => {
+    try {
+      const unitsRes = await api.get(`/consumer-units?plant_id=${plantId}`);
+      const invoicesRes = await api.get(`/invoices?plant_id=${plantId}`);
+      const units = unitsRes.data || [];
+      const invoices = invoicesRes.data || [];
+      // Build status for each UC and each month of selectedYear
+      const statuses = units.map(u => {
+        const months = {};
+        for (let m = 1; m <= 12; m++) {
+          const ref = `${String(m).padStart(2,'0')}/${selectedYear}`;
+          const hasInvoice = invoices.some(inv => inv.consumer_unit_id === u.id && inv.reference_month === ref);
+          months[m] = hasInvoice;
+        }
+        return { ...u, invoiceMonths: months };
+      });
+      setUcInvoiceStatus(statuses);
+    } catch (error) {
+      console.error('Error loading UC invoice status:', error);
     }
   };
 
