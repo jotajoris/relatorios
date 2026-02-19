@@ -908,6 +908,143 @@ import shutil
 UPLOAD_DIR = "/tmp/invoice_uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+@api_router.post("/invoices/upload-pdf-auto")
+async def upload_invoice_pdf_auto(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Upload a COPEL invoice PDF and auto-detect the consumer unit by UC number.
+    The system will automatically find the matching UC.
+    """
+    # Validate file type
+    if not file.filename.lower().endswith('.pdf'):
+        raise HTTPException(status_code=400, detail="Apenas arquivos PDF são aceitos")
+    
+    # Save file temporarily
+    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+    filename = f"fatura_auto_{timestamp}.pdf"
+    filepath = os.path.join(UPLOAD_DIR, filename)
+    
+    try:
+        with open(filepath, 'wb') as buffer:
+            shutil.copyfileobj(file.file, buffer)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro ao salvar arquivo: {str(e)}")
+    
+    # Parse PDF
+    try:
+        parsed_data = parse_copel_invoice(filepath)
+    except Exception as e:
+        logger.error(f"Error parsing PDF: {str(e)}")
+        return {
+            "success": False,
+            "error": f"Erro ao processar PDF: {str(e)}",
+            "filepath": filepath
+        }
+    
+    if not parsed_data.get('success'):
+        return {
+            "success": False,
+            "error": parsed_data.get('error', 'Erro desconhecido'),
+            "filepath": filepath
+        }
+    
+    # Extract UC number from PDF
+    uc_number = parsed_data.get('uc_number')
+    if not uc_number:
+        return {
+            "success": False,
+            "error": "Não foi possível identificar o número da UC na fatura. Verifique se o PDF é válido.",
+            "filepath": filepath,
+            "parsed_data": parsed_data
+        }
+    
+    # Find the consumer unit by UC number
+    unit = await db.consumer_units.find_one({'uc_number': uc_number, 'is_active': True}, {'_id': 0})
+    
+    if not unit:
+        # UC not found - return data so user can add it
+        return {
+            "success": True,
+            "uc_found": False,
+            "message": f"UC {uc_number} não encontrada no sistema. Cadastre-a primeiro ou verifique o número.",
+            "filepath": filepath,
+            "uc_number": uc_number,
+            "parsed_data": {
+                "uc_number": uc_number,
+                "holder_name": parsed_data.get('holder_name'),
+                "holder_document": parsed_data.get('holder_document'),
+                "address": parsed_data.get('address'),
+                "city": parsed_data.get('city'),
+                "classification": parsed_data.get('classification'),
+                "tariff_group": parsed_data.get('tariff_group'),
+                "is_generator": parsed_data.get('is_generator', False),
+                "reference_month": parsed_data.get('reference_month'),
+                "amount_total_brl": parsed_data.get('amount_total_brl', 0),
+            }
+        }
+    
+    # Get plant info
+    plant = await db.plants.find_one({'id': unit.get('plant_id'), 'is_active': True}, {'_id': 0})
+    
+    # Return full parsed data
+    return {
+        "success": True,
+        "uc_found": True,
+        "message": f"Fatura da UC {uc_number} processada com sucesso!",
+        "filepath": filepath,
+        "consumer_unit": {
+            "id": unit.get('id'),
+            "uc_number": unit.get('uc_number'),
+            "holder_name": unit.get('holder_name'),
+            "address": unit.get('address'),
+            "plant_id": unit.get('plant_id'),
+            "plant_name": plant.get('name') if plant else None
+        },
+        "parsed_data": {
+            "consumer_unit_id": unit.get('id'),
+            "plant_id": unit.get('plant_id'),
+            "uc_number": uc_number,
+            "holder_name": parsed_data.get('holder_name'),
+            "holder_document": parsed_data.get('holder_document'),
+            "classification": parsed_data.get('classification'),
+            "tariff_group": parsed_data.get('tariff_group'),
+            "is_generator": parsed_data.get('is_generator', False),
+            "tariff_flag": parsed_data.get('tariff_flag'),
+            "reference_month": parsed_data.get('reference_month'),
+            "billing_cycle_start": parsed_data.get('billing_cycle_start'),
+            "billing_cycle_end": parsed_data.get('billing_cycle_end'),
+            "due_date": parsed_data.get('due_date'),
+            "amount_total_brl": parsed_data.get('amount_total_brl', 0),
+            "amount_saved_brl": parsed_data.get('amount_saved_brl', 0),
+            "public_lighting_brl": parsed_data.get('public_lighting_brl', 0),
+            "icms_brl": parsed_data.get('icms_brl', 0),
+            "pis_brl": parsed_data.get('pis_brl', 0),
+            "cofins_brl": parsed_data.get('cofins_brl', 0),
+            # Energy data - Fora Ponta
+            "energy_registered_fp_kwh": parsed_data.get('energy_registered_fp_kwh', 0),
+            "energy_injected_fp_kwh": parsed_data.get('energy_injected_fp_kwh', 0),
+            "energy_compensated_fp_kwh": parsed_data.get('energy_compensated_fp_kwh', 0),
+            "energy_billed_fp_kwh": parsed_data.get('energy_billed_fp_kwh', 0),
+            "credits_balance_fp_kwh": parsed_data.get('credits_balance_fp_kwh', 0),
+            "credits_accumulated_fp_kwh": parsed_data.get('credits_accumulated_fp_kwh', 0),
+            # Energy data - Ponta (Group A only)
+            "energy_registered_p_kwh": parsed_data.get('energy_registered_p_kwh', 0),
+            "energy_injected_p_kwh": parsed_data.get('energy_injected_p_kwh', 0),
+            "energy_compensated_p_kwh": parsed_data.get('energy_compensated_p_kwh', 0),
+            "energy_billed_p_kwh": parsed_data.get('energy_billed_p_kwh', 0),
+            "credits_balance_p_kwh": parsed_data.get('credits_balance_p_kwh', 0),
+            "credits_accumulated_p_kwh": parsed_data.get('credits_accumulated_p_kwh', 0),
+            # Demand data (Group A only)
+            "demand_contracted_kw": parsed_data.get('demand_contracted_kw', 0),
+            "demand_measured_kw": parsed_data.get('demand_measured_kw', 0),
+            "demand_injected_kw": parsed_data.get('demand_injected_kw', 0),
+            # Tariffs
+            "tariff_values": parsed_data.get('tariff_values', {}),
+        }
+    }
+
 @api_router.post("/invoices/upload-pdf/{consumer_unit_id}")
 async def upload_invoice_pdf(
     consumer_unit_id: str,
