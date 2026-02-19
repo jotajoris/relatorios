@@ -417,11 +417,11 @@ class SolarReportGenerator:
             el.append(self._styled_table(cu_headers, cu_rows,
                                           [62, 40, 46, 46, 46, 42, 44, 48, 48]))
 
-            # Totals
-            totals_cons = sum(c.get('consumption_registered', 0) for c in consumer_units)
-            totals_comp = sum(c.get('energy_compensated', 0) for c in consumer_units)
-            totals_bill = sum(c.get('amount_billed', 0) for c in consumer_units)
-            totals_save = sum(c.get('amount_saved', 0) for c in consumer_units)
+            # Totals - handle None values from get()
+            totals_cons = sum(c.get('consumption_registered') or 0 for c in consumer_units)
+            totals_comp = sum(c.get('energy_compensated') or 0 for c in consumer_units)
+            totals_bill = sum(c.get('amount_billed') or 0 for c in consumer_units)
+            totals_save = sum(c.get('amount_saved') or 0 for c in consumer_units)
             el.append(Spacer(1, 2 * mm))
             el.append(Paragraph(
                 f"<b>TOTAIS:</b> Consumo: {_fmt(totals_cons, 0)} kWh | "
