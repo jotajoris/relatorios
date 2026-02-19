@@ -2303,17 +2303,25 @@ async def download_pdf_report(
     report_data['consumption_p'] = sum(i.get('energy_registered_p_kwh', 0) for i in invoices)
     report_data['consumption_fp'] = sum(i.get('energy_registered_fp_kwh', 0) for i in invoices)
     
-    # Consumer units with invoice data
+    # Consumer units with invoice data - deduplicate by uc_number
     consumer_units_data = []
+    seen_ucs = set()
     for inv in invoices:
+        # Find matching UC in THIS plant
         unit = next((u for u in units if u['id'] == inv.get('consumer_unit_id')), None)
-        # Fallback: match by uc_number from parsed data
         if not unit:
-            inv_uc = inv.get('uc_number') or ''
-            unit = next((u for u in units if u.get('uc_number') == inv_uc), None)
+            # Match by uc_number from the UC that the invoice belongs to
+            inv_cu_id = inv.get('consumer_unit_id', '')
+            inv_uc_doc = await db.consumer_units.find_one({'id': inv_cu_id}, {'_id': 0, 'uc_number': 1})
+            if inv_uc_doc:
+                inv_uc_num = inv_uc_doc.get('uc_number', '')
+                unit = next((u for u in units if u.get('uc_number') == inv_uc_num), None)
         if not unit:
-            # Create a minimal unit from invoice data
-            unit = {'uc_number': inv.get('uc_number', '?'), 'holder_name': None, 'address': '', 'compensation_percentage': 0}
+            continue
+        uc_num = unit.get('uc_number', '')
+        if uc_num in seen_ucs:
+            continue
+        seen_ucs.add(uc_num)
         consumer_units_data.append({
             'uc_number': unit.get('uc_number', ''),
             'name': unit.get('holder_name') or unit.get('address') or '',
