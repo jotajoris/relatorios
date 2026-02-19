@@ -579,8 +579,12 @@ def parse_copel_invoice(pdf_source) -> Dict[str, Any]:
         # Extract SCEE credits
         data.update(_extract_scee_credits(full_text))
 
-        # Calculate savings
-        data["amount_saved_brl"] = _calculate_savings(data)
+        # Economizado = sum of billing deductions from INJETADA items
+        billing_deductions = _extract_billing_deductions(full_text)
+        if billing_deductions > 0:
+            data["amount_saved_brl"] = billing_deductions
+        else:
+            data["amount_saved_brl"] = _calculate_savings(data)
 
         return data
 
