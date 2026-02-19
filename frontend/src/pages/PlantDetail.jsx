@@ -120,7 +120,53 @@ const PlantDetail = () => {
     is_generator: false
   });
   
-  const [plantFormData, setPlantFormData] = useState({});
+  // City search for irradiance
+  const [citySearch, setCitySearch] = useState('');
+  const [citySuggestions, setCitySuggestions] = useState([]);
+  const [showCitySuggestions, setShowCitySuggestions] = useState(false);
+  const [calculatingPrognosis, setCalculatingPrognosis] = useState(false);
+  const [prognosisDetail, setPrognosisDetail] = useState(null);
+
+  const searchCities = async (query) => {
+    if (query.length < 2) { setCitySuggestions([]); return; }
+    try {
+      const res = await api.get(`/irradiance/cities?q=${encodeURIComponent(query)}`);
+      setCitySuggestions(res.data);
+      setShowCitySuggestions(true);
+    } catch { setCitySuggestions([]); }
+  };
+
+  const selectCity = (city) => {
+    setPlantFormData({...plantFormData, city: city.city, state: city.state});
+    setCitySearch(city.city);
+    setShowCitySuggestions(false);
+  };
+
+  const calculatePrognosis = async () => {
+    if (!plantFormData.city || !plantFormData.capacity_kwp) {
+      toast.error('Preencha a cidade e a potencia antes');
+      return;
+    }
+    setCalculatingPrognosis(true);
+    try {
+      const res = await api.post('/irradiance/calculate-prognosis', {
+        city: plantFormData.city,
+        capacity_kwp: plantFormData.capacity_kwp,
+      });
+      const d = res.data;
+      setPrognosisDetail(d);
+      setPlantFormData({
+        ...plantFormData,
+        monthly_prognosis_kwh: d.average_monthly_kwh,
+        annual_prognosis_kwh: d.total_annual_kwh,
+      });
+      toast.success(`Prognostico calculado: ${(d.total_annual_kwh/1000).toFixed(2)} MWh/ano`);
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Erro ao calcular prognostico');
+    } finally {
+      setCalculatingPrognosis(false);
+    }
+  };
 
   useEffect(() => {
     loadData();
