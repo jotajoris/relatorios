@@ -1,7 +1,8 @@
 """
-PDF Report Generator v4 - ON Soluções Energéticas
-Palette: Yellow #FFD600 + Black #1A1A1A (NO orange)
-Features: Pagination, footer on all pages, energy flow diagram, colored tables
+PDF Report Generator v5 - ON Soluções Energéticas
+Fixes: UC centered, Endereco column, % with 2 decimals on one line,
+no text cut, centered summary, better energy flow diagram,
+better Meses Anteriores table (dark text, more columns), more color
 """
 import os, io, logging
 from datetime import datetime, timezone, timedelta
@@ -13,17 +14,15 @@ from reportlab.lib.units import mm
 from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
 from reportlab.platypus import (
     BaseDocTemplate, PageTemplate, Frame, Paragraph, Spacer,
-    Table, TableStyle, Image, PageBreak, HRFlowable, NextPageTemplate
+    Table, TableStyle, Image, PageBreak, HRFlowable
 )
-from reportlab.graphics.shapes import Drawing, Rect, Line, String
+from reportlab.graphics.shapes import Drawing, Rect, Line, String, Circle, Polygon
 from reportlab.graphics.charts.barcharts import VerticalBarChart
 
 logger = logging.getLogger(__name__)
 
-# ON Brand Colors - NO orange
 Y = colors.HexColor('#FFD600')
 YL = colors.HexColor('#FFF9D4')
-YD = colors.HexColor('#D4B300')
 BK = colors.HexColor('#1A1A1A')
 BK2 = colors.HexColor('#333333')
 GL = colors.HexColor('#F7F7F7')
@@ -40,6 +39,8 @@ LOGO = '/app/backend/assets/logo_on.png'
 
 MESES = {'01':'JANEIRO','02':'FEVEREIRO','03':'MARCO','04':'ABRIL','05':'MAIO','06':'JUNHO',
          '07':'JULHO','08':'AGOSTO','09':'SETEMBRO','10':'OUTUBRO','11':'NOVEMBRO','12':'DEZEMBRO'}
+MESES_ABR = {'01':'JAN','02':'FEV','03':'MAR','04':'ABR','05':'MAI','06':'JUN',
+             '07':'JUL','08':'AGO','09':'SET','10':'OUT','11':'NOV','12':'DEZ'}
 
 def _n(v, d=2):
     if v is None: return "0"
@@ -54,135 +55,115 @@ def _img(p, w, h):
         except: pass
     return None
 
+def _ps(name, sz, fn='Helvetica', cl=BK, al=TA_CENTER, ld=None):
+    return ParagraphStyle(name, fontSize=sz, fontName=fn, textColor=cl, alignment=al, leading=ld or sz*1.35)
+
 
 class SolarReportGenerator:
     def __init__(self):
         self.st = getSampleStyleSheet()
-        for nm, sz, fn, cl, al in [
-            ('Brand', 11, 'Helvetica-Bold', Y, TA_LEFT),
-            ('Period', 18, 'Helvetica-Bold', W, TA_LEFT),
-            ('Sub', 9, 'Helvetica', colors.HexColor('#CCCCCC'), TA_LEFT),
-            ('Sec', 11, 'Helvetica-Bold', BK, TA_LEFT),
-            ('SecW', 11, 'Helvetica-Bold', W, TA_LEFT),
-            ('KL', 7, 'Helvetica', GM, TA_CENTER),
-            ('KV', 13, 'Helvetica-Bold', BK, TA_CENTER),
-            ('KY', 13, 'Helvetica-Bold', Y, TA_CENTER),
-            ('KG', 13, 'Helvetica-Bold', GR, TA_CENTER),
-            ('Bd', 8, 'Helvetica', BK, TA_LEFT),
-            ('Sm', 7, 'Helvetica', GD, TA_LEFT),
-            ('SmC', 7, 'Helvetica', GD, TA_CENTER),
-            ('Ft', 6.5, 'Helvetica', GM, TA_CENTER),
-            ('FlL', 7, 'Helvetica', GD, TA_CENTER),
-            ('FlV', 9, 'Helvetica-Bold', BK, TA_CENTER),
-            ('InfoL', 8, 'Helvetica', GD, TA_LEFT),
-            ('InfoV', 10, 'Helvetica-Bold', BK, TA_LEFT),
-        ]:
-            self.st.add(ParagraphStyle(name=nm, fontSize=sz, fontName=fn, textColor=cl, alignment=al, leading=sz*1.3))
 
-    def _header_block(self, d):
-        """Dark header bar with logo, plant name, period."""
+    def _hdr(self, d):
         parts = d.get('month_year','').split('-')
         period = f"{MESES.get(parts[1],parts[1])} {parts[0]}" if len(parts)==2 else d.get('month_year','')
         logo = _img(LOGO, 48, 48)
-
-        title = [
-            Paragraph("ON SOLUCOES ENERGETICAS", self.st['Brand']),
-            Paragraph(f"{d.get('plant_name','')} - {period}", self.st['Period']),
-            Paragraph(f"{d.get('company_name','')} | {_n(d.get('capacity_kwp',0),2)} kWp", self.st['Sub']),
-        ]
-        cells = []
-        ws = []
-        if logo:
-            cells.append(logo); ws.append(56)
-        cells.append(title)
-        ws.append(CW - sum(ws) - 4)
-
+        title = []
+        title.append(Paragraph("ON SOLUCOES ENERGETICAS", _ps('HB',11,'Helvetica-Bold',Y,TA_LEFT)))
+        title.append(Paragraph(f"{d.get('plant_name','')} - {period}", _ps('HP',17,'Helvetica-Bold',W,TA_LEFT)))
+        title.append(Paragraph(f"{d.get('company_name','')} | {_n(d.get('capacity_kwp',0),2)} kWp", _ps('HS',9,'Helvetica',colors.HexColor('#BBBBBB'),TA_LEFT)))
+        cells = [logo, title] if logo else [title]
+        ws = [56, CW-60] if logo else [CW]
         t = Table([cells], colWidths=ws)
-        t.setStyle(TableStyle([
-            ('VALIGN',(0,0),(-1,-1),'MIDDLE'),('LEFTPADDING',(0,0),(-1,-1),6),
-            ('BACKGROUND',(0,0),(-1,-1),BK),
-            ('TOPPADDING',(0,0),(-1,-1),8),('BOTTOMPADDING',(0,0),(-1,-1),8),
-        ]))
+        t.setStyle(TableStyle([('VALIGN',(0,0),(-1,-1),'MIDDLE'),('LEFTPADDING',(0,0),(-1,-1),8),
+            ('BACKGROUND',(0,0),(-1,-1),BK),('TOPPADDING',(0,0),(-1,-1),8),('BOTTOMPADDING',(0,0),(-1,-1),8)]))
         return [t, Spacer(1,4*mm)]
 
     def _sec(self, title, dark=False):
-        st = self.st['SecW'] if dark else self.st['Sec']
         bg = BK if dark else Y
-        t = Table([[Paragraph(title, st)]], colWidths=[CW])
-        t.setStyle(TableStyle([
-            ('BACKGROUND',(0,0),(-1,-1),bg),
-            ('LEFTPADDING',(0,0),(-1,-1),8),
-            ('TOPPADDING',(0,0),(-1,-1),4),('BOTTOMPADDING',(0,0),(-1,-1),4),
-        ]))
+        cl = W if dark else BK
+        t = Table([[Paragraph(title, _ps('S',11,'Helvetica-Bold',cl,TA_LEFT))]], colWidths=[CW])
+        t.setStyle(TableStyle([('BACKGROUND',(0,0),(-1,-1),bg),('LEFTPADDING',(0,0),(-1,-1),8),
+            ('TOPPADDING',(0,0),(-1,-1),5),('BOTTOMPADDING',(0,0),(-1,-1),5)]))
         return t
 
-    def _kpi(self, label, value, style='KV'):
-        data = [[Paragraph(label, self.st['KL'])],[Paragraph(f"<nobr>{value}</nobr>", self.st[style])]]
+    def _kpi(self, label, value, accent=False, green=False):
+        cl = GR if green else (Y if accent else BK)
+        data = [[Paragraph(label, _ps('KL',7,'Helvetica',GM))],
+                [Paragraph(f"<nobr>{value}</nobr>", _ps('KV',13,'Helvetica-Bold',cl))]]
         c = Table(data, colWidths=[88])
-        border_color = Y if style in ('KY','KG') else colors.HexColor('#E5E7EB')
-        c.setStyle(TableStyle([
-            ('ALIGN',(0,0),(-1,-1),'CENTER'),('VALIGN',(0,0),(-1,-1),'MIDDLE'),
+        bc = Y if (accent or green) else colors.HexColor('#E5E7EB')
+        c.setStyle(TableStyle([('ALIGN',(0,0),(-1,-1),'CENTER'),('VALIGN',(0,0),(-1,-1),'MIDDLE'),
             ('TOPPADDING',(0,0),(-1,-1),5),('BOTTOMPADDING',(0,0),(-1,-1),5),
-            ('BACKGROUND',(0,0),(-1,-1),W),
-            ('BOX',(0,0),(-1,-1),0.5,colors.HexColor('#E5E7EB')),
-            ('LINEABOVE',(0,0),(-1,0),3,border_color),
-        ]))
+            ('BACKGROUND',(0,0),(-1,-1),W),('BOX',(0,0),(-1,-1),0.5,colors.HexColor('#E5E7EB')),
+            ('LINEABOVE',(0,0),(-1,0),3,bc)]))
         return c
 
     def _kpi_row(self, items):
-        cards = [self._kpi(k['l'],k['v'],k.get('s','KV')) for k in items]
+        cards = [self._kpi(k['l'],k['v'],k.get('a'),k.get('g')) for k in items]
         w = CW/len(items)
         r = Table([cards], colWidths=[w]*len(items))
         r.setStyle(TableStyle([('ALIGN',(0,0),(-1,-1),'CENTER')]))
         return r
 
-    def _energy_flow(self, d):
-        """Energy flow diagram in a styled box."""
+    def _energy_flow_diagram(self, d):
+        """Visual energy flow using Drawing with shapes and arrows."""
         gen = d.get('total_generation_kwh',0) or 0
         inj_p = d.get('energy_injected_p',0) or 0
         inj_fp = d.get('energy_injected_fp',0) or 0
         cons_p = d.get('consumption_p',0) or 0
         cons_fp = d.get('consumption_fp',0) or 0
 
-        def _box(lines):
-            paras = []
-            for lbl, val in lines:
-                paras.append(Paragraph(lbl, self.st['FlL']))
-                paras.append(Paragraph(f"<b>{val}</b>", self.st['FlV']))
-                paras.append(Spacer(1,1.5*mm))
-            return paras
+        dw = Drawing(CW, 160)
+        dw.add(Rect(0,0,CW,160,fillColor=GL,strokeColor=colors.HexColor('#E0E0E0'),strokeWidth=0.5))
 
-        left = _box([
-            ("Unidade Geradora", f"{_n(gen,0)} kWh"),
-            ("C. Registrado Ponta", f"{_n(cons_p,0)} kWh"),
-            ("C. Registrado F.Ponta", f"{_n(cons_fp,0)} kWh"),
-        ])
-        mid = _box([
-            ("E. Injetada Ponta", f"{_n(inj_p,0)} kWh"),
-            ("E. Injetada F.Ponta", f"{_n(inj_fp,0)} kWh"),
-            ("Geracao Total", f"{_n(gen,0)} kWh"),
-        ])
-        right = _box([
-            ("Consumo F.Ponta", f"{_n(cons_fp,0)} kWh"),
-            ("Consumo Ponta", f"{_n(cons_p,0)} kWh"),
-        ])
+        cx = CW/2
+        # House (left) - UC Geradora
+        hx, hy = 60, 120
+        dw.add(Rect(hx-18,hy-20,36,25,fillColor=colors.HexColor('#E5E7EB'),strokeColor=GD,strokeWidth=0.5))
+        dw.add(Polygon(points=[hx-22,hy+5,hx,hy+22,hx+22,hy+5],fillColor=colors.HexColor('#D1D5DB'),strokeColor=GD,strokeWidth=0.5))
+        dw.add(String(hx,hy-30,'Unidade Geradora',fontSize=6,fillColor=GD,textAnchor='middle'))
+        dw.add(String(hx,hy-40,f'{_n(gen,0)} kWh',fontSize=8,fillColor=BK,textAnchor='middle',fontName='Helvetica-Bold'))
 
-        data = [[left, mid, right]]
-        t = Table(data, colWidths=[CW/3]*3)
-        t.setStyle(TableStyle([
-            ('VALIGN',(0,0),(-1,-1),'TOP'),
-            ('BACKGROUND',(0,0),(-1,-1),GL),
-            ('BOX',(0,0),(-1,-1),1.5,Y),
-            ('LINEBEFORE',(1,0),(1,-1),0.5,colors.HexColor('#E5E7EB')),
-            ('LINEBEFORE',(2,0),(2,-1),0.5,colors.HexColor('#E5E7EB')),
-            ('TOPPADDING',(0,0),(-1,-1),8),('BOTTOMPADDING',(0,0),(-1,-1),8),
-            ('LEFTPADDING',(0,0),(-1,-1),10),
-        ]))
-        return t
+        # Tower (right) - Rede
+        tx, ty = CW-60, 120
+        dw.add(Rect(tx-3,ty-15,6,35,fillColor=colors.HexColor('#9CA3AF'),strokeColor=GD,strokeWidth=0.5))
+        dw.add(Rect(tx-18,ty+15,36,3,fillColor=colors.HexColor('#9CA3AF'),strokeColor=GD,strokeWidth=0.5))
+        dw.add(Rect(tx-12,ty+10,24,3,fillColor=colors.HexColor('#9CA3AF'),strokeColor=GD,strokeWidth=0.5))
+
+        # Solar panel (bottom center)
+        sx, sy = cx, 25
+        dw.add(Rect(sx-15,sy-10,30,20,fillColor=Y,strokeColor=BK,strokeWidth=0.5))
+        dw.add(Line(sx-15,sy,sx+15,sy,strokeColor=BK,strokeWidth=0.3))
+        dw.add(Line(sx-5,sy-10,sx-5,sy+10,strokeColor=BK,strokeWidth=0.3))
+        dw.add(Line(sx+5,sy-10,sx+5,sy+10,strokeColor=BK,strokeWidth=0.3))
+        dw.add(String(sx,sy-20,f'Geracao: {_n(gen,0)} kWh',fontSize=7,fillColor=BK,textAnchor='middle',fontName='Helvetica-Bold'))
+
+        # Top center text - C. Registrado
+        dw.add(String(cx,148,'C. Registrado Ponta',fontSize=6,fillColor=GD,textAnchor='middle'))
+        dw.add(String(cx,139,f'{_n(cons_p,0)} kWh',fontSize=8,fillColor=BK,textAnchor='middle',fontName='Helvetica-Bold'))
+        dw.add(String(cx,128,'C. Registrado Fora Ponta',fontSize=6,fillColor=GD,textAnchor='middle'))
+        dw.add(String(cx,119,f'{_n(cons_fp,0)} kWh',fontSize=8,fillColor=BK,textAnchor='middle',fontName='Helvetica-Bold'))
+
+        # Right side text - Consumption & Injection
+        rx = CW-60
+        dw.add(String(rx,80,'Consumo F.Ponta',fontSize=6,fillColor=GD,textAnchor='middle'))
+        dw.add(String(rx,71,f'{_n(cons_fp,0)} kWh',fontSize=7,fillColor=BK,textAnchor='middle',fontName='Helvetica-Bold'))
+        dw.add(String(rx,58,'E. Injetada Ponta',fontSize=6,fillColor=GD,textAnchor='middle'))
+        dw.add(String(rx,49,f'{_n(inj_p,0)} kWh',fontSize=7,fillColor=BK,textAnchor='middle',fontName='Helvetica-Bold'))
+        dw.add(String(rx,36,'E. Injetada F.Ponta',fontSize=6,fillColor=GD,textAnchor='middle'))
+        dw.add(String(rx,27,f'{_n(inj_fp,0)} kWh',fontSize=7,fillColor=BK,textAnchor='middle',fontName='Helvetica-Bold'))
+
+        # Arrows (simple lines)
+        dw.add(Line(hx+22,hy,cx-40,hy,strokeColor=GM,strokeWidth=1))
+        dw.add(Line(cx+40,hy,tx-22,hy,strokeColor=GM,strokeWidth=1))
+        dw.add(Line(sx,sy+10,hx,hy-25,strokeColor=GM,strokeWidth=1))
+        dw.add(Line(sx+15,sy+10,tx,hy-25,strokeColor=GM,strokeWidth=1))
+
+        return dw
 
     def _chart(self, daily, prog_daily):
         dw = Drawing(CW, 155)
-        dw.add(Rect(0,0,CW,155,fillColor=W,strokeColor=colors.HexColor('#E5E7EB')))
+        dw.add(Rect(0,0,CW,155,fillColor=W,strokeColor=colors.HexColor('#E5E7EB'),strokeWidth=0.5))
         vals = [dd.get('generation_kwh',0) for dd in daily[:31]]
         if not vals: return dw
         bc = VerticalBarChart()
@@ -210,34 +191,32 @@ class SolarReportGenerator:
             dw.add(ln)
         return dw
 
-    def _nice_table(self, headers, rows, widths, has_total=False, yellow_values=False):
-        hdr_s = ParagraphStyle('TH', fontSize=6.5, fontName='Helvetica-Bold', textColor=Y, alignment=TA_CENTER, leading=8)
-        td_s = ParagraphStyle('TD', fontSize=7, fontName='Helvetica', textColor=BK, alignment=TA_CENTER, leading=9)
-        td_l = ParagraphStyle('TDL', fontSize=6.5, fontName='Helvetica', textColor=BK, alignment=TA_LEFT, leading=8.5)
-        td_b = ParagraphStyle('TDB', fontSize=7, fontName='Helvetica-Bold', textColor=BK, alignment=TA_CENTER, leading=9)
-        td_y = ParagraphStyle('TDY', fontSize=7, fontName='Helvetica-Bold', textColor=Y, alignment=TA_CENTER, leading=9)
+    def _data_table(self, headers, rows, widths, has_total=False):
+        """Table with dark headers, white text values, no text cutting."""
+        hs = _ps('TH',7,'Helvetica-Bold',W,TA_CENTER,9)
+        ts = _ps('TD',7,'Helvetica',BK,TA_CENTER,9)
+        tl = _ps('TDL',7,'Helvetica',BK,TA_LEFT,9)
+        tc = _ps('TDC',7,'Helvetica',BK,TA_CENTER,9)
+        tb = _ps('TDB',7.5,'Helvetica-Bold',BK,TA_CENTER,10)
 
-        pdata = [[Paragraph(h, hdr_s) for h in headers]]
+        pdata = [[Paragraph(h, hs) for h in headers]]
         for i, row in enumerate(rows):
-            is_total = has_total and i == len(rows)-1
+            is_t = has_total and i == len(rows)-1
             prow = []
             for j, cell in enumerate(row):
-                if is_total:
-                    prow.append(Paragraph(str(cell), td_b))
-                elif j == 0:
-                    prow.append(Paragraph(str(cell), td_l))
-                elif yellow_values:
-                    prow.append(Paragraph(str(cell), td_y))
+                if is_t:
+                    prow.append(Paragraph(str(cell), tb))
+                elif j <= 1:  # UC and Endereco left-aligned
+                    prow.append(Paragraph(str(cell), tl if j==1 else tc))
                 else:
-                    prow.append(Paragraph(str(cell), td_s))
+                    prow.append(Paragraph(str(cell), ts))
             pdata.append(prow)
 
         t = Table(pdata, colWidths=widths, repeatRows=1)
         cmds = [
-            ('BACKGROUND',(0,0),(-1,0),BK),
-            ('ALIGN',(0,0),(-1,0),'CENTER'),('VALIGN',(0,0),(-1,-1),'MIDDLE'),
-            ('TOPPADDING',(0,0),(-1,0),5),('BOTTOMPADDING',(0,0),(-1,0),5),
-            ('TOPPADDING',(0,1),(-1,-1),4),('BOTTOMPADDING',(0,1),(-1,-1),4),
+            ('BACKGROUND',(0,0),(-1,0),BK),('VALIGN',(0,0),(-1,-1),'MIDDLE'),
+            ('TOPPADDING',(0,0),(-1,0),6),('BOTTOMPADDING',(0,0),(-1,0),6),
+            ('TOPPADDING',(0,1),(-1,-1),5),('BOTTOMPADDING',(0,1),(-1,-1),5),
             ('LEFTPADDING',(0,0),(-1,-1),4),('RIGHTPADDING',(0,0),(-1,-1),4),
             ('ROWBACKGROUNDS',(0,1),(-1,-1),[W,GL]),
             ('GRID',(0,0),(-1,-1),0.4,colors.HexColor('#D1D5DB')),
@@ -247,18 +226,27 @@ class SolarReportGenerator:
         t.setStyle(TableStyle(cmds))
         return t
 
-    def _footer_text(self):
-        return 'ON Solucoes Energeticas | onsolucoesenergeticas.com.br | @on.solucoes'
+    def _hist_table(self, headers, rows):
+        """Meses Anteriores table - dark text, readable."""
+        hs = _ps('HH',8,'Helvetica-Bold',W,TA_CENTER,10)
+        ts = _ps('HT',8,'Helvetica-Bold',BK,TA_CENTER,10)
+
+        pdata = [[Paragraph(h, hs) for h in headers]]
+        for row in rows:
+            pdata.append([Paragraph(str(c), ts) for c in row])
+
+        w = CW / len(headers)
+        t = Table(pdata, colWidths=[w]*len(headers))
+        t.setStyle(TableStyle([
+            ('BACKGROUND',(0,0),(-1,0),BK),('VALIGN',(0,0),(-1,-1),'MIDDLE'),
+            ('TOPPADDING',(0,0),(-1,-1),8),('BOTTOMPADDING',(0,0),(-1,-1),8),
+            ('ROWBACKGROUNDS',(0,1),(-1,-1),[W,GL]),
+            ('GRID',(0,0),(-1,-1),0.5,colors.HexColor('#D1D5DB')),
+        ]))
+        return t
 
     def generate_report(self, d):
         buf = io.BytesIO()
-
-        # Custom doc with page numbers
-        footer_text = self._footer_text()
-        class NumberedCanvas:
-            pass
-
-        # PDF metadata title
         parts = d.get('month_year','').split('-')
         mm_aa = f"{parts[1]}/{parts[0][2:]}" if len(parts)==2 else ''
         pdf_title = f"{d.get('company_name','ON')} | {mm_aa} | Relatorio de Energia"
@@ -269,34 +257,23 @@ class SolarReportGenerator:
 
         def _on_page(canvas, doc_obj):
             canvas.saveState()
-            # Yellow bottom bar
             canvas.setFillColor(Y)
             canvas.rect(0, 0, PW, 14*mm, fill=1, stroke=0)
-            # Footer text with clickable links
             canvas.setFont('Helvetica-Bold', 7)
             canvas.setFillColor(BK)
-            canvas.drawString(MG + 22, 8*mm, "ON Solucoes Energeticas")
-            canvas.setFont('Helvetica', 7)
-            canvas.drawString(MG + 22, 4*mm, "onsolucoesenergeticas.com.br | @on.solucoes")
-            # Clickable link areas
-            canvas.linkURL("https://onsolucoesenergeticas.com.br",
-                          (MG + 22, 3*mm, MG + 160, 6*mm))
-            canvas.linkURL("https://instagram.com/on.solucoes",
-                          (MG + 165, 3*mm, MG + 250, 6*mm))
-            # Page number
+            canvas.drawString(MG+22, 7*mm, "ON Solucoes Energeticas | onsolucoesenergeticas.com.br | @on.solucoes")
+            canvas.linkURL("https://onsolucoesenergeticas.com.br", (MG+135, 5*mm, MG+270, 10*mm))
+            canvas.linkURL("https://instagram.com/on.solucoes", (MG+275, 5*mm, MG+370, 10*mm))
             canvas.setFont('Helvetica-Bold', 7)
-            page_text = f"Pagina {doc_obj.page}"
-            canvas.drawRightString(PW - MG, 6*mm, page_text)
-            # ON logo in footer
+            canvas.drawRightString(PW-MG, 7*mm, f"Pagina {doc_obj.page}")
             if os.path.exists(LOGO):
-                try:
-                    canvas.drawImage(LOGO, MG, 3*mm, width=18, height=18, preserveAspectRatio=True, mask='auto')
+                try: canvas.drawImage(LOGO, MG+2, 2*mm, width=16, height=16, preserveAspectRatio=True, mask='auto')
                 except: pass
             canvas.restoreState()
 
         doc.addPageTemplates([PageTemplate(id='all', frames=[frame], onPage=_on_page)])
-
         el = []
+
         prog = d.get('prognosis_kwh',0) or 0
         gen = d.get('total_generation_kwh',0) or 0
         perf = (gen/prog*100) if prog>0 else 0
@@ -311,44 +288,37 @@ class SolarReportGenerator:
         ann_prog = d.get('prognosis_annual_kwh', prog*12) or 0
 
         # ═══ PAGE 1: DASHBOARD ═══
-        el.extend(self._header_block(d))
-
-        # Top KPIs
+        el.extend(self._hdr(d))
         el.append(self._kpi_row([
-            {'l':'Potencia','v':f"{_n(cap,2)} kWp",'s':'KV'},
-            {'l':'Geracao do Mes','v':f"{_n(gen,0)} kWh",'s':'KY'},
-            {'l':'Desempenho','v':f"{_n(perf,1)} %",'s':'KG' if perf>=100 else 'KY'},
+            {'l':'Potencia','v':f"{_n(cap,2)} kWp"},
+            {'l':'Geracao do Mes','v':f"{_n(gen,0)} kWh",'a':True},
+            {'l':'Desempenho','v':f"{_n(perf,1)} %",'g':perf>=100,'a':perf<100},
         ]))
-        el.append(Spacer(1,3*mm))
+        el.append(Spacer(1,4*mm))
 
-        # Energy Flow
+        # Energy Flow Diagram
         el.append(self._sec("Fluxo de Energia"))
         el.append(Spacer(1,2*mm))
-        el.append(self._energy_flow(d))
-        el.append(Spacer(1,3*mm))
+        el.append(self._energy_flow_diagram(d))
+        el.append(Spacer(1,4*mm))
 
-        # Financial section with yellow accent
+        # Financial
         el.append(self._sec("Financeiro", dark=True))
         el.append(Spacer(1,2*mm))
-        fin_data = [
-            ['Faturado', _brl(billed), 'Economia', _brl(saved)],
-            ['Retorno Mensal', f"{_n(roi_m,2)} %", 'Economia Total', _brl(total_sav)],
-            ['Retorno Total', f"{_n(roi_t,2)} %", '', ''],
-        ]
-        ft = Table(fin_data, colWidths=[80,CW/2-80,80,CW/2-80])
-        ft.setStyle(TableStyle([
-            ('FONTSIZE',(0,0),(-1,-1),9),
-            ('TEXTCOLOR',(0,0),(0,-1),GD),('TEXTCOLOR',(2,0),(2,-1),GD),
-            ('FONTNAME',(1,0),(1,-1),'Helvetica-Bold'),('FONTNAME',(3,0),(3,-1),'Helvetica-Bold'),
-            ('TEXTCOLOR',(1,0),(1,-1),BK),('TEXTCOLOR',(3,0),(3,0),GR),
-            ('TOPPADDING',(0,0),(-1,-1),3),('BOTTOMPADDING',(0,0),(-1,-1),3),
-            ('BACKGROUND',(0,0),(-1,-1),GL),
-            ('BOX',(0,0),(-1,-1),0.5,colors.HexColor('#E5E7EB')),
+        el.append(self._kpi_row([
+            {'l':'Faturado','v':_brl(billed)},
+            {'l':'Economia do Mes','v':_brl(saved),'g':True},
+            {'l':'Retorno Mensal','v':f"{_n(roi_m,2)} %"},
         ]))
-        el.append(ft)
-        el.append(Spacer(1,3*mm))
+        el.append(Spacer(1,2*mm))
+        el.append(self._kpi_row([
+            {'l':'Economia Total','v':_brl(total_sav),'g':True},
+            {'l':'Retorno Total','v':f"{_n(roi_t,2)} %"},
+            {'l':'Ger. Acordada','v':f"{_n(prog,0)} kWh"},
+        ]))
+        el.append(Spacer(1,4*mm))
 
-        # Meses Anteriores - with more columns like the reference
+        # Meses Anteriores - dark readable text, more columns
         hist = d.get('historical',[])
         if hist:
             el.append(self._sec("Meses Anteriores"))
@@ -360,101 +330,81 @@ class SolarReportGenerator:
                 pk = h.get('prognosis_kwh',0)
                 pf = f"{gk/pk*100:.0f}%" if pk>0 else "-"
                 rows.append([my, f"{_n(gk,0)} kWh", pf])
-            el.append(self._nice_table(
-                ['Mes/Ano','Geracao','Desempenho'],
-                rows, [80,120,80], yellow_values=True))
+            el.append(self._hist_table(['Mes/Ano','Geracao','Desempenho'], rows))
 
-        # ═══ PAGE 2: GENERATION CHART + PROGNOSIS + ENVIRONMENTAL ═══
+        # ═══ PAGE 2: CHART + PROGNOSIS + ENVIRONMENTAL ═══
         el.append(PageBreak())
-        el.extend(self._header_block(d))
-
+        el.extend(self._hdr(d))
         el.append(self._kpi_row([
-            {'l':'Potencia','v':f"{_n(cap,2)} kWp",'s':'KV'},
-            {'l':'Geracao','v':f"{_n(gen,0)} kWh",'s':'KY'},
-            {'l':'Desempenho','v':f"{_n(perf,1)} %",'s':'KG' if perf>=100 else 'KY'},
+            {'l':'Potencia','v':f"{_n(cap,2)} kWp"},
+            {'l':'Geracao','v':f"{_n(gen,0)} kWh",'a':True},
+            {'l':'Desempenho','v':f"{_n(perf,1)} %",'g':perf>=100,'a':perf<100},
         ]))
         el.append(Spacer(1,2*mm))
 
-        # Month title
-        parts = d.get('month_year','').split('-')
         month_name = MESES.get(parts[1],'') if len(parts)==2 else ''
         el.append(Paragraph(f"<font color='#FFD600'><b>{month_name}</b></font>",
-                  ParagraphStyle('MT',fontSize=14,fontName='Helvetica-Bold',textColor=Y,alignment=TA_CENTER)))
+                  _ps('MT',14,'Helvetica-Bold',Y,TA_CENTER)))
         el.append(Spacer(1,2*mm))
 
         daily = d.get('daily_generation',[])
         days = len(daily) if daily else 30
         dp = prog/days if days>0 else 0
         el.append(self._chart(daily, dp))
-        el.append(Paragraph(
-            "<font color='#BDBDBD'>&#9632;</font> Geracao &nbsp;&nbsp;"
-            "<font color='#FFD600'>&#8212; &#8212;</font> Prognostico",
-            self.st['SmC']))
+        el.append(Paragraph("<font color='#BDBDBD'>&#9632;</font> Geracao &nbsp;&nbsp;<font color='#FFD600'>&#8212;&#8212;</font> Prognostico",
+                  _ps('LG',7,'Helvetica',GD,TA_CENTER)))
         el.append(Spacer(1,3*mm))
-
-        # Gen/Prog/Perf summary
-        gen_mwh = gen/1000
-        prog_mwh = prog/1000
         el.append(self._kpi_row([
-            {'l':'Geracao','v':f"{_n(gen_mwh,2)} MWh",'s':'KV'},
-            {'l':'Prognostico','v':f"{_n(prog_mwh,2)} MWh",'s':'KV'},
-            {'l':'Desempenho','v':f"{_n(perf,1)} %",'s':'KG' if perf>=100 else 'KY'},
+            {'l':'Geracao','v':f"{_n(gen/1000,2)} MWh"},
+            {'l':'Prognostico','v':f"{_n(prog/1000,2)} MWh"},
+            {'l':'Desempenho','v':f"{_n(perf,1)} %",'g':perf>=100,'a':perf<100},
         ]))
         el.append(Spacer(1,4*mm))
 
-        # Prognosis section (image 3)
+        # Prognosis section
         el.append(self._sec("Prognostico e Impacto Ambiental"))
         el.append(Spacer(1,2*mm))
+        il = _ps('IL',8,'Helvetica',GD,TA_LEFT)
+        iv = _ps('IV',10,'Helvetica-Bold',BK,TA_LEFT)
         prog_data = [
-            [Paragraph("Geracao acordada mensal", self.st['InfoL']),
-             Paragraph(f"<b>{_n(prog,0)} kWh</b>", self.st['InfoV']),
-             Paragraph("Geracao acordada anual", self.st['InfoL']),
-             Paragraph(f"<b>{_n(ann_prog/1000,2)} MWh</b>", self.st['InfoV'])],
-            [Paragraph("Prognostico mensal", self.st['InfoL']),
-             Paragraph(f"<b>{_n(prog,0)} kWh</b>", self.st['InfoV']),
-             Paragraph("Prognostico anual", self.st['InfoL']),
-             Paragraph(f"<b>{_n(ann_prog/1000,2)} MWh</b>", self.st['InfoV'])],
+            [Paragraph("Geracao acordada mensal",il), Paragraph(f"<b>{_n(prog,0)} kWh</b>",iv),
+             Paragraph("Geracao acordada anual",il), Paragraph(f"<b>{_n(ann_prog/1000,2)} MWh</b>",iv)],
+            [Paragraph("Prognostico mensal",il), Paragraph(f"<b>{_n(prog,0)} kWh</b>",iv),
+             Paragraph("Prognostico anual",il), Paragraph(f"<b>{_n(ann_prog/1000,2)} MWh</b>",iv)],
         ]
         pt = Table(prog_data, colWidths=[95,CW/2-95,95,CW/2-95])
-        pt.setStyle(TableStyle([
-            ('TOPPADDING',(0,0),(-1,-1),4),('BOTTOMPADDING',(0,0),(-1,-1),4),
-            ('BACKGROUND',(0,0),(-1,-1),GL),('BOX',(0,0),(-1,-1),0.5,colors.HexColor('#E5E7EB')),
-        ]))
+        pt.setStyle(TableStyle([('TOPPADDING',(0,0),(-1,-1),4),('BOTTOMPADDING',(0,0),(-1,-1),4),
+            ('BACKGROUND',(0,0),(-1,-1),GL),('BOX',(0,0),(-1,-1),0.5,colors.HexColor('#E5E7EB'))]))
         el.append(pt)
         el.append(Spacer(1,3*mm))
 
-        # Environmental (image 3 bottom)
         co2t = (env.get('co2_avoided_kg',0) or 0)/1000
         trees = int(env.get('trees_saved',0) or 0)
+        el2 = _ps('EE',8,'Helvetica',GD,TA_CENTER,12)
         env_data = [[
-            Paragraph(f"Deixados de produzir<br/><b><font size='12'>{_n(co2t,2)}t de CO2</font></b><br/>(Ultimos 12 meses)",
-                      ParagraphStyle('EL',fontSize=8,fontName='Helvetica',textColor=GD,alignment=TA_CENTER,leading=12)),
-            Paragraph(f"Total de<br/><b><font size='12' color='#16A34A'>{trees} arvores salvas</font></b><br/>(Ultimos 12 meses)",
-                      ParagraphStyle('ER',fontSize=8,fontName='Helvetica',textColor=GD,alignment=TA_CENTER,leading=12)),
+            Paragraph(f"Deixados de produzir<br/><b><font size='12'>{_n(co2t,2)}t de CO2</font></b><br/>(Ultimos 12 meses)",el2),
+            Paragraph(f"Total de<br/><b><font size='12' color='#16A34A'>{trees} arvores salvas</font></b><br/>(Ultimos 12 meses)",el2),
         ]]
         et = Table(env_data, colWidths=[CW/2]*2)
-        et.setStyle(TableStyle([
-            ('ALIGN',(0,0),(-1,-1),'CENTER'),('VALIGN',(0,0),(-1,-1),'MIDDLE'),
+        et.setStyle(TableStyle([('ALIGN',(0,0),(-1,-1),'CENTER'),('VALIGN',(0,0),(-1,-1),'MIDDLE'),
             ('TOPPADDING',(0,0),(-1,-1),10),('BOTTOMPADDING',(0,0),(-1,-1),10),
-            ('BACKGROUND',(0,0),(-1,-1),GL),
-            ('BOX',(0,0),(-1,-1),1,Y),
-            ('LINEBEFORE',(1,0),(1,-1),0.5,colors.HexColor('#E5E7EB')),
-        ]))
+            ('BACKGROUND',(0,0),(-1,-1),GL),('BOX',(0,0),(-1,-1),1,Y),
+            ('LINEBEFORE',(1,0),(1,-1),0.5,colors.HexColor('#E5E7EB'))]))
         el.append(et)
 
         # ═══ PAGE 3+: CONSUMER UNITS ═══
         cu = d.get('consumer_units',[])
         if cu:
             el.append(PageBreak())
-            el.extend(self._header_block(d))
+            el.extend(self._hdr(d))
             el.append(self._sec("INFORMACOES CONCESSIONARIA", dark=True))
             el.append(Spacer(1,3*mm))
 
-            hdr = ['UC','Denominacao','Ciclo','%','Consumo\nRegistrado','Energia\nCompensada',
+            hdr = ['UC','Endereco','Ciclo','(%)','Consumo\nRegistrado','Energia\nCompensada',
                    'Energia\nFaturada','Credito\nAnterior','Credito\nAcumulado',
                    'Faturado\n(R$)','Economia\n(R$)']
             rows = []
-            t_cons=t_comp=t_fat=t_ca=t_cacc=t_bill=t_sav=0
+            tc=tp=tf=ta=tac=tb=ts2=0
             for c in cu:
                 cons=c.get('consumption_registered',0) or 0
                 comp=c.get('energy_compensated',0) or 0
@@ -463,22 +413,20 @@ class SolarReportGenerator:
                 cacc=c.get('credit_accumulated',0) or 0
                 bill=c.get('amount_billed',0) or 0
                 sav=c.get('amount_saved',0) or 0
-                t_cons+=cons;t_comp+=comp;t_fat+=fat;t_ca+=ca;t_cacc+=cacc;t_bill+=bill;t_sav+=sav
-                uc = c.get('uc_number','')
-                name = (c.get('name') or '')[:25]
-                pct_val = c.get('percentage', 0) or 0
-                pct = f"{pct_val:.0f} %" if pct_val == int(pct_val) else f"{pct_val:.1f} %"
-                rows.append([uc,name,c.get('cycle',''),pct,_n(cons,0),_n(comp,0),_n(fat,0),_n(ca,0),_n(cacc,0),_n(bill,2),_n(sav,2)])
-            rows.append(['TOTAL','','','',_n(t_cons,0),_n(t_comp,0),_n(t_fat,0),_n(t_ca,0),_n(t_cacc,0),_n(t_bill,2),_n(t_sav,2)])
+                tc+=cons;tp+=comp;tf+=fat;ta+=ca;tac+=cacc;tb+=bill;ts2+=sav
+                pct_val = c.get('percentage',0) or 0
+                pct = f"{_n(pct_val,2)}%"
+                rows.append([c.get('uc_number',''),(c.get('name') or '')[:28],c.get('cycle',''),
+                    pct,_n(cons,0),_n(comp,0),_n(fat,0),_n(ca,0),_n(cacc,0),_n(bill,2),_n(sav,2)])
+            rows.append(['TOTAL','','','',_n(tc,0),_n(tp,0),_n(tf,0),_n(ta,0),_n(tac,0),_n(tb,2),_n(ts2,2)])
 
-            # Wider columns - use full A4 width
-            el.append(self._nice_table(hdr, rows,
-                [52,72,56,22,44,44,42,38,38,48,48], has_total=True))
+            el.append(self._data_table(hdr, rows,
+                [52,76,54,28,42,42,40,38,38,46,46], has_total=True))
             el.append(Spacer(1,4*mm))
             el.append(Paragraph(
-                f"<b>Resumo:</b> Consumo: {_n(t_cons,0)} kWh | Compensado: {_n(t_comp,0)} kWh | "
-                f"Faturado: {_brl(t_bill)} | <font color='#16A34A'><b>Economizado: {_brl(t_sav)}</b></font>",
-                self.st['Bd']))
+                f"<b>Resumo:</b> Consumo: {_n(tc,0)} kWh | Compensado: {_n(tp,0)} kWh | "
+                f"Faturado: {_brl(tb)} | <font color='#16A34A'><b>Economizado: {_brl(ts2)}</b></font>",
+                _ps('RS',8,'Helvetica',BK,TA_CENTER)))
 
         doc.build(el)
         res = buf.getvalue()
