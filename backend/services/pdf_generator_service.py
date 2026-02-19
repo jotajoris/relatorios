@@ -406,16 +406,17 @@ class SolarReportGenerator:
                           'Faturado\n(R$)', 'Economizado\n(R$)']
             cu_rows = []
             for c in consumer_units:
+                name = c.get('name') or c.get('uc_number') or 'N/A'
                 cu_rows.append([
-                    c.get('name', '')[:16],
-                    c.get('cycle', ''),
-                    _fmt(c.get('consumption_registered', 0), 0),
-                    _fmt(c.get('energy_compensated', 0), 0),
-                    _fmt(c.get('energy_billed', 0), 0),
-                    _fmt(c.get('credit_previous', 0), 0),
-                    _fmt(c.get('credit_accumulated', 0), 0),
-                    _fmt(c.get('amount_billed', 0), 2),
-                    _fmt(c.get('amount_saved', 0), 2),
+                    str(name)[:16],
+                    str(c.get('cycle') or ''),
+                    _fmt(c.get('consumption_registered') or 0, 0),
+                    _fmt(c.get('energy_compensated') or 0, 0),
+                    _fmt(c.get('energy_billed') or 0, 0),
+                    _fmt(c.get('credit_previous') or 0, 0),
+                    _fmt(c.get('credit_accumulated') or 0, 0),
+                    _fmt(c.get('amount_billed') or 0, 2),
+                    _fmt(c.get('amount_saved') or 0, 2),
                 ])
             el.append(self._styled_table(cu_headers, cu_rows,
                                           [62, 40, 46, 46, 46, 42, 44, 48, 48]))
