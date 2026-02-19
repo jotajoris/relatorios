@@ -172,6 +172,15 @@ const PlantDetail = () => {
     }
   };
 
+  const loadMonthlySummary = async () => {
+    try {
+      const res = await api.get(`/plants/${plantId}/monthly-summary?year=${selectedYear}`);
+      setMonthlySummary(res.data);
+    } catch (error) {
+      console.error('Error loading monthly summary:', error);
+    }
+  };
+
   const handleLogoUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
