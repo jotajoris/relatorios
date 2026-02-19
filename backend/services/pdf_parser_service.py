@@ -492,16 +492,27 @@ def _extract_billing_deductions(text: str) -> float:
     """
     Calculate 'Economizado' = sum of all ENERGIA INJETADA billing line R$ amounts.
     These are negative values that represent deductions from the invoice total.
+    Note: Some lines have garbled 'kWh' as 'kIIWh' due to PDF watermark.
     """
     total = 0.0
-    # Find all negative R$ amounts on INJETADA/INJ lines from the NF3e section
-    # Pattern: ... -21,39 ... (the Valor column, which is the 4th number after kWh quantity and unit price)
-    inj_amounts = re.findall(
-        r'(?:ENERGIA\s+INJETADA|ENERGIA\s+INJ\.).*?kWh\s+-?[\d.,]+\s+[\d.,]+\s+(-[\d.,]+)',
+    # Match INJETADA lines with their negative R$ value (Valor column)
+    # Pattern: ENERGIA INJETADA ... -QUANTITY UNIT_PRICE -VALOR
+    # Handle both kWh and garbled kIIWh
+    inj_lines = re.findall(
+        r'ENERGIA\s+INJETAD[A].*?k\w+h\s+-?[\d.,]+\s+[\d.,]+\s+(-[\d.,]+)',
         text
     )
-    for val in inj_amounts:
+    for val in inj_lines:
         total += abs(_parse_br_number(val))
+
+    # Also match ENERGIA INJ. BAND. AMARELA lines
+    band_lines = re.findall(
+        r'ENERGIA\s+INJ\.\s+BAND\..*?k\w+h\s+-?[\d.,]+\s+[\d.,]+\s+(-[\d.,]+)',
+        text
+    )
+    for val in band_lines:
+        total += abs(_parse_br_number(val))
+
     return round(total, 2)
 
 
