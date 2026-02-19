@@ -2295,7 +2295,15 @@ async def download_pdf_report(
             'generation_kwh': daily_dict.get(date_str, 0)
         })
     
-    # Get historical data (last 12 months)
+    # Get historical data (last 4 months) - need UC IDs for invoice lookup
+    units = await db.consumer_units.find({'plant_id': plant_id, 'is_active': True}, {'_id': 0}).to_list(100)
+    unit_ids = [u['id'] for u in units]
+    uc_numbers = [u.get('uc_number','') for u in units if u.get('uc_number')]
+    all_matching_ucs = await db.consumer_units.find(
+        {'uc_number': {'$in': uc_numbers}}, {'_id': 0, 'id': 1}
+    ).to_list(500)
+    all_uc_ids = list(set(unit_ids + [u['id'] for u in all_matching_ucs]))
+
     historical = []
     for i in range(1, 5):  # Last 4 months
         hist_date = datetime(year, mon, 1) - timedelta(days=30*i)
