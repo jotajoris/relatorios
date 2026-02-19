@@ -117,9 +117,6 @@ class SolarReportGenerator:
             else:
                 client_logo = _load_image(logo_url, 40, 40)
 
-        accent = Drawing(5, 50)
-        accent.add(Rect(0, 0, 5, 50, fillColor=YELLOW, strokeColor=None))
-
         title_parts = [
             Paragraph("ON SOLUCOES ENERGETICAS", self.styles['ON_Brand']),
             Paragraph(period, self.styles['Period']),
@@ -128,8 +125,10 @@ class SolarReportGenerator:
         if company_name and company_name.upper() != 'ON SOLUCOES ENERGETICAS':
             title_parts.append(Paragraph(company_name, self.styles['CompSub']))
 
-        cells = [accent]
-        widths = [8]
+        # Build table without Drawing in cell - use colored table border instead
+        cells = []
+        widths = []
+        
         if on_logo:
             cells.append(on_logo)
             widths.append(38)
@@ -149,6 +148,8 @@ class SolarReportGenerator:
             ('LEFTPADDING', (0, 0), (-1, -1), 4),
             ('TOPPADDING', (0, 0), (-1, -1), 0),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 0),
+            # Add yellow accent line on the left edge
+            ('LINEBEFOREBEFORE', (0, 0), (0, -1), 4, YELLOW),
         ]))
         return [tbl, Spacer(1, 5 * mm)]
 
