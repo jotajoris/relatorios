@@ -267,13 +267,13 @@ const PlantDetail = () => {
   };
 
   // PDF Download Functions
-  const handleDownloadPdf = async (month, type = 'basic') => {
+  const handleDownloadPdf = async (month) => {
     const monthStr = `${selectedYear}-${String(month).padStart(2, '0')}`;
     setDownloadingPdf(month);
     
     try {
       const response = await api.get(`/reports/download-pdf/${plantId}`, {
-        params: { month: monthStr, report_type: type },
+        params: { month: monthStr },
         responseType: 'blob'
       });
       
