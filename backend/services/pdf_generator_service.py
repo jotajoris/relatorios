@@ -233,6 +233,9 @@ class SolarReportGenerator:
         return drawing
 
     def _styled_table(self, headers, rows, col_widths=None):
+        if not rows:
+            # Don't create table with no data rows
+            return Spacer(1, 1)
         data = [headers] + rows
         if not col_widths:
             col_widths = [CONTENT_W / len(headers)] * len(headers)
