@@ -444,9 +444,9 @@ class SolarReportGenerator:
             el.append(self._sec("INFORMACOES CONCESSIONARIA", dark=True))
             el.append(Spacer(1,3*mm))
 
-            hdr = ['UC / Contrato','Ciclo','Consumo\nRegistrado','Energia\nCompensada',
+            hdr = ['UC','Denominacao','Ciclo','%','Consumo\nRegistrado','Energia\nCompensada',
                    'Energia\nFaturada','Credito\nAnterior','Credito\nAcumulado',
-                   'Faturado\n(R$)','Economizado\n(R$)']
+                   'Faturado\n(R$)','Economia\n(R$)']
             rows = []
             t_cons=t_comp=t_fat=t_ca=t_cacc=t_bill=t_sav=0
             for c in cu:
@@ -458,13 +458,13 @@ class SolarReportGenerator:
                 bill=c.get('amount_billed',0) or 0
                 sav=c.get('amount_saved',0) or 0
                 t_cons+=cons;t_comp+=comp;t_fat+=fat;t_ca+=ca;t_cacc+=cacc;t_bill+=bill;t_sav+=sav
-                name = (c.get('name') or c.get('address') or '')
                 uc = c.get('uc_number','')
-                label = f"{name[:22]}\n{uc}" if uc else name[:25]
-                rows.append([label,c.get('cycle',''),_n(cons,0),_n(comp,0),_n(fat,0),_n(ca,0),_n(cacc,0),_n(bill,2),_n(sav,2)])
-            rows.append(['TOTAL','',_n(t_cons,0),_n(t_comp,0),_n(t_fat,0),_n(t_ca,0),_n(t_cacc,0),_n(t_bill,2),_n(t_sav,2)])
+                name = (c.get('name') or '')[:18]
+                pct = f"{c.get('percentage',0):.0f}%"
+                rows.append([uc,name,c.get('cycle',''),pct,_n(cons,0),_n(comp,0),_n(fat,0),_n(ca,0),_n(cacc,0),_n(bill,2),_n(sav,2)])
+            rows.append(['TOTAL','','','',_n(t_cons,0),_n(t_comp,0),_n(t_fat,0),_n(t_ca,0),_n(t_cacc,0),_n(t_bill,2),_n(t_sav,2)])
 
-            el.append(self._nice_table(hdr, rows, [78,52,42,42,40,36,36,46,46], has_total=True))
+            el.append(self._nice_table(hdr, rows, [48,62,50,18,38,38,38,34,34,42,42], has_total=True))
             el.append(Spacer(1,4*mm))
             el.append(Paragraph(
                 f"<b>Resumo:</b> Consumo: {_n(t_cons,0)} kWh | Compensado: {_n(t_comp,0)} kWh | "
