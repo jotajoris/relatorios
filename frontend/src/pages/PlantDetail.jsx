@@ -1532,9 +1532,10 @@ const PlantDetail = () => {
                   <p className="text-neutral-500">{prognosisDetail.city} - {prognosisDetail.state} | {prognosisDetail.capacity_kwp} kWp</p>
                   <div className="grid grid-cols-4 gap-1">
                     {prognosisDetail.months?.map((m, i) => (
-                      <div key={i} className="bg-white px-2 py-1 rounded text-center">
-                        <span className="text-neutral-400 uppercase">{m.month}</span>
-                        <p className="font-bold text-[10px]">{Number(m.monthly_kwh).toLocaleString('pt-BR',{maximumFractionDigits:0})}</p>
+                      <div key={i} className="bg-white px-2 py-1 rounded text-center border">
+                        <span className="text-neutral-400 uppercase text-[9px]">{m.month}</span>
+                        <p className="font-bold text-[10px]">{Number(m.monthly_kwh).toLocaleString('pt-BR',{maximumFractionDigits:0})} kWh</p>
+                        <p className="text-[8px] text-neutral-400">irr: {m.irradiance}</p>
                       </div>
                     ))}
                   </div>
