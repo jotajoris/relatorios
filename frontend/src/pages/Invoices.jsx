@@ -1,10 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Upload, FileText, Search, Trash2, Eye, CheckCircle, AlertCircle, Loader2, Filter } from 'lucide-react';
+import { Upload, FileText, Search, Trash2, CheckCircle, AlertCircle, Loader2, Filter, ArrowLeft } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/dialog';
 import { toast } from 'sonner';
 import api from '../services/api';
 
@@ -19,9 +18,10 @@ const InvoicesPage = () => {
   const [uploading, setUploading] = useState(false);
   const [concessionaria, setConcessionaria] = useState('copel');
   const [searchTerm, setSearchTerm] = useState('');
-  const [parsedResult, setParsedResult] = useState(null);
-  const [showResultDialog, setShowResultDialog] = useState(false);
+  const [editData, setEditData] = useState(null);
   const [savingInvoice, setSavingInvoice] = useState(false);
+  const [showEditForm, setShowEditForm] = useState(false);
+  const [parsedMeta, setParsedMeta] = useState(null);
 
   const loadInvoices = useCallback(async () => {
     try {
@@ -54,13 +54,52 @@ const InvoicesPage = () => {
       });
 
       if (res.data.success) {
-        setParsedResult(res.data);
-        setShowResultDialog(true);
-        if (res.data.uc_found) {
-          toast.success(`Fatura da UC ${res.data.parsed_data?.uc_number || ''} processada!`);
-        } else {
-          toast.warning(`UC ${res.data.uc_number} nao encontrada no sistema`);
-        }
+        const pd = res.data.parsed_data || {};
+        const tv = pd.tariff_values || {};
+        setParsedMeta({
+          uc_found: res.data.uc_found,
+          consumer_unit: res.data.consumer_unit,
+          uc_number: pd.uc_number || res.data.uc_number,
+          message: res.data.message,
+        });
+        setEditData({
+          consumer_unit_id: pd.consumer_unit_id || '',
+          plant_id: pd.plant_id || '',
+          reference_month: pd.reference_month || '',
+          tariff_group: pd.tariff_group || 'B',
+          is_generator: pd.is_generator || false,
+          amount_total_brl: pd.amount_total_brl || 0,
+          billing_cycle_start: pd.billing_cycle_start || '',
+          billing_cycle_end: pd.billing_cycle_end || '',
+          amount_saved_brl: pd.amount_saved_brl || 0,
+          // FP
+          energy_registered_fp_kwh: pd.energy_registered_fp_kwh || 0,
+          tariff_total_fp: tv.tariff_total_fp || 0,
+          energy_billed_fp_kwh: pd.energy_billed_fp_kwh || 0,
+          energy_injected_fp_kwh: pd.energy_injected_fp_kwh || 0,
+          energy_compensated_fp_kwh: pd.energy_compensated_fp_kwh || 0,
+          credits_accumulated_fp_kwh: pd.credits_accumulated_fp_kwh || 0,
+          tariff_te_fp: tv.te_fp_unit || tv.te_fp || 0,
+          // P
+          energy_registered_p_kwh: pd.energy_registered_p_kwh || 0,
+          tariff_total_p: tv.tariff_total_p || 0,
+          energy_billed_p_kwh: pd.energy_billed_p_kwh || 0,
+          energy_injected_p_kwh: pd.energy_injected_p_kwh || 0,
+          energy_compensated_p_kwh: pd.energy_compensated_p_kwh || 0,
+          credits_accumulated_p_kwh: pd.credits_accumulated_p_kwh || 0,
+          tariff_te_p: tv.te_p_unit || tv.te_ponta || 0,
+          // Extra
+          public_lighting_brl: pd.public_lighting_brl || 0,
+          demand_measured_kw: pd.demand_measured_kw || 0,
+          demand_injected_kw: pd.demand_injected_kw || 0,
+          demand_contracted_kw: pd.demand_contracted_kw || 0,
+          credits_balance_fp_kwh: pd.credits_balance_fp_kwh || 0,
+          credits_balance_p_kwh: pd.credits_balance_p_kwh || 0,
+          pdf_file_path: res.data.filepath || '',
+          source: 'upload',
+        });
+        setShowEditForm(true);
+        toast.success(`Fatura processada!`);
       } else {
         toast.error(res.data.error || 'Erro ao processar PDF');
       }
@@ -72,17 +111,22 @@ const InvoicesPage = () => {
     }
   };
 
+  const handleFieldChange = (field, value) => {
+    setEditData(prev => ({ ...prev, [field]: value }));
+  };
+
   const handleSaveInvoice = async () => {
-    if (!parsedResult?.parsed_data?.consumer_unit_id) {
+    if (!editData?.consumer_unit_id) {
       toast.error('UC nao encontrada. Cadastre a UC antes de salvar.');
       return;
     }
     setSavingInvoice(true);
     try {
-      await api.post('/invoices/save-from-upload', parsedResult.parsed_data);
+      await api.post('/invoices/save-from-upload', editData);
       toast.success('Fatura salva com sucesso!');
-      setShowResultDialog(false);
-      setParsedResult(null);
+      setShowEditForm(false);
+      setEditData(null);
+      setParsedMeta(null);
       loadInvoices();
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Erro ao salvar fatura');
@@ -103,28 +147,138 @@ const InvoicesPage = () => {
   };
 
   const formatCurrency = (v) => {
-    if (!v) return 'R$ 0,00';
+    if (!v && v !== 0) return 'R$ 0,00';
     return `R$ ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
   const formatNumber = (v) => {
-    if (!v) return '0';
+    if (!v && v !== 0) return '0';
     return Number(v).toLocaleString('pt-BR', { maximumFractionDigits: 0 });
   };
 
   const filtered = invoices.filter(inv => {
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
-    return (
-      inv.reference_month?.toLowerCase().includes(term) ||
-      inv.consumer_unit_id?.toLowerCase().includes(term) ||
-      inv.plant_id?.toLowerCase().includes(term)
-    );
+    return inv.reference_month?.toLowerCase().includes(term) || inv.consumer_unit_id?.toLowerCase().includes(term);
   });
 
+  // Editable Form View (SolarZ-style)
+  if (showEditForm && editData) {
+    const isGroupA = editData.tariff_group === 'A';
+    return (
+      <div className="space-y-4" data-testid="invoice-edit-form">
+        {/* Top bar */}
+        <div className="flex items-center justify-between">
+          <button
+            className="flex items-center gap-2 text-sm text-neutral-500 hover:text-neutral-800 transition-colors"
+            onClick={() => { setShowEditForm(false); setEditData(null); setParsedMeta(null); }}
+            data-testid="back-btn"
+          >
+            <ArrowLeft className="h-4 w-4" /> Voltar
+          </button>
+          <Button
+            className="bg-[#1A1A1A] hover:bg-[#2D2D2D] text-white px-6"
+            onClick={handleSaveInvoice}
+            disabled={savingInvoice || !parsedMeta?.uc_found}
+            data-testid="save-invoice-btn"
+          >
+            {savingInvoice ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            Salvar
+          </Button>
+        </div>
+
+        {/* UC Header */}
+        <div className="flex items-center gap-3 px-1">
+          <div className="w-6 h-6 rounded bg-[#1A1A1A] flex items-center justify-center">
+            <FileText className="h-3.5 w-3.5 text-[#FFD600]" />
+          </div>
+          <span className="text-sm font-semibold text-[#1A1A1A]">
+            {parsedMeta?.consumer_unit?.plant_name || 'Usina'} | {parsedMeta?.uc_number || ''} | {editData.reference_month}
+          </span>
+          {!parsedMeta?.uc_found && (
+            <span className="ml-2 text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded">UC nao cadastrada</span>
+          )}
+        </div>
+
+        {/* Main Fields */}
+        <Card className="shadow-sm">
+          <CardContent className="p-5 space-y-4">
+            <div className="grid grid-cols-3 gap-4">
+              <Field label="Valor Faturado (R$)" value={editData.amount_total_brl}
+                onChange={v => handleFieldChange('amount_total_brl', parseFloat(v) || 0)} />
+              <Field label="Inicio do Ciclo" value={editData.billing_cycle_start}
+                onChange={v => handleFieldChange('billing_cycle_start', v)} />
+              <Field label="Fim do Ciclo" value={editData.billing_cycle_end}
+                onChange={v => handleFieldChange('billing_cycle_end', v)} />
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <Field label="Economizado (R$)" value={editData.amount_saved_brl}
+                onChange={v => handleFieldChange('amount_saved_brl', parseFloat(v) || 0)} />
+              <Field label="Ilum. Publica (R$)" value={editData.public_lighting_brl}
+                onChange={v => handleFieldChange('public_lighting_brl', parseFloat(v) || 0)} />
+              <div />
+            </div>
+
+            {/* FORA PONTA */}
+            <SectionLabel text="FORA PONTA" />
+            <div className="grid grid-cols-3 gap-4">
+              <Field label="Energia registrada (kWh)" value={editData.energy_registered_fp_kwh}
+                onChange={v => handleFieldChange('energy_registered_fp_kwh', parseFloat(v) || 0)} />
+              <Field label="Valor tarifa (R$)" value={editData.tariff_total_fp}
+                onChange={v => handleFieldChange('tariff_total_fp', parseFloat(v) || 0)} step="0.000001" />
+              <Field label="Energia faturada (kWh)" value={editData.energy_billed_fp_kwh}
+                onChange={v => handleFieldChange('energy_billed_fp_kwh', parseFloat(v) || 0)} />
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <Field label="Energia injetada (kWh)" value={editData.energy_injected_fp_kwh}
+                onChange={v => handleFieldChange('energy_injected_fp_kwh', parseFloat(v) || 0)} />
+              <Field label="Energia compensada (kWh)" value={editData.energy_compensated_fp_kwh}
+                onChange={v => handleFieldChange('energy_compensated_fp_kwh', parseFloat(v) || 0)} />
+              <Field label="Credito acumulado (kWh)" value={editData.credits_accumulated_fp_kwh}
+                onChange={v => handleFieldChange('credits_accumulated_fp_kwh', parseFloat(v) || 0)} />
+            </div>
+            <div className="grid grid-cols-3 gap-4">
+              <Field label="Tarifa TE (R$)" value={editData.tariff_te_fp}
+                onChange={v => handleFieldChange('tariff_te_fp', parseFloat(v) || 0)} step="0.000001" />
+              <div /><div />
+            </div>
+
+            {/* PONTA (Group A only, but show for all and let user fill) */}
+            {isGroupA && (
+              <>
+                <SectionLabel text="PONTA" />
+                <div className="grid grid-cols-3 gap-4">
+                  <Field label="Energia registrada (kWh)" value={editData.energy_registered_p_kwh}
+                    onChange={v => handleFieldChange('energy_registered_p_kwh', parseFloat(v) || 0)} />
+                  <Field label="Valor tarifa (R$)" value={editData.tariff_total_p}
+                    onChange={v => handleFieldChange('tariff_total_p', parseFloat(v) || 0)} step="0.000001" />
+                  <Field label="Energia faturada (kWh)" value={editData.energy_billed_p_kwh}
+                    onChange={v => handleFieldChange('energy_billed_p_kwh', parseFloat(v) || 0)} />
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <Field label="Energia injetada (kWh)" value={editData.energy_injected_p_kwh}
+                    onChange={v => handleFieldChange('energy_injected_p_kwh', parseFloat(v) || 0)} />
+                  <Field label="Energia compensada (kWh)" value={editData.energy_compensated_p_kwh}
+                    onChange={v => handleFieldChange('energy_compensated_p_kwh', parseFloat(v) || 0)} />
+                  <Field label="Credito acumulado (kWh)" value={editData.credits_accumulated_p_kwh}
+                    onChange={v => handleFieldChange('credits_accumulated_p_kwh', parseFloat(v) || 0)} />
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <Field label="Tarifa TE (R$)" value={editData.tariff_te_p}
+                    onChange={v => handleFieldChange('tariff_te_p', parseFloat(v) || 0)} step="0.000001" />
+                  <div /><div />
+                </div>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // List View
   return (
     <div className="space-y-6" data-testid="invoices-page">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-[#1A1A1A]">Faturas</h1>
@@ -153,22 +307,9 @@ const InvoicesPage = () => {
                   ))}
                 </SelectContent>
               </Select>
-
               <label className="cursor-pointer">
-                <input
-                  type="file"
-                  accept=".pdf"
-                  className="hidden"
-                  onChange={handleFileUpload}
-                  disabled={uploading}
-                  data-testid="invoice-file-input"
-                />
-                <Button
-                  variant="default"
-                  className="bg-[#1A1A1A] hover:bg-[#2D2D2D] text-white gap-2"
-                  disabled={uploading}
-                  asChild
-                >
+                <input type="file" accept=".pdf" className="hidden" onChange={handleFileUpload} disabled={uploading} data-testid="invoice-file-input" />
+                <Button variant="default" className="bg-[#1A1A1A] hover:bg-[#2D2D2D] text-white gap-2" disabled={uploading} asChild>
                   <span>
                     {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
                     {uploading ? 'Processando...' : 'Enviar PDF'}
@@ -180,17 +321,11 @@ const InvoicesPage = () => {
         </CardContent>
       </Card>
 
-      {/* Search & Filter */}
+      {/* Search */}
       <div className="flex items-center gap-3">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400" />
-          <Input
-            placeholder="Buscar por referencia, UC..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-            data-testid="invoice-search"
-          />
+          <Input placeholder="Buscar por referencia, UC..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10" data-testid="invoice-search" />
         </div>
         <div className="flex items-center gap-1 text-sm text-neutral-500">
           <Filter className="h-4 w-4" />
@@ -200,9 +335,7 @@ const InvoicesPage = () => {
 
       {/* Invoices List */}
       {loading ? (
-        <div className="flex items-center justify-center py-12">
-          <Loader2 className="h-6 w-6 animate-spin text-neutral-400" />
-        </div>
+        <div className="flex items-center justify-center py-12"><Loader2 className="h-6 w-6 animate-spin text-neutral-400" /></div>
       ) : filtered.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12 text-center">
@@ -222,15 +355,10 @@ const InvoicesPage = () => {
                       <FileText className="h-5 w-5 text-[#FFD600]" />
                     </div>
                     <div className="min-w-0">
-                      <p className="font-semibold text-sm text-[#1A1A1A] truncate">
-                        Ref: {inv.reference_month || 'N/A'}
-                      </p>
-                      <p className="text-xs text-neutral-400">
-                        Grupo {inv.tariff_group || 'B'} | {inv.is_generator ? 'Geradora' : 'Beneficiaria'}
-                      </p>
+                      <p className="font-semibold text-sm text-[#1A1A1A] truncate">Ref: {inv.reference_month || 'N/A'}</p>
+                      <p className="text-xs text-neutral-400">Grupo {inv.tariff_group || 'B'} | {inv.is_generator ? 'Geradora' : 'Beneficiaria'}</p>
                     </div>
                   </div>
-
                   <div className="hidden sm:flex items-center gap-6 text-sm">
                     <div className="text-right">
                       <p className="text-xs text-neutral-400">Consumo</p>
@@ -245,14 +373,8 @@ const InvoicesPage = () => {
                       <p className="font-semibold">{formatCurrency(inv.amount_total_brl)}</p>
                     </div>
                   </div>
-
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="text-red-400 hover:text-red-600 hover:bg-red-50"
-                    onClick={() => handleDeleteInvoice(inv.id)}
-                    data-testid={`delete-invoice-${inv.id}`}
-                  >
+                  <Button variant="ghost" size="icon" className="text-red-400 hover:text-red-600 hover:bg-red-50"
+                    onClick={() => handleDeleteInvoice(inv.id)} data-testid={`delete-invoice-${inv.id}`}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
@@ -261,103 +383,28 @@ const InvoicesPage = () => {
           ))}
         </div>
       )}
-
-      {/* Parsed Result Dialog */}
-      <Dialog open={showResultDialog} onOpenChange={setShowResultDialog}>
-        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              {parsedResult?.uc_found ? (
-                <CheckCircle className="h-5 w-5 text-emerald-500" />
-              ) : (
-                <AlertCircle className="h-5 w-5 text-amber-500" />
-              )}
-              Resultado da Leitura
-            </DialogTitle>
-          </DialogHeader>
-
-          {parsedResult && (
-            <div className="space-y-4">
-              {/* UC Info */}
-              <div className="p-3 rounded-lg bg-neutral-50 border">
-                <p className="text-sm font-medium">
-                  UC: <span className="text-[#1A1A1A] font-bold">{parsedResult.parsed_data?.uc_number || parsedResult.uc_number || 'N/A'}</span>
-                </p>
-                {parsedResult.consumer_unit && (
-                  <p className="text-xs text-neutral-500 mt-1">
-                    {parsedResult.consumer_unit.holder_name} | Usina: {parsedResult.consumer_unit.plant_name}
-                  </p>
-                )}
-                {!parsedResult.uc_found && (
-                  <p className="text-xs text-amber-600 mt-1">{parsedResult.message}</p>
-                )}
-              </div>
-
-              {/* Parsed Data Grid */}
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <DataRow label="Referencia" value={parsedResult.parsed_data?.reference_month} />
-                <DataRow label="Vencimento" value={parsedResult.parsed_data?.due_date} />
-                <DataRow label="Grupo" value={parsedResult.parsed_data?.tariff_group} />
-                <DataRow label="Bandeira" value={parsedResult.parsed_data?.tariff_flag} />
-                <DataRow label="Total" value={formatCurrency(parsedResult.parsed_data?.amount_total_brl)} highlight />
-                <DataRow label="Ilum. Publica" value={formatCurrency(parsedResult.parsed_data?.public_lighting_brl)} />
-              </div>
-
-              {/* Energy Data */}
-              <div>
-                <h4 className="font-semibold text-sm mb-2 text-[#1A1A1A]">Dados de Energia</h4>
-                <div className="grid grid-cols-2 gap-3 text-sm">
-                  {parsedResult.parsed_data?.tariff_group === 'A' ? (
-                    <>
-                      <DataRow label="Energia Reg. Ponta" value={`${formatNumber(parsedResult.parsed_data?.energy_registered_p_kwh)} kWh`} />
-                      <DataRow label="Energia Reg. F.Ponta" value={`${formatNumber(parsedResult.parsed_data?.energy_registered_fp_kwh)} kWh`} />
-                      <DataRow label="Injetada Ponta" value={`${formatNumber(parsedResult.parsed_data?.energy_injected_p_kwh)} kWh`} />
-                      <DataRow label="Injetada F.Ponta" value={`${formatNumber(parsedResult.parsed_data?.energy_injected_fp_kwh)} kWh`} />
-                      <DataRow label="Compensada Ponta" value={`${formatNumber(parsedResult.parsed_data?.energy_compensated_p_kwh)} kWh`} />
-                      <DataRow label="Compensada F.Ponta" value={`${formatNumber(parsedResult.parsed_data?.energy_compensated_fp_kwh)} kWh`} />
-                      <DataRow label="Demanda Medida" value={`${parsedResult.parsed_data?.demand_measured_kw || 0} kW`} />
-                      <DataRow label="Demanda Injetada" value={`${parsedResult.parsed_data?.demand_injected_kw || 0} kW`} />
-                    </>
-                  ) : (
-                    <>
-                      <DataRow label="Consumo" value={`${formatNumber(parsedResult.parsed_data?.energy_registered_fp_kwh)} kWh`} />
-                      <DataRow label="Compensado" value={`${formatNumber(parsedResult.parsed_data?.energy_compensated_fp_kwh)} kWh`} />
-                      <DataRow label="Faturado" value={`${formatNumber(parsedResult.parsed_data?.energy_billed_fp_kwh)} kWh`} />
-                      <DataRow label="Cred. Acumulado FP" value={`${formatNumber(parsedResult.parsed_data?.credits_accumulated_fp_kwh)} kWh`} />
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex gap-3 pt-2">
-                {parsedResult.uc_found && (
-                  <Button
-                    className="flex-1 bg-[#1A1A1A] hover:bg-[#2D2D2D] text-white"
-                    onClick={handleSaveInvoice}
-                    disabled={savingInvoice}
-                    data-testid="save-invoice-btn"
-                  >
-                    {savingInvoice ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <CheckCircle className="h-4 w-4 mr-2" />}
-                    Salvar Fatura
-                  </Button>
-                )}
-                <Button variant="outline" onClick={() => setShowResultDialog(false)}>
-                  Fechar
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };
 
-const DataRow = ({ label, value, highlight }) => (
-  <div className="flex justify-between items-center py-1.5 px-2 rounded bg-neutral-50">
-    <span className="text-neutral-500">{label}</span>
-    <span className={`font-medium ${highlight ? 'text-[#1A1A1A] font-bold' : ''}`}>{value || '-'}</span>
+const SectionLabel = ({ text }) => (
+  <div className="flex items-center gap-2 pt-2">
+    <div className="w-1 h-4 bg-[#FFD600] rounded-full" />
+    <span className="text-sm font-bold text-[#1A1A1A] uppercase tracking-wide">{text}</span>
+  </div>
+);
+
+const Field = ({ label, value, onChange, step = 'any' }) => (
+  <div className="space-y-1">
+    <label className="text-xs text-neutral-500">{label}</label>
+    <Input
+      type="text"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      step={step}
+      className="h-9 text-sm font-medium bg-white border-neutral-200 focus:border-[#FFD600] focus:ring-[#FFD600]/20"
+      data-testid={`field-${label.replace(/[\s()\/]/g, '-').toLowerCase()}`}
+    />
   </div>
 );
 
