@@ -664,6 +664,20 @@ const PlantDetail = () => {
                       </div>
                     </div>
                   </div>
+                  {/* Month navigation */}
+                  <div className="flex items-center gap-2 mt-2">
+                    <Button variant="ghost" size="sm" onClick={() => {
+                      const [y, m] = chartMonth.split('-').map(Number);
+                      const prev = m === 1 ? `${y-1}-12` : `${y}-${String(m-1).padStart(2,'0')}`;
+                      setChartMonth(prev);
+                    }}><ChevronLeft className="h-4 w-4" /></Button>
+                    <Input type="month" value={chartMonth} onChange={e => setChartMonth(e.target.value)} className="w-44 h-8 text-sm" />
+                    <Button variant="ghost" size="sm" onClick={() => {
+                      const [y, m] = chartMonth.split('-').map(Number);
+                      const next = m === 12 ? `${y+1}-01` : `${y}-${String(m+1).padStart(2,'0')}`;
+                      setChartMonth(next);
+                    }}><ChevronRight className="h-4 w-4" /></Button>
+                  </div>
                 </CardHeader>
                 <CardContent>
                   <div className="h-[300px]">
