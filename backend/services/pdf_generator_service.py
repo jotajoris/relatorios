@@ -298,10 +298,11 @@ class SolarReportGenerator:
         ]))
         el.append(Spacer(1,4*mm))
 
-        # Energy Flow Diagram
+        # Energy Flow Diagram with background image
         el.append(self._sec("Fluxo de Energia"))
         el.append(Spacer(1,2*mm))
-        el.append(self._energy_flow_diagram(d))
+        flow_elements = self._energy_flow_diagram(d)
+        el.extend(flow_elements)
         el.append(Spacer(1,4*mm))
 
         # Financial
