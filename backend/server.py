@@ -1739,7 +1739,24 @@ async def get_monthly_summary(
     if not plant:
         raise HTTPException(status_code=404, detail="Usina nao encontrada")
 
-    prognosis = plant.get('monthly_prognosis_kwh', 0)
+    flat_prognosis = plant.get('monthly_prognosis_kwh', 0)
+    kwp = plant.get('capacity_kwp', 0)
+    city_name = plant.get('city', '')
+
+    # Try to get per-month prognosis from irradiance data
+    month_prognosis = {}
+    if city_name and kwp:
+        city_doc = await db.irradiance_cities.find_one(
+            {'city': {'$regex': f'^{city_name}$', '$options': 'i'}},
+            {'_id': 0}
+        )
+        if city_doc:
+            irr = city_doc.get('irradiance', {})
+            months_key = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez']
+            for i, mk in enumerate(months_key):
+                irr_val = irr.get(mk, 0)
+                month_prognosis[i+1] = round(kwp * 30 * ((irr_val / 1000) - 0.1) * 0.75, 2)
+
     import calendar as cal_mod
     result = []
 
@@ -1754,13 +1771,14 @@ async def get_monthly_summary(
         ).to_list(100)
 
         gen_total = sum(d.get('generation_kwh', 0) for d in gen_docs)
-        perf = (gen_total / prognosis * 100) if prognosis > 0 else 0
+        prog = month_prognosis.get(month, flat_prognosis)
+        perf = (gen_total / prog * 100) if prog > 0 else 0
 
         result.append({
             'month': month,
             'year': year,
             'generation_kwh': round(gen_total, 2),
-            'prognosis_kwh': prognosis,
+            'prognosis_kwh': prog,
             'performance_percent': round(perf, 1),
         })
 
