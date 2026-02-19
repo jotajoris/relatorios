@@ -12,7 +12,8 @@ import {
   X,
   Zap,
   ChevronDown,
-  User
+  User,
+  Receipt
 } from 'lucide-react';
 import {
   DropdownMenu,
@@ -29,6 +30,7 @@ const navItems = [
   { path: '/clientes', label: 'Clientes', icon: Users },
   { path: '/usinas', label: 'Usinas', icon: Factory },
   { path: '/unidades-consumidoras', label: 'Unidades Consumidoras', icon: Zap },
+  { path: '/faturas', label: 'Faturas', icon: Receipt },
   { path: '/relatorios', label: 'Relatórios', icon: FileText },
   { path: '/configuracoes', label: 'Configurações', icon: Settings },
 ];

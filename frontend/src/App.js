@@ -10,6 +10,7 @@ import ConsumerUnits from "./pages/ConsumerUnits";
 import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
 import Profile from "./pages/Profile";
+import Invoices from "./pages/Invoices";
 import Layout from "./components/Layout";
 
 const ProtectedRoute = ({ children }) => {
@@ -81,6 +82,11 @@ function App() {
           <Route path="/unidades-consumidoras" element={
             <ProtectedRoute>
               <ConsumerUnits />
+            </ProtectedRoute>
+          } />
+          <Route path="/faturas" element={
+            <ProtectedRoute>
+              <Invoices />
             </ProtectedRoute>
           } />
           <Route path="/relatorios" element={
