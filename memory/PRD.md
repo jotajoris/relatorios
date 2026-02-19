@@ -62,6 +62,11 @@ Aplicação web full-stack para gerenciamento e elaboração de relatórios de u
 - [x] Corrigir parser de faturas PDF (copel_service.py → pdf_parser_service.py)
 - [x] Criar nova página "Faturas" no menu lateral
 - [x] Corrigir layout do relatório PDF
+- [x] KPIs na página Relatórios: Prognóstico, Geração do Mês, Desempenho % (19/02/2026)
+- [x] Formulário editável de fatura estilo SolarZ com todos os campos (19/02/2026)
+- [x] Parser: Economizado = soma deduções INJETADA = 159.07 (19/02/2026)
+- [x] Parser: Valor tarifa = TE + USD, Tarifa TE separada (19/02/2026)
+- [x] Parser: Energia compensada Ponta = total injetada, Faturada Ponta = -265 (19/02/2026)
 
 ## P1 - Upcoming
 - [ ] Frontend para gerenciamento do Sistema de Créditos (distribuição entre UCs)
