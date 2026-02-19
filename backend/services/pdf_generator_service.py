@@ -259,18 +259,25 @@ class SolarReportGenerator:
 
         def _on_page(canvas, doc_obj):
             canvas.saveState()
+            # Yellow footer bar
             canvas.setFillColor(Y)
-            canvas.rect(0, 0, PW, 14*mm, fill=1, stroke=0)
-            canvas.setFont('Helvetica-Bold', 7)
+            canvas.rect(0, 0, PW, 12*mm, fill=1, stroke=0)
+            # Footer text - centered
+            txt = "ON Solucoes Energeticas | onsolucoesenergeticas.com.br | @on.solucoes"
+            canvas.setFont('Helvetica-Bold', 6.5)
             canvas.setFillColor(BK)
-            canvas.drawString(MG+22, 7*mm, "ON Solucoes Energeticas | onsolucoesenergeticas.com.br | @on.solucoes")
-            canvas.linkURL("https://onsolucoesenergeticas.com.br", (MG+135, 5*mm, MG+270, 10*mm))
-            canvas.linkURL("https://instagram.com/on.solucoes", (MG+275, 5*mm, MG+370, 10*mm))
-            canvas.setFont('Helvetica-Bold', 7)
-            canvas.drawRightString(PW-MG, 7*mm, f"Pagina {doc_obj.page}")
-            if os.path.exists(LOGO):
-                try: canvas.drawImage(LOGO, MG+2, 2*mm, width=16, height=16, preserveAspectRatio=True, mask='auto')
-                except: pass
+            canvas.drawCentredString(PW/2, 5.5*mm, txt)
+            # Clickable links over the correct text positions
+            # "onsolucoesenergeticas.com.br" is roughly at center - measure text
+            tw = canvas.stringWidth(txt, 'Helvetica-Bold', 6.5)
+            x_start = PW/2 - tw/2
+            # ON Solucoes = ~115pt, then " | " = ~10pt, then site ~135pt, then " | " ~10pt, then insta ~55pt
+            site_x = x_start + 130
+            insta_x = site_x + 145
+            canvas.linkURL("https://onsolucoesenergeticas.com.br", (site_x, 3*mm, site_x+130, 9*mm))
+            canvas.linkURL("https://instagram.com/on.solucoes", (insta_x, 3*mm, insta_x+55, 9*mm))
+            # Page number - right
+            canvas.drawRightString(PW-MG, 5.5*mm, f"Pagina {doc_obj.page}")
             canvas.restoreState()
 
         doc.addPageTemplates([PageTemplate(id='all', frames=[frame], onPage=_on_page)])
