@@ -258,7 +258,13 @@ class SolarReportGenerator:
         class NumberedCanvas:
             pass
 
-        doc = BaseDocTemplate(buf, pagesize=A4, rightMargin=MG, leftMargin=MG, topMargin=MG, bottomMargin=18*mm)
+        # PDF metadata title
+        parts = d.get('month_year','').split('-')
+        mm_aa = f"{parts[1]}/{parts[0][2:]}" if len(parts)==2 else ''
+        pdf_title = f"{d.get('company_name','ON')} | {mm_aa} | Relatorio de Energia"
+
+        doc = BaseDocTemplate(buf, pagesize=A4, rightMargin=MG, leftMargin=MG, topMargin=MG, bottomMargin=18*mm,
+                              title=pdf_title, author="ON Solucoes Energeticas")
         frame = Frame(MG, 18*mm, CW, PH - MG - 18*mm, id='main')
 
         def _on_page(canvas, doc_obj):
