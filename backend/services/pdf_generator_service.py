@@ -397,43 +397,46 @@ class SolarReportGenerator:
             el.append(ef_tbl)
             el.append(Spacer(1, 4 * mm))
 
-            # Consumer Units Table
-            el.append(self._section("Detalhamento por Unidade Consumidora"))
-            el.append(Spacer(1, 2 * mm))
+            # Consumer Units Table - only show if there's data
+            if consumer_units:
+                el.append(self._section("Detalhamento por Unidade Consumidora"))
+                el.append(Spacer(1, 2 * mm))
 
-            cu_headers = ['Contrato', 'Ciclo', 'Consumo\nRegistrado', 'Energia\nCompensada',
-                          'Energia\nFaturada', 'Cred.\nAnterior', 'Cred.\nAcumulado',
-                          'Faturado\n(R$)', 'Economizado\n(R$)']
-            cu_rows = []
-            for c in consumer_units:
-                name = c.get('name') or c.get('uc_number') or 'N/A'
-                cu_rows.append([
-                    str(name)[:16],
-                    str(c.get('cycle') or ''),
-                    _fmt(c.get('consumption_registered') or 0, 0),
-                    _fmt(c.get('energy_compensated') or 0, 0),
-                    _fmt(c.get('energy_billed') or 0, 0),
-                    _fmt(c.get('credit_previous') or 0, 0),
-                    _fmt(c.get('credit_accumulated') or 0, 0),
-                    _fmt(c.get('amount_billed') or 0, 2),
-                    _fmt(c.get('amount_saved') or 0, 2),
-                ])
-            el.append(self._styled_table(cu_headers, cu_rows,
-                                          [62, 40, 46, 46, 46, 42, 44, 48, 48]))
+                cu_headers = ['Contrato', 'Ciclo', 'Consumo\nRegistrado', 'Energia\nCompensada',
+                              'Energia\nFaturada', 'Cred.\nAnterior', 'Cred.\nAcumulado',
+                              'Faturado\n(R$)', 'Economizado\n(R$)']
+                cu_rows = []
+                for c in consumer_units:
+                    name = c.get('name') or c.get('uc_number') or 'N/A'
+                    cu_rows.append([
+                        str(name)[:16],
+                        str(c.get('cycle') or ''),
+                        _fmt(c.get('consumption_registered') or 0, 0),
+                        _fmt(c.get('energy_compensated') or 0, 0),
+                        _fmt(c.get('energy_billed') or 0, 0),
+                        _fmt(c.get('credit_previous') or 0, 0),
+                        _fmt(c.get('credit_accumulated') or 0, 0),
+                        _fmt(c.get('amount_billed') or 0, 2),
+                        _fmt(c.get('amount_saved') or 0, 2),
+                    ])
+                
+                if cu_rows:
+                    el.append(self._styled_table(cu_headers, cu_rows,
+                                                  [62, 40, 46, 46, 46, 42, 44, 48, 48]))
 
-            # Totals - handle None values from get()
-            totals_cons = sum(c.get('consumption_registered') or 0 for c in consumer_units)
-            totals_comp = sum(c.get('energy_compensated') or 0 for c in consumer_units)
-            totals_bill = sum(c.get('amount_billed') or 0 for c in consumer_units)
-            totals_save = sum(c.get('amount_saved') or 0 for c in consumer_units)
-            el.append(Spacer(1, 2 * mm))
-            el.append(Paragraph(
-                f"<b>TOTAIS:</b> Consumo: {_fmt(totals_cons, 0)} kWh | "
-                f"Compensado: {_fmt(totals_comp, 0)} kWh | "
-                f"Faturado: {_brl(totals_bill)} | "
-                f"<font color='#10B981'><b>Economizado: {_brl(totals_save)}</b></font>",
-                self.styles['Body']
-            ))
+                    # Totals - handle None values from get()
+                    totals_cons = sum(c.get('consumption_registered') or 0 for c in consumer_units)
+                    totals_comp = sum(c.get('energy_compensated') or 0 for c in consumer_units)
+                    totals_bill = sum(c.get('amount_billed') or 0 for c in consumer_units)
+                    totals_save = sum(c.get('amount_saved') or 0 for c in consumer_units)
+                    el.append(Spacer(1, 2 * mm))
+                    el.append(Paragraph(
+                        f"<b>TOTAIS:</b> Consumo: {_fmt(totals_cons, 0)} kWh | "
+                        f"Compensado: {_fmt(totals_comp, 0)} kWh | "
+                        f"Faturado: {_brl(totals_bill)} | "
+                        f"<font color='#10B981'><b>Economizado: {_brl(totals_save)}</b></font>",
+                        self.styles['Body']
+                    ))
 
         # Footer
         el.append(Spacer(1, 8 * mm))
