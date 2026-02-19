@@ -75,6 +75,8 @@ const PlantDetail = () => {
   const [chartData, setChartData] = useState([]);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [availableYears, setAvailableYears] = useState([]);
+  const [chartMonth, setChartMonth] = useState(`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`);
+  const [ucInvoiceStatus, setUcInvoiceStatus] = useState([]);
   
   // Dialogs
   const [ucDialogOpen, setUcDialogOpen] = useState(false);
