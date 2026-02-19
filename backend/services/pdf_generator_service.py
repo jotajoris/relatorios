@@ -212,50 +212,44 @@ class SolarReportGenerator:
         return t
 
     def _hist_table(self, hist_data):
-        """Meses Anteriores table matching reference: Mes/Ano | Geracao | Desempenho | Consumo PT | Consumo FP | Economizado | Faturado + SOMA."""
+        """Meses Anteriores - ON palette (black text, yellow section header)."""
         hs = _ps('HH2',7.5,'Helvetica-Bold',GD,TA_CENTER,10)
-        tv = _ps('HV2',8,'Helvetica-Bold',colors.HexColor('#F97316'),TA_CENTER,10)
+        tv = _ps('HV2',8,'Helvetica-Bold',BK,TA_CENTER,10)
         tl = _ps('HL2',8,'Helvetica',BK,TA_LEFT,10)
 
         headers = ['Mes/Ano','Geracao','Desemp.','Consumo PT','Consumo FP','Economizado','Faturado']
         pdata = [[Paragraph(h, hs) for h in headers]]
 
-        sum_gen = sum_perf_n = sum_pt = sum_fp = sum_eco = sum_fat = 0
+        sum_gen = sum_pt = sum_fp = sum_eco = sum_fat = 0
         count = 0
         for h in hist_data:
             gk = h.get('generation_kwh',0)
             pk = h.get('prognosis_kwh',0)
             pf = (gk/pk*100) if pk>0 else 0
-            # We don't have per-month consumption data in historical, use 0 for now
             pt = h.get('consumption_p',0)
             fp = h.get('consumption_fp',0)
             eco = h.get('economizado',0)
             fat = h.get('faturado',0)
             sum_gen += gk; sum_pt += pt; sum_fp += fp; sum_eco += eco; sum_fat += fat
-            if pk > 0: sum_perf_n += 1; count += 1
+            count += 1
             pdata.append([
                 Paragraph(h.get('month',h.get('month_year','')), tl),
                 Paragraph(f"{_n(gk,0)} kWh", tv),
                 Paragraph(f"{pf:.0f}%", tv),
                 Paragraph(f"{_n(pt,0)} kWh" if pt else "-", tv),
                 Paragraph(f"{_n(fp,0)} kWh" if fp else "-", tv),
-                Paragraph(f"{_brl(eco)}" if eco else "-", tv),
-                Paragraph(f"{_brl(fat)}" if fat else "-", tv),
+                Paragraph(_brl(eco) if eco else "-", tv),
+                Paragraph(_brl(fat) if fat else "-", tv),
             ])
 
         # SOMA row
-        avg_perf = (sum_gen / (sum_gen + 1) * 100) if count > 0 else 0
-        sb = _ps('SB2',8,'Helvetica-Bold',colors.HexColor('#F97316'),TA_CENTER,10)
-        su = _ps('SU2',6,'Helvetica',colors.HexColor('#F97316'),TA_CENTER,8)
-        soma_row1 = [Paragraph('',sb)] + [Paragraph(v,sb) for v in [
-            f'Soma\nGeracao',f'Desemp.',f'Soma Cons.\nPT',f'Soma Cons.\nFP',f'Soma\nEconomizado',f'Soma\nFaturado']]
-        soma_row2 = [Paragraph('',sb)] + [Paragraph(v,sb) for v in [
-            f"{_n(sum_gen,0)}", f"-", f"{_n(sum_pt,0)}", f"{_n(sum_fp,0)}", f"{_n(sum_eco,2)}", f"{_n(sum_fat,2)}"]]
-        soma_row3 = [Paragraph('',su)] + [Paragraph(v,su) for v in ['kWh','%','kWh','kWh','R$','R$']]
-
-        pdata.append(soma_row1)
-        pdata.append(soma_row2)
-        pdata.append(soma_row3)
+        sb = _ps('SB2',8,'Helvetica-Bold',BK,TA_CENTER,10)
+        su = _ps('SU2',6,'Helvetica',GD,TA_CENTER,8)
+        pdata.append([Paragraph('',sb)] + [Paragraph(v,sb) for v in [
+            'Soma\nGeracao','Desemp.','Soma Cons.\nPT','Soma Cons.\nFP','Soma\nEconomizado','Soma\nFaturado']])
+        pdata.append([Paragraph('',sb)] + [Paragraph(v,sb) for v in [
+            f"{_n(sum_gen,0)}", "-", f"{_n(sum_pt,0)}", f"{_n(sum_fp,0)}", f"{_n(sum_eco,2)}", f"{_n(sum_fat,2)}"]])
+        pdata.append([Paragraph('',su)] + [Paragraph(v,su) for v in ['kWh','%','kWh','kWh','R$','R$']])
 
         w = CW / 7
         t = Table(pdata, colWidths=[w]*7)
