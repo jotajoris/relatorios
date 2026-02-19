@@ -465,12 +465,15 @@ class SolarReportGenerator:
                 sav=c.get('amount_saved',0) or 0
                 t_cons+=cons;t_comp+=comp;t_fat+=fat;t_ca+=ca;t_cacc+=cacc;t_bill+=bill;t_sav+=sav
                 uc = c.get('uc_number','')
-                name = (c.get('name') or '')[:18]
-                pct = f"{c.get('percentage',0):.0f}%"
+                name = (c.get('name') or '')[:25]
+                pct_val = c.get('percentage', 0) or 0
+                pct = f"{pct_val:.0f} %" if pct_val == int(pct_val) else f"{pct_val:.1f} %"
                 rows.append([uc,name,c.get('cycle',''),pct,_n(cons,0),_n(comp,0),_n(fat,0),_n(ca,0),_n(cacc,0),_n(bill,2),_n(sav,2)])
             rows.append(['TOTAL','','','',_n(t_cons,0),_n(t_comp,0),_n(t_fat,0),_n(t_ca,0),_n(t_cacc,0),_n(t_bill,2),_n(t_sav,2)])
 
-            el.append(self._nice_table(hdr, rows, [48,62,50,18,38,38,38,34,34,42,42], has_total=True))
+            # Wider columns - use full A4 width
+            el.append(self._nice_table(hdr, rows,
+                [52,72,56,22,44,44,42,38,38,48,48], has_total=True))
             el.append(Spacer(1,4*mm))
             el.append(Paragraph(
                 f"<b>Resumo:</b> Consumo: {_n(t_cons,0)} kWh | Compensado: {_n(t_comp,0)} kWh | "
