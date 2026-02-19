@@ -2267,7 +2267,8 @@ async def download_pdf_report(
     try:
         pdf_bytes = generate_plant_report(report_data, report_type)
     except Exception as e:
-        logger.error(f"Error generating PDF: {str(e)}")
+        import traceback
+        logger.error(f"Error generating PDF: {str(e)}\n{traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"Erro ao gerar PDF: {str(e)}")
     
     # Return PDF
