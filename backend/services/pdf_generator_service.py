@@ -329,8 +329,9 @@ class SolarReportGenerator:
 
         # Environmental
         env = data.get('environmental', {})
-        co2t = env.get('co2_avoided_kg', 0) / 1000
-        trees = env.get('trees_saved', 0)
+        co2_val = env.get('co2_avoided_kg', 0)
+        co2t = (co2_val if co2_val else 0) / 1000
+        trees = env.get('trees_saved', 0) or 0  # Handle None
         el.append(self._section("Impacto Ambiental (12 meses)"))
         el.append(Spacer(1, 2 * mm))
         el.append(self._kpi_row([
