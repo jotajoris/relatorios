@@ -336,28 +336,38 @@ const PlantDetail = () => {
     }
   };
 
-  // Invoice Upload Functions
+  // Invoice Upload Functions - Auto-detect UC
   const handleInvoiceUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    
-    if (!selectedUcForInvoice) {
-      toast.error('Selecione uma UC primeiro');
-      return;
-    }
     
     setUploadingInvoice(true);
     const formData = new FormData();
     formData.append('file', file);
     
     try {
-      const response = await api.post(`/invoices/upload-pdf/${selectedUcForInvoice}`, formData, {
+      // Use auto-detect endpoint - no need to select UC first
+      const response = await api.post('/invoices/upload-pdf-auto', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       
       if (response.data.success) {
-        setParsedInvoice(response.data.parsed_data);
-        toast.success('Fatura processada! Revise os dados antes de salvar.');
+        if (response.data.uc_found) {
+          // UC was found, show parsed data
+          setParsedInvoice({
+            ...response.data.parsed_data,
+            uc_info: response.data.consumer_unit
+          });
+          toast.success(`Fatura da UC ${response.data.consumer_unit.uc_number} processada!`);
+        } else {
+          // UC not found
+          toast.warning(response.data.message);
+          setParsedInvoice({
+            ...response.data.parsed_data,
+            uc_not_found: true
+          });
+        }
+        setInvoiceDialogOpen(true);
       } else {
         toast.error(response.data.error || 'Erro ao processar fatura');
       }
@@ -376,13 +386,38 @@ const PlantDetail = () => {
     
     setSaving(true);
     try {
-      await api.post('/invoices/save-from-upload', parsedInvoice);
+      // Create invoice from parsed data
+      const invoiceData = {
+        consumer_unit_id: parsedInvoice.consumer_unit_id,
+        plant_id: parsedInvoice.plant_id,
+        reference_month: parsedInvoice.reference_month,
+        billing_cycle_start: parsedInvoice.billing_cycle_start,
+        billing_cycle_end: parsedInvoice.billing_cycle_end,
+        due_date: parsedInvoice.due_date,
+        amount_total_brl: parsedInvoice.amount_total_brl,
+        amount_saved_brl: parsedInvoice.amount_saved_brl,
+        energy_registered_fp_kwh: parsedInvoice.energy_registered_fp_kwh,
+        energy_registered_p_kwh: parsedInvoice.energy_registered_p_kwh,
+        energy_injected_fp_kwh: parsedInvoice.energy_injected_fp_kwh,
+        energy_injected_p_kwh: parsedInvoice.energy_injected_p_kwh,
+        energy_compensated_fp_kwh: parsedInvoice.energy_compensated_fp_kwh,
+        energy_compensated_p_kwh: parsedInvoice.energy_compensated_p_kwh,
+        energy_billed_fp_kwh: parsedInvoice.energy_billed_fp_kwh,
+        credits_balance_fp_kwh: parsedInvoice.credits_balance_fp_kwh,
+        credits_accumulated_fp_kwh: parsedInvoice.credits_accumulated_fp_kwh,
+        tariff_group: parsedInvoice.tariff_group,
+        tariff_flag: parsedInvoice.tariff_flag,
+        demand_contracted_kw: parsedInvoice.demand_contracted_kw,
+        demand_measured_kw: parsedInvoice.demand_measured_kw,
+      };
+      
+      await api.post('/invoices', invoiceData);
       toast.success('Fatura salva com sucesso!');
       setParsedInvoice(null);
       setInvoiceDialogOpen(false);
       loadData();
     } catch (error) {
-      toast.error('Erro ao salvar fatura');
+      toast.error(error.response?.data?.detail || 'Erro ao salvar fatura');
     } finally {
       setSaving(false);
     }
