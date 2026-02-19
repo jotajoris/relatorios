@@ -61,22 +61,30 @@ def _detect_tariff_group(text: str) -> str:
 
 
 def _extract_uc_number(text: str) -> Optional[str]:
-    """Extract UC number - 9 digit number near address or header."""
-    # Pattern 1: After address, standalone 9-digit on same or next line
-    m = re.search(r'Endereço[:\s]*.+?(\d{9})', text, re.DOTALL)
+    """Extract UC number (7-9 digits) from COPEL invoice."""
+    # Best pattern: UC number followed by MM/YYYY DD/MM/YYYY R$ at bottom of page
+    # e.g. "2902567 01/2026 05/02/2026 R$3.122,79"
+    # or "113577680 01/2026 01/02/2026 R$3.285,91"
+    m = re.search(r'\b(\d{7,9})\s+\d{2}/\d{4}\s+\d{2}/\d{2}/\d{4}\s+R\$', text)
     if m:
-        return m.group(1)
+        uc = m.group(1)
+        # Filter out NF numbers (start with 210, 310)
+        if not uc.startswith('210') and not uc.startswith('310'):
+            return uc
 
-    # Pattern 2: In early text, standalone 9-digit number
+    # Pattern 2: After address line, 7-9 digit number
+    m = re.search(r'Endereço[:\s]*.+?(\d{7,9})\b', text, re.DOTALL)
+    if m:
+        uc = m.group(1)
+        if not uc.startswith('210') and not uc.startswith('310') and not uc.startswith('412'):
+            return uc
+
+    # Pattern 3: In first 1200 chars, standalone 7-9 digit number
     first_section = text[:1200]
-    candidates = re.findall(r'\b(\d{9})\b', first_section)
-    # Filter out NF numbers (starting with 2 and having 10 digits nearby)
+    candidates = re.findall(r'\b(\d{7,9})\b', first_section)
     for c in candidates:
-        if not c.startswith('210') and not c.startswith('310') and not c.startswith('412'):
+        if not c.startswith('210') and not c.startswith('310') and not c.startswith('412') and not c.startswith('043'):
             return c
-
-    if candidates:
-        return candidates[0]
 
     return None
 
