@@ -433,9 +433,14 @@ def _extract_group_b_data(text: str) -> Dict[str, Any]:
     data["demand_contracted_kw"] = 0
     data["demand_injected_kw"] = 0
 
-    # Tariff values
+    # Tariff values - derive from consumption amounts and quantities
     tariffs = {}
-    # From ENERGIA INJ. OUC lines (cleaner text, always available for beneficiaries)
+    # Best source: actual consumption line amounts / quantity
+    # ENERGIA ELET CONSUMO ... kWh 6.744 ... 2.529,88 → TE = 2529.88/6744
+    # ENERGIA ELET USO SISTEMA ... kWh 6.744 ... 3.364,04 → TUSD = 3364.04/6744
+    consumption = data.get("energy_registered_fp_kwh", 0)
+
+    # Try from INJ. OUC lines (cleaner text)
     m = re.search(r'ENERGIA\s+INJ\.\s+OUC\s+OPT\s+TE.*?kWh\s+-?[\d.,]+\s+(0,\d{5,6})', text)
     if m:
         tariffs["te_fp"] = _parse_br_number(m.group(1))
@@ -444,19 +449,33 @@ def _extract_group_b_data(text: str) -> Dict[str, Any]:
     if m:
         tariffs["tusd_fp"] = _parse_br_number(m.group(1))
         tariffs["usd_fp_unit"] = tariffs["tusd_fp"]
-    # Fallback: garbled first page text
-    if "te_fp" not in tariffs:
+
+    # Override with CONSUMPTION tariffs (higher, represents what user actually pays)
+    # Derive from total amounts if consumption > 0
+    if consumption > 0:
+        # Extract total TE amount from CONSUMO line
+        m_te = re.search(r'ENERGIA\s+ELET\s+CONSUMO.*?kWh.*?[\d.,]+\s+\w?\s*[\d.,]+\s+\w?\s*([\d.,]+)', text, re.DOTALL)
+        m_tusd = re.search(r'ENERGIA\s+ELET\s+USO\s+SISTEMA.*?kWh.*?[\d.,]+\s+\w?\s*[\d.,]+\s+\w?\s*([\d.,]+)', text, re.DOTALL)
+        if m_te:
+            te_amount = _parse_br_number(m_te.group(1))
+            if te_amount > 100:  # it's the total R$ amount
+                tariffs["te_fp_unit"] = round(te_amount / consumption, 6)
+        if m_tusd:
+            tusd_amount = _parse_br_number(m_tusd.group(1))
+            if tusd_amount > 100:
+                tariffs["usd_fp_unit"] = round(tusd_amount / consumption, 6)
+
+    # Fallback: use unit prices from garbled text
+    if "te_fp_unit" not in tariffs:
         m = re.search(r'ENERGIA\s+ELET\s+CONSUMO.*?kWh.*?[\d.,]+\s+\w?\s*(0,\d{5,6})', text, re.DOTALL)
         if m:
-            tariffs["te_fp"] = _parse_br_number(m.group(1))
-            tariffs["te_fp_unit"] = tariffs["te_fp"]
-    if "tusd_fp" not in tariffs:
+            tariffs["te_fp_unit"] = _parse_br_number(m.group(1))
+    if "usd_fp_unit" not in tariffs:
         m = re.search(r'ENERGIA\s+ELET\s+USO\s+SISTEMA.*?kWh.*?[\d.,]+\s+\w?\s*(0,\d{5,6})', text, re.DOTALL)
         if m:
-            tariffs["tusd_fp"] = _parse_br_number(m.group(1))
-            tariffs["usd_fp_unit"] = tariffs["tusd_fp"]
-    # Calculate tariff_total_fp = TE + TUSD
-    tariffs["tariff_total_fp"] = tariffs.get("te_fp", 0) + tariffs.get("tusd_fp", 0)
+            tariffs["usd_fp_unit"] = _parse_br_number(m.group(1))
+
+    tariffs["tariff_total_fp"] = round(tariffs.get("te_fp_unit", 0) + tariffs.get("usd_fp_unit", 0), 6)
     data["tariff_values"] = tariffs
 
     return data
