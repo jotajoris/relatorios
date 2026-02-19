@@ -146,10 +146,12 @@ def parse_growatt_excel(file_content: bytes, filename: str) -> Dict[str, Any]:
             inverter_name = str(row.iloc[0])
             
             # Extract daily values only for days that have data
+            # Stop before the last column which is "Total(kWh)"
             daily_values = []
             for day in range(1, actual_days + 1):
                 col_idx = day + 2  # Column index (day 1 is column 3)
-                if col_idx < len(row):
+                # Ensure we don't read the Total column
+                if col_idx < len(row) - 1:
                     val = row.iloc[col_idx]
                     if pd.notna(val):
                         try:
