@@ -125,7 +125,8 @@ const PlantDetail = () => {
   // City/State selection for irradiance
   const [statesList, setStatesList] = useState([]);
   const [filteredCities, setFilteredCities] = useState([]);
-  const [selectedState, setSelectedState] = useState('');
+  const [citySearchText, setCitySearchText] = useState('');
+  const [showCityDropdown, setShowCityDropdown] = useState(false);
   const [calculatingPrognosis, setCalculatingPrognosis] = useState(false);
   const [prognosisDetail, setPrognosisDetail] = useState(null);
 
@@ -139,27 +140,31 @@ const PlantDetail = () => {
   const loadCitiesByState = async (state) => {
     if (!state) { setFilteredCities([]); return; }
     try {
-      const res = await api.get(`/irradiance/cities?state=${encodeURIComponent(state)}&q=`);
-      // The API returns max 30, but for state filter we need all cities
-      // Use a broader query
-      const res2 = await api.get(`/irradiance/cities?state=${encodeURIComponent(state)}`);
-      setFilteredCities(res2.data.map(c => c.city).sort());
+      const res = await api.get(`/irradiance/cities?state=${encodeURIComponent(state)}`);
+      setFilteredCities(res.data.map(c => c.city).sort());
     } catch { setFilteredCities([]); }
   };
 
-  const handleStateSelect = (state) => {
-    setSelectedState(state);
-    setPlantFormData({...plantFormData, state: state});
+  const handleStateSelect = (e) => {
+    const state = e.target.value;
+    setPlantFormData(prev => ({...prev, state}));
+    setCitySearchText('');
     loadCitiesByState(state);
   };
 
-  const handleCitySelect = (city) => {
-    setPlantFormData({...plantFormData, city: city});
+  const handleCityClick = (city) => {
+    setPlantFormData(prev => ({...prev, city}));
+    setCitySearchText(city);
+    setShowCityDropdown(false);
   };
+
+  const cityMatches = filteredCities.filter(c => 
+    !citySearchText || c.toLowerCase().includes(citySearchText.toLowerCase())
+  ).slice(0, 50);
 
   const calculatePrognosis = async () => {
     if (!plantFormData.city || !plantFormData.capacity_kwp) {
-      toast.error('Preencha a cidade e a potencia antes');
+      toast.error('Preencha o estado, cidade e potencia');
       return;
     }
     setCalculatingPrognosis(true);
@@ -170,11 +175,11 @@ const PlantDetail = () => {
       });
       const d = res.data;
       setPrognosisDetail(d);
-      setPlantFormData({
-        ...plantFormData,
+      setPlantFormData(prev => ({
+        ...prev,
         monthly_prognosis_kwh: d.average_monthly_kwh,
         annual_prognosis_kwh: d.total_annual_kwh,
-      });
+      }));
       toast.success(`Prognostico calculado: ${(d.total_annual_kwh/1000).toFixed(2)} MWh/ano`);
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Erro ao calcular prognostico');
