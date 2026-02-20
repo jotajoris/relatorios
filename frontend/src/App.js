@@ -11,6 +11,7 @@ import Reports from "./pages/Reports";
 import Settings from "./pages/Settings";
 import Profile from "./pages/Profile";
 import Invoices from "./pages/Invoices";
+import Portais from "./pages/Portais";
 import Layout from "./components/Layout";
 
 const ProtectedRoute = ({ children }) => {
