@@ -1243,6 +1243,8 @@ async def get_plants_summary(current_user: dict = Depends(get_current_user)):
     now = datetime.now(timezone.utc)
     month_start = now.replace(day=1).strftime('%Y-%m-%d')
     
+    total_capacity_mwp = 0
+    total_gen_all = 0
     summaries = []
     for plant in plants:
         # Get generation for this month
@@ -1255,21 +1257,46 @@ async def get_plants_summary(current_user: dict = Depends(get_current_user)):
         prognosis = plant.get('monthly_prognosis_kwh') or 0
         performance = (total_gen / prognosis * 100) if prognosis and prognosis > 0 else 0
         
-        # Get client name
-        client = await db.clients.find_one({'id': plant['client_id']}, {'_id': 0, 'name': 1})
+        # Get client name and contact
+        client = await db.clients.find_one({'id': plant['client_id']}, {'_id': 0, 'name': 1, 'contact_person': 1})
+        
+        # Get total generation for 12 months
+        year_ago = (now - timedelta(days=365)).strftime('%Y-%m-%d')
+        gen_12m = await db.generation_data.find({
+            'plant_id': plant['id'],
+            'date': {'$gte': year_ago}
+        }, {'_id': 0, 'generation_kwh': 1}).to_list(10000)
+        total_gen_12m = sum(d.get('generation_kwh', 0) for d in gen_12m)
+        
+        cap = plant.get('capacity_kwp', 0)
+        total_capacity_mwp += cap / 1000
+        total_gen_all += total_gen_12m
         
         summaries.append({
             'id': plant['id'],
             'name': plant['name'],
             'client_name': client.get('name', 'N/A') if client else 'N/A',
-            'capacity_kwp': plant.get('capacity_kwp', 0),
+            'contact_person': client.get('contact_person') if client else None,
+            'city': plant.get('city', ''),
+            'state': plant.get('state', ''),
+            'capacity_kwp': cap,
+            'installation_date': plant.get('installation_date', ''),
             'status': plant.get('status', 'online'),
             'generation_kwh': round(total_gen, 2),
+            'generation_12m_kwh': round(total_gen_12m, 2),
             'prognosis_kwh': prognosis,
-            'performance': round(performance, 1)
+            'performance': round(performance, 1),
+            'logo_url': plant.get('logo_url'),
         })
     
-    return summaries
+    return {
+        'plants': summaries,
+        'totals': {
+            'total_plants': len(plants),
+            'total_capacity_mwp': round(total_capacity_mwp, 2),
+            'total_generation_gwh': round(total_gen_all / 1000000, 2),
+        }
+    }
 
 @api_router.get("/dashboard/generation-chart/{plant_id}")
 async def get_generation_chart(
