@@ -223,7 +223,7 @@ const Dashboard = () => {
                       <div className="flex items-center gap-3">
                         <div className={`w-10 h-10 rounded-full flex items-center justify-center ring-2 ${statusRing[status]} overflow-hidden bg-neutral-100`}>
                           {p.logo_url ? (
-                            <img src={`${API_URL}${p.logo_url}`} alt="" className="w-full h-full object-cover" />
+                            <img src={p.logo_url.startsWith('http') ? p.logo_url : `${API_URL}${p.logo_url}`} alt="" className="w-full h-full object-cover" />
                           ) : (
                             <Factory className="h-5 w-5 text-neutral-400" />
                           )}
