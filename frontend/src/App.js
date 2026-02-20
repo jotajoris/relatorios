@@ -95,6 +95,11 @@ function App() {
               <Reports />
             </ProtectedRoute>
           } />
+          <Route path="/portais" element={
+            <ProtectedRoute>
+              <Portais />
+            </ProtectedRoute>
+          } />
           <Route path="/configuracoes" element={
             <ProtectedRoute>
               <Settings />
