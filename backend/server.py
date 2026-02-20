@@ -1871,7 +1871,8 @@ async def get_monthly_summary(
 
         # For current month: prognosis proportional to days elapsed
         if year == current_year and month == current_month:
-            prog_adjusted = prog * (current_day / 30) if prog > 0 else 0
+            prog_daily = prog / days if prog > 0 else 0
+            prog_adjusted = prog_daily * current_day
             perf = (gen_total / prog_adjusted * 100) if prog_adjusted > 0 else 0
         else:
             perf = (gen_total / prog * 100) if prog > 0 else 0
