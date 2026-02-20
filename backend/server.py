@@ -2695,7 +2695,7 @@ async def download_pdf_report(
         if city_doc:
             months_key = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez']
             irr_val = city_doc.get('irradiance', {}).get(months_key[mon - 1], 0)
-            irr_prog = round(kwp * 30 * ((irr_val / 1000) - 0.1) * 0.75, 2)
+            irr_prog = round(kwp * days_in_month * ((irr_val / 1000) - 0.1) * 0.75, 2)
             if irr_prog > 0:
                 prognosis = irr_prog
     
