@@ -1805,8 +1805,17 @@ const PlantDetail = () => {
                     {prognosisDetail.months?.map((m, i) => (
                       <div key={i} className="bg-white px-2 py-1 rounded text-center border">
                         <span className="text-neutral-400 uppercase text-[9px]">{m.month}</span>
-                        <p className="font-bold text-[10px]">{Number(m.monthly_kwh).toLocaleString('pt-BR',{maximumFractionDigits:0})} kWh</p>
-                        <p className="text-[8px] text-neutral-400">irr: {m.irradiance}</p>
+                        <Input type="number" className="h-6 text-[10px] text-center p-0 border-0 font-bold"
+                          defaultValue={Math.round(m.monthly_kwh)}
+                          onChange={(e) => {
+                            const newVal = parseFloat(e.target.value) || 0;
+                            const months = [...prognosisDetail.months];
+                            months[i] = {...months[i], monthly_kwh: newVal};
+                            const total = months.reduce((s,x) => s + x.monthly_kwh, 0);
+                            setPrognosisDetail(prev => ({...prev, months, total_annual_kwh: total, average_monthly_kwh: total/12}));
+                            setPlantFormData(prev => ({...prev, monthly_prognosis_kwh: (total/12).toFixed(2), annual_prognosis_kwh: total.toFixed(2)}));
+                          }} />
+                        <p className="text-[7px] text-neutral-400">irr: {m.irradiance}</p>
                       </div>
                     ))}
                   </div>
