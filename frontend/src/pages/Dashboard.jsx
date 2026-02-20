@@ -1,305 +1,241 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import api from '../services/api';
-import KPICard from '../components/KPICard';
-import StatusBadge from '../components/StatusBadge';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
+import { Card, CardContent } from '../components/ui/card';
 import { Button } from '../components/ui/button';
+import { Input } from '../components/ui/input';
 import {
-  Sun,
-  Factory,
-  DollarSign,
-  Leaf,
-  TrendingUp,
-  ArrowRight,
-  AlertTriangle,
-  Zap
+  Zap, Factory, TrendingUp, Search, ChevronRight, CheckCircle,
+  AlertTriangle, AlertCircle, HelpCircle, FileText, Users, BarChart3
 } from 'lucide-react';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  AreaChart,
-  Area
-} from 'recharts';
 import { toast } from 'sonner';
 
-const formatCurrency = (value) => {
-  return new Intl.NumberFormat('pt-BR', {
-    style: 'currency',
-    currency: 'BRL'
-  }).format(value);
-};
-
-const formatNumber = (value) => {
-  return new Intl.NumberFormat('pt-BR').format(value);
-};
+const API_URL = process.env.REACT_APP_BACKEND_URL;
 
 const Dashboard = () => {
-  const [stats, setStats] = useState(null);
-  const [plants, setPlants] = useState([]);
+  const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [chartData, setChartData] = useState([]);
+  const [filter, setFilter] = useState('all');
+  const [search, setSearch] = useState('');
+  const navigate = useNavigate();
 
-  useEffect(() => {
-    loadDashboardData();
-  }, []);
+  useEffect(() => { loadData(); }, []);
 
-  const loadDashboardData = async () => {
+  const loadData = async () => {
     try {
-      const [statsRes, plantsRes] = await Promise.all([
-        api.get('/dashboard/stats'),
-        api.get('/dashboard/plants-summary')
-      ]);
-      
-      setStats(statsRes.data);
-      setPlants(plantsRes.data);
-      
-      // Generate mock chart data for the last 7 days
-      const mockChartData = [];
-      const today = new Date();
-      for (let i = 6; i >= 0; i--) {
-        const date = new Date(today);
-        date.setDate(date.getDate() - i);
-        mockChartData.push({
-          day: date.toLocaleDateString('pt-BR', { weekday: 'short' }),
-          generation: Math.floor(Math.random() * 1000) + 500,
-          prognosis: 800
-        });
-      }
-      setChartData(mockChartData);
-    } catch (error) {
-      toast.error('Erro ao carregar dados do dashboard');
-      console.error(error);
+      const res = await api.get('/dashboard/plants-summary');
+      setData(res.data);
+    } catch (err) {
+      toast.error('Erro ao carregar dashboard');
     } finally {
       setLoading(false);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="w-8 h-8 spinner"></div>
-      </div>
-    );
-  }
+  if (loading) return (
+    <div className="flex items-center justify-center h-64"><div className="w-8 h-8 spinner"></div></div>
+  );
 
-  const lowPerformancePlants = plants.filter(p => p.performance < 80 && p.performance > 0);
+  const plants = data?.plants || [];
+  const totals = data?.totals || {};
+
+  const getStatus = (p) => {
+    if (p.performance >= 90) return 'normal';
+    if (p.performance >= 50) return 'alert';
+    if (p.performance > 0) return 'critical';
+    return 'unknown';
+  };
+
+  const counts = { all: plants.length, normal: 0, alert: 0, critical: 0, unknown: 0 };
+  plants.forEach(p => { counts[getStatus(p)]++; });
+
+  const filtered = plants.filter(p => {
+    if (filter !== 'all' && getStatus(p) !== filter) return false;
+    if (search) {
+      const s = search.toLowerCase();
+      return p.name?.toLowerCase().includes(s) || p.client_name?.toLowerCase().includes(s) || p.city?.toLowerCase().includes(s);
+    }
+    return true;
+  });
+
+  const statusColors = { normal: 'bg-emerald-500', alert: 'bg-amber-500', critical: 'bg-red-500', unknown: 'bg-neutral-400' };
+  const statusRing = { normal: 'ring-emerald-500', alert: 'ring-amber-500', critical: 'ring-red-500', unknown: 'ring-neutral-400' };
 
   return (
-    <div className="space-y-6 animate-fade-in" data-testid="dashboard">
-      {/* Page header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl lg:text-3xl font-bold text-neutral-900 font-heading">Dashboard</h1>
-          <p className="text-neutral-500 mt-1">
-            Visão geral das suas usinas solares - {stats?.month || 'Carregando...'}
-          </p>
-        </div>
-        <div className="flex gap-3">
-          <Button asChild className="bg-[#FFD600] hover:bg-[#EAB308] text-[#1A1A1A]">
-            <Link to="/usinas">
-              <Factory className="h-4 w-4 mr-2" />
-              Ver Usinas
-            </Link>
-          </Button>
-        </div>
-      </div>
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
-        <KPICard
-          title="Geração Total"
-          value={`${formatNumber(stats?.total_generation_kwh || 0)} kWh`}
-          icon={Sun}
-          accent="yellow"
-          subtitle="Este mês"
-        />
-        <KPICard
-          title="Usinas Ativas"
-          value={stats?.total_plants || 0}
-          icon={Factory}
-          accent="green"
-          subtitle={`${formatNumber(stats?.total_capacity_kwp || 0)} kWp total`}
-        />
-        <KPICard
-          title="Economia Total"
-          value={formatCurrency(stats?.total_saved_brl || 0)}
-          icon={DollarSign}
-          accent="blue"
-          subtitle="Este mês"
-        />
-        <KPICard
-          title="CO₂ Evitado"
-          value={`${formatNumber(stats?.co2_avoided_kg || 0)} kg`}
-          icon={Leaf}
-          accent="gray"
-          subtitle={`≈ ${formatNumber(stats?.trees_equivalent || 0)} árvores`}
-        />
-      </div>
-
-      {/* Charts and Tables Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Generation Chart */}
-        <Card className="lg:col-span-2 border-neutral-100 shadow-sm bg-white">
-          <CardHeader className="pb-2 bg-white">
-            <CardTitle className="text-lg font-semibold text-neutral-900 flex items-center gap-2">
-              <TrendingUp className="h-5 w-5 text-[#FFD600]" />
-              Geração dos Últimos 7 Dias
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="bg-white">
-            <div className="h-[300px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" vertical={false} />
-                  <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fill: '#737373', fontSize: 12 }} />
-                  <YAxis axisLine={false} tickLine={false} tick={{ fill: '#737373', fontSize: 12 }} />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#fff',
-                      border: '1px solid #e5e5e5',
-                      borderRadius: '8px',
-                      boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)'
-                    }}
-                    formatter={(value, name) => [
-                      `${formatNumber(value)} kWh`,
-                      name === 'generation' ? 'Geração' : 'Prognóstico'
-                    ]}
-                  />
-                  <Bar dataKey="generation" fill="#FFD600" radius={[4, 4, 0, 0]} name="generation" />
-                  <Bar dataKey="prognosis" fill="#D4D4D8" radius={[4, 4, 0, 0]} name="prognosis" />
-                </BarChart>
-              </ResponsiveContainer>
+    <div className="space-y-5 animate-fade-in" data-testid="dashboard">
+      {/* Top Summary Cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <Card className="bg-[#1A1A1A] text-white border-0">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Zap className="h-4 w-4 text-[#FFD600]" />
+              <span className="text-xs text-neutral-400 font-medium">Valores Totais</span>
+            </div>
+            <div className="flex items-baseline gap-3">
+              <div>
+                <p className="text-xs text-neutral-400">Total de usinas</p>
+                <p className="text-2xl font-bold">{totals.total_plants}</p>
+              </div>
+            </div>
+            <div className="flex gap-4 mt-2 text-xs text-neutral-400">
+              <span><Zap className="h-3 w-3 inline text-[#FFD600]" /> {totals.total_generation_gwh} GWh</span>
+              <span><Factory className="h-3 w-3 inline" /> {totals.total_capacity_mwp} MWp</span>
             </div>
           </CardContent>
         </Card>
 
-        {/* Alerts */}
-        <Card className="border-neutral-100 shadow-sm">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg font-semibold text-neutral-900 flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-amber-500" />
-              Alertas
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {lowPerformancePlants.length > 0 ? (
-              <ul className="space-y-3">
-                {lowPerformancePlants.slice(0, 5).map((plant) => (
-                  <li key={plant.id} className="flex items-start gap-3 p-3 bg-amber-50 rounded-lg">
-                    <Zap className="h-5 w-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-neutral-900 truncate">{plant.name}</p>
-                      <p className="text-xs text-amber-700">
-                        Desempenho: {plant.performance}% (abaixo de 80%)
-                      </p>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-8 text-center">
-                <div className="p-3 bg-emerald-50 rounded-full mb-3">
-                  <Leaf className="h-6 w-6 text-emerald-600" />
-                </div>
-                <p className="text-sm text-neutral-600">Nenhum alerta no momento</p>
-                <p className="text-xs text-neutral-400 mt-1">Todas as usinas operando normalmente</p>
-              </div>
-            )}
+        <Card className="border-[#FFD600] border-2 bg-[#FFD600]/5">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <FileText className="h-4 w-4 text-[#1A1A1A]" />
+              <span className="text-xs font-medium">Relatorios</span>
+              <ChevronRight className="h-3 w-3 ml-auto text-neutral-400" />
+            </div>
+            <p className="text-xs text-neutral-500">Necessitam atencao</p>
+            <p className="text-xl font-bold text-[#1A1A1A]">{counts.alert + counts.critical}</p>
           </CardContent>
         </Card>
+
+        <Card className="border-neutral-200">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <AlertTriangle className="h-4 w-4 text-amber-500" />
+              <span className="text-xs font-medium">Alertas</span>
+            </div>
+            <p className="text-xs text-neutral-500">Usinas com alerta</p>
+            <p className="text-xl font-bold">{counts.alert}</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-neutral-200">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <BarChart3 className="h-4 w-4 text-emerald-500" />
+              <span className="text-xs font-medium">Gestao de Desempenho</span>
+            </div>
+            <p className="text-xs text-neutral-500">Necessitam intervencao</p>
+            <p className="text-xl font-bold">{counts.critical}</p>
+          </CardContent>
+        </Card>
+
+        <Card className="border-neutral-200">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <Users className="h-4 w-4 text-blue-500" />
+              <span className="text-xs font-medium">Clientes</span>
+            </div>
+            <p className="text-xs text-neutral-500">Usinas ativas</p>
+            <p className="text-xl font-bold">{totals.total_plants} <span className="text-sm font-normal text-neutral-400">usinas</span></p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Filter Tabs + Search */}
+      <div className="flex flex-wrap items-center gap-2">
+        {[
+          { key: 'all', label: 'Todos', count: counts.all, color: 'bg-[#FFD600] text-[#1A1A1A]' },
+          { key: 'normal', label: 'Normal', count: counts.normal, color: 'bg-emerald-500 text-white' },
+          { key: 'alert', label: 'Com alerta', count: counts.alert, color: 'bg-amber-500 text-white' },
+          { key: 'critical', label: 'Critico', count: counts.critical, color: 'bg-red-500 text-white' },
+          { key: 'unknown', label: 'Desconhecido', count: counts.unknown, color: 'bg-neutral-400 text-white' },
+        ].map(f => (
+          <button key={f.key}
+            className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-all ${filter === f.key ? f.color : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'}`}
+            onClick={() => setFilter(f.key)}>
+            {f.label} <span className="ml-1 opacity-80">{f.count}</span>
+          </button>
+        ))}
+
+        <div className="ml-auto relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400" />
+          <Input placeholder="Buscar usina, cliente, cidade..." value={search} onChange={e => setSearch(e.target.value)}
+            className="pl-9 w-64 h-9 text-sm" data-testid="dashboard-search" />
+        </div>
       </div>
 
       {/* Plants Table */}
-      <Card className="border-neutral-100 shadow-sm">
-        <CardHeader className="pb-2">
-          <div className="flex items-center justify-between">
-            <CardTitle className="text-lg font-semibold text-neutral-900 flex items-center gap-2">
-              <Factory className="h-5 w-5 text-[#FFD600]" />
-              Usinas
-            </CardTitle>
-            <Button variant="ghost" asChild className="text-sm text-neutral-600 hover:text-neutral-900">
-              <Link to="/usinas">
-                Ver todas
-                <ArrowRight className="h-4 w-4 ml-1" />
-              </Link>
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {plants.length > 0 ? (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-neutral-100">
-                    <th className="table-header text-left py-3 px-4">Usina</th>
-                    <th className="table-header text-left py-3 px-4">Cliente</th>
-                    <th className="table-header text-left py-3 px-4">Capacidade</th>
-                    <th className="table-header text-left py-3 px-4">Geração</th>
-                    <th className="table-header text-left py-3 px-4">Desempenho</th>
-                    <th className="table-header text-left py-3 px-4">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {plants.slice(0, 5).map((plant) => (
-                    <tr key={plant.id} className="table-row">
-                      <td className="py-4 px-4">
-                        <Link 
-                          to={`/usinas/${plant.id}`}
-                          className="text-sm font-medium text-neutral-900 hover:text-[#EAB308] transition-colors"
-                        >
-                          {plant.name}
-                        </Link>
-                      </td>
-                      <td className="py-4 px-4 text-sm text-neutral-600">{plant.client_name}</td>
-                      <td className="py-4 px-4 text-sm text-neutral-600">{plant.capacity_kwp} kWp</td>
-                      <td className="py-4 px-4 text-sm text-neutral-900 font-medium tabular-nums">
-                        {formatNumber(plant.generation_kwh)} kWh
-                      </td>
-                      <td className="py-4 px-4">
-                        <div className="flex items-center gap-2">
-                          <div className="w-16 h-2 bg-neutral-100 rounded-full overflow-hidden">
-                            <div 
-                              className={`h-full rounded-full ${
-                                plant.performance >= 80 ? 'bg-emerald-500' : 
-                                plant.performance >= 50 ? 'bg-amber-500' : 'bg-red-500'
-                              }`}
-                              style={{ width: `${Math.min(plant.performance, 100)}%` }}
-                            />
-                          </div>
-                          <span className="text-sm text-neutral-600 tabular-nums">{plant.performance}%</span>
+      <Card className="border-neutral-200 shadow-sm overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="bg-neutral-50 border-b border-neutral-200">
+                <th className="text-left py-3 px-4 text-xs font-semibold text-neutral-500 uppercase">Usina</th>
+                <th className="text-left py-3 px-4 text-xs font-semibold text-neutral-500 uppercase">Cliente</th>
+                <th className="text-left py-3 px-4 text-xs font-semibold text-neutral-500 uppercase">Cidade</th>
+                <th className="text-left py-3 px-4 text-xs font-semibold text-neutral-500 uppercase">Data</th>
+                <th className="text-center py-3 px-3 text-xs font-semibold text-neutral-500 uppercase">30D</th>
+                <th className="text-center py-3 px-3 text-xs font-semibold text-neutral-500 uppercase">12M</th>
+                <th className="text-center py-3 px-3 text-xs font-semibold text-neutral-500 uppercase">Aviso</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((p) => {
+                const status = getStatus(p);
+                return (
+                  <tr key={p.id} className="border-b border-neutral-100 hover:bg-neutral-50/50 cursor-pointer transition-colors"
+                    onClick={() => navigate(`/usinas/${p.id}`)} data-testid={`plant-row-${p.id}`}>
+                    <td className="py-3 px-4">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ring-2 ${statusRing[status]} overflow-hidden bg-neutral-100`}>
+                          {p.logo_url ? (
+                            <img src={`${API_URL}${p.logo_url}`} alt="" className="w-full h-full object-cover" />
+                          ) : (
+                            <Factory className="h-5 w-5 text-neutral-400" />
+                          )}
                         </div>
-                      </td>
-                      <td className="py-4 px-4">
-                        <StatusBadge status={plant.status} />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
-              <div className="p-4 bg-neutral-100 rounded-full mb-4">
-                <Factory className="h-8 w-8 text-neutral-400" />
-              </div>
-              <h3 className="text-lg font-medium text-neutral-900 mb-1">Nenhuma usina cadastrada</h3>
-              <p className="text-sm text-neutral-500 mb-4">Comece adicionando sua primeira usina solar</p>
-              <Button asChild className="bg-[#FFD600] hover:bg-[#EAB308] text-[#1A1A1A]">
-                <Link to="/usinas">
-                  Cadastrar Usina
-                </Link>
-              </Button>
-            </div>
-          )}
-        </CardContent>
+                        <div>
+                          <p className="text-sm font-semibold text-[#1A1A1A]">{p.name}</p>
+                          <p className="text-[11px] text-[#FFD600] font-medium">{p.capacity_kwp} kWp</p>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4 text-sm text-neutral-600">{p.client_name}</td>
+                    <td className="py-3 px-4 text-sm text-neutral-500">{p.city}{p.state ? ` - ${p.state}` : ''}</td>
+                    <td className="py-3 px-4 text-sm text-neutral-500">{p.installation_date || '-'}</td>
+                    <td className="py-3 px-3 text-center">
+                      <PerfBadge value={p.performance} />
+                    </td>
+                    <td className="py-3 px-3 text-center">
+                      <PerfBadge value={p.generation_12m_kwh > 0 ? Math.round(p.generation_12m_kwh / (p.prognosis_kwh * 12 || 1) * 100) : 0} />
+                    </td>
+                    <td className="py-3 px-3 text-center">
+                      {status === 'critical' ? (
+                        <AlertCircle className="h-5 w-5 text-red-500 mx-auto" />
+                      ) : status === 'alert' ? (
+                        <AlertTriangle className="h-5 w-5 text-amber-500 mx-auto" />
+                      ) : status === 'normal' ? (
+                        <CheckCircle className="h-5 w-5 text-emerald-500 mx-auto" />
+                      ) : (
+                        <HelpCircle className="h-5 w-5 text-neutral-300 mx-auto" />
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+              {filtered.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="py-12 text-center text-neutral-400">
+                    Nenhuma usina encontrada
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </Card>
     </div>
+  );
+};
+
+const PerfBadge = ({ value }) => {
+  if (!value || value === 0) return <span className="text-xs text-neutral-300">-</span>;
+  const color = value >= 90 ? 'text-emerald-600 bg-emerald-50 ring-emerald-200'
+    : value >= 70 ? 'text-amber-600 bg-amber-50 ring-amber-200'
+    : 'text-red-600 bg-red-50 ring-red-200';
+  return (
+    <span className={`inline-flex items-center justify-center w-12 h-7 rounded-full text-xs font-bold ring-1 ${color}`}>
+      {value}
+    </span>
   );
 };
 
