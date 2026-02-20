@@ -1173,6 +1173,16 @@ async def save_invoice_from_upload(invoice_data: dict, current_user: dict = Depe
     if not unit:
         raise HTTPException(status_code=404, detail="Unidade consumidora não encontrada")
     
+    # Check for duplicate - same UC + same reference month
+    ref_month = invoice_data.get('reference_month', '')
+    if ref_month:
+        existing = await db.invoices.find_one({
+            'consumer_unit_id': consumer_unit_id,
+            'reference_month': ref_month
+        })
+        if existing:
+            raise HTTPException(status_code=409, detail=f"Fatura ja existe para UC {unit.get('uc_number','')} ref {ref_month}")
+    
     # Create invoice record
     invoice = InvoiceData(
         consumer_unit_id=consumer_unit_id,
