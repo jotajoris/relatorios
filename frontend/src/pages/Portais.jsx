@@ -5,7 +5,7 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { toast } from 'sonner';
-import { Loader2, CheckCircle, AlertCircle, Wifi, WifiOff, Import, Sun, Zap, Factory } from 'lucide-react';
+import { Loader2, CheckCircle, AlertCircle, Wifi, WifiOff, Import, Sun, Zap, Factory, RefreshCw } from 'lucide-react';
 
 const PORTALS = [
   { id: 'growatt', name: 'Growatt (ShinePhone)', color: '#FFD600', endpoint: '/integrations/growatt/login' },
