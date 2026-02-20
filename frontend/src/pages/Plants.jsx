@@ -534,24 +534,8 @@ const Plants = () => {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="investment">Investimento Total (R$)</Label>
-                <Input
-                  id="investment"
-                  type="number"
-                  value={formData.total_investment}
-                  onChange={(e) => setFormData({ ...formData, total_investment: e.target.value })}
-                  placeholder="Ex: 50000"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="installation_date">Data de Instalação</Label>
-                <Input
-                  id="installation_date"
-                  type="date"
-                  value={formData.installation_date}
-                  onChange={(e) => setFormData({ ...formData, installation_date: e.target.value })}
-                />
+                <Label>Data de Instalacao</Label>
+                <Input type="date" value={formData.installation_date} onChange={(e) => setFormData({...formData, installation_date: e.target.value})} />
               </div>
             </div>
           </div>
