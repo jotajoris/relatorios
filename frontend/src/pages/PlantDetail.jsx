@@ -110,6 +110,28 @@ const PlantDetail = () => {
   });
   const [selectedGrowattPlant, setSelectedGrowattPlant] = useState(null);
   const [syncingGrowatt, setSyncingGrowatt] = useState(false);
+
+  // Sync Growatt data for this plant
+  const handleSyncGrowattDirect = async () => {
+    setSyncingGrowatt(true);
+    try {
+      const res = await api.post(`/integrations/growatt/sync-plant/${plantId}`, {});
+      if (res.data.success) {
+        toast.success(res.data.message || 'Dados sincronizados!');
+        loadData();
+        loadChartData();
+      }
+    } catch (err) {
+      const detail = err.response?.data?.detail || 'Erro ao sincronizar';
+      if (detail.includes('Credenciais') || detail.includes('vinculada')) {
+        toast.error(detail + ' Va em Configuracoes > Conectar ao Growatt');
+      } else {
+        toast.error(detail);
+      }
+    } finally {
+      setSyncingGrowatt(false);
+    }
+  };
   
   // Form data
   const [ucFormData, setUcFormData] = useState({
