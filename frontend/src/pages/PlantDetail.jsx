@@ -192,12 +192,11 @@ const PlantDetail = () => {
     } catch { setFilteredCities([]); }
   };
 
-  // When config dialog opens and plant has a state, auto-load cities
   useEffect(() => {
-    if (plantFormData.state && statesList.length > 0) {
+    if (plantFormData.state) {
       loadCitiesByState(plantFormData.state);
     }
-  }, [plantFormData.state, statesList]);
+  }, [plantFormData.state]);
 
   const handleStateSelect = (e) => {
     const state = e.target.value;
