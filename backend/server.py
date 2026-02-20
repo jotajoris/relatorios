@@ -1839,7 +1839,7 @@ async def get_monthly_summary(
         ).to_list(100)
 
         gen_total = sum(d.get('generation_kwh', 0) for d in gen_docs)
-        prog = month_prognosis.get(month, flat_prognosis)
+        prog = month_prognosis.get(month, flat_prognosis) or 0
 
         # For current month: prognosis proportional to days elapsed
         if year == current_year and month == current_month:
