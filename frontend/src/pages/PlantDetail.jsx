@@ -1242,125 +1242,150 @@ const PlantDetail = () => {
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Listas de Distribuição de Créditos</CardTitle>
+                  <CardTitle>Sistema de Creditos</CardTitle>
                   <p className="text-sm text-neutral-500 mt-1">
-                    Configure as UCs geradoras e beneficiárias com suas porcentagens
+                    Configure a distribuicao de creditos entre UCs geradoras e beneficiarias
                   </p>
                 </div>
-                <Button 
-                  onClick={handleAddUc}
-                  className="bg-[#FFD600] hover:bg-[#EAB308] text-[#1A1A1A]"
-                >
-                  <Plus className="h-4 w-4 mr-2" />
-                  Adicionar UC
-                </Button>
+                <div className="flex gap-2">
+                  <Button variant="outline" size="sm" onClick={async () => {
+                    // Create new vigencia based on current UCs
+                    const month = prompt('Vigencia (MM/YYYY):', new Date().toLocaleDateString('pt-BR', {month:'2-digit',year:'numeric'}));
+                    if (!month) return;
+                    const units_list = [...(generators || []), ...(beneficiaries || [])].map(uc => ({
+                      consumer_unit_id: uc.id,
+                      uc_number: uc.uc_number,
+                      address: uc.address || '',
+                      classification: uc.classification || `${uc.tariff_group || 'B'}3-Comercial`,
+                      percentage: uc.compensation_percentage || 0,
+                      is_generator: uc.is_generator || false,
+                    }));
+                    try {
+                      await api.post('/credit-distribution', {
+                        plant_id: plantId,
+                        name: `Vigencia ${month}`,
+                        effective_date: month,
+                        units: units_list,
+                      });
+                      toast.success(`Vigencia ${month} criada!`);
+                      loadData();
+                    } catch (err) { toast.error('Erro ao criar vigencia'); }
+                  }} className="border-[#FFD600]">
+                    <FileText className="h-4 w-4 mr-1" />Salvar Vigencia
+                  </Button>
+                  <Button onClick={handleAddUc} className="bg-[#FFD600] hover:bg-[#EAB308] text-[#1A1A1A]">
+                    <Plus className="h-4 w-4 mr-2" />Adicionar UC
+                  </Button>
+                </div>
               </div>
             </CardHeader>
-            <CardContent>
-              {/* Active Distribution List Header */}
-              <div className="bg-[#FFD600] text-[#1A1A1A] px-4 py-2 rounded-t-lg font-medium flex items-center gap-2">
-                <AlertCircle className="h-4 w-4" />
-                Vigência 12/2025 - Baseada em Lista de Porcentagem
+            <CardContent className="space-y-4">
+              {/* Vigência header */}
+              <div className="bg-[#1A1A1A] text-[#FFD600] px-4 py-3 rounded-lg font-medium flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="h-4 w-4" />
+                  Distribuicao Atual - {generators?.length || 0} geradora(s) + {beneficiaries?.length || 0} beneficiaria(s)
+                </div>
+                <span className="text-sm text-neutral-400">
+                  Total: {beneficiaries?.reduce((s, u) => s + (u.compensation_percentage || 0), 0).toFixed(2)}%
+                </span>
               </div>
               
-              {/* Table */}
-              <div className="border border-t-0 rounded-b-lg overflow-hidden">
+              {/* UC Table */}
+              <div className="border rounded-lg overflow-hidden">
                 <table className="w-full">
                   <thead className="bg-neutral-50">
                     <tr>
-                      <th className="text-left px-4 py-3 text-sm font-medium text-neutral-600">Denominação</th>
-                      <th className="text-left px-4 py-3 text-sm font-medium text-neutral-600">Contrato</th>
-                      <th className="text-left px-4 py-3 text-sm font-medium text-neutral-600">Classificação</th>
-                      <th className="text-right px-4 py-3 text-sm font-medium text-neutral-600">Porcentagem</th>
-                      <th className="text-right px-4 py-3 text-sm font-medium text-neutral-600">Ações</th>
+                      <th className="text-left px-4 py-3 text-xs font-medium text-neutral-500">Endereco</th>
+                      <th className="text-left px-4 py-3 text-xs font-medium text-neutral-500">UC</th>
+                      <th className="text-left px-4 py-3 text-xs font-medium text-neutral-500">Classificacao</th>
+                      <th className="text-right px-4 py-3 text-xs font-medium text-neutral-500">%</th>
+                      <th className="text-right px-4 py-3 text-xs font-medium text-neutral-500">Acoes</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {/* Generators first */}
-                    {generators?.map((uc, idx) => (
+                    {generators?.map((uc) => (
                       <tr key={uc.id} className="border-t hover:bg-neutral-50">
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-2.5">
                           <div className="flex items-center gap-2">
-                            <Sun className="h-4 w-4 text-amber-500" />
-                            <span className="font-medium">{uc.address || plant.name}</span>
+                            <Sun className="h-4 w-4 text-amber-500 flex-shrink-0" />
+                            <span className="font-medium text-sm">{uc.address || plant.name}</span>
                           </div>
                         </td>
-                        <td className="px-4 py-3 text-neutral-600">{uc.uc_number}</td>
-                        <td className="px-4 py-3">
-                          <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-sm">
-                            {uc.tariff_modality || `${uc.tariff_group || 'A'}4-Comercial`}
+                        <td className="px-4 py-2.5 text-sm text-neutral-600">{uc.uc_number}</td>
+                        <td className="px-4 py-2.5">
+                          <span className="px-2 py-0.5 bg-amber-100 text-amber-700 rounded text-xs font-medium">
+                            {uc.classification || 'A4 - Comercial'}
                           </span>
                         </td>
-                        <td className="px-4 py-3 text-right font-medium">0%</td>
-                        <td className="px-4 py-3 text-right">
-                          <div className="flex justify-end gap-1">
-                            <Button variant="ghost" size="sm" onClick={() => handleEditUc(uc)}>
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button variant="ghost" size="sm" onClick={() => handleDeleteUc(uc)}>
-                              <Trash2 className="h-4 w-4 text-red-500" />
-                            </Button>
+                        <td className="px-4 py-2.5 text-right font-bold text-sm">GER</td>
+                        <td className="px-4 py-2.5 text-right">
+                          <Button variant="ghost" size="sm" onClick={() => handleEditUc(uc)}>
+                            <Edit className="h-3.5 w-3.5" />
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                    {beneficiaries?.map((uc) => (
+                      <tr key={uc.id} className="border-t hover:bg-neutral-50">
+                        <td className="px-4 py-2.5">
+                          <div className="flex items-center gap-2">
+                            <Zap className="h-4 w-4 text-blue-500 flex-shrink-0" />
+                            <span className="text-sm">{uc.address}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-2.5 text-sm text-neutral-600">{uc.uc_number}</td>
+                        <td className="px-4 py-2.5">
+                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${uc.classification?.includes('B1') ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'}`}>
+                            {uc.classification || 'B3 - Comercial'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 text-right font-bold text-sm">{(uc.compensation_percentage || 0).toFixed(2)}%</td>
+                        <td className="px-4 py-2.5 text-right">
+                          <div className="flex justify-end gap-0.5">
+                            <Button variant="ghost" size="sm" onClick={() => handleEditUc(uc)}><Edit className="h-3.5 w-3.5" /></Button>
+                            <Button variant="ghost" size="sm" onClick={() => handleDeleteUc(uc)}><Trash2 className="h-3.5 w-3.5 text-red-400" /></Button>
                           </div>
                         </td>
                       </tr>
                     ))}
-                    
-                    {/* Beneficiaries */}
-                    {beneficiaries?.map((uc, idx) => (
-                      <tr key={uc.id} className="border-t hover:bg-neutral-50">
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <Zap className="h-4 w-4 text-blue-500" />
-                            <span>{uc.address}</span>
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-neutral-600">{uc.uc_number}</td>
-                        <td className="px-4 py-3">
-                          <span className={`px-2 py-1 rounded text-sm ${
-                            uc.tariff_modality?.includes('B1') 
-                              ? 'bg-blue-100 text-blue-700' 
-                              : 'bg-green-100 text-green-700'
-                          }`}>
-                            {uc.tariff_modality || `${uc.tariff_group || 'B'}3-Comercial`}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-right font-medium">{uc.compensation_percentage || 0}%</td>
-                        <td className="px-4 py-3 text-right">
-                          <div className="flex justify-end gap-1">
-                            <Button variant="ghost" size="sm" onClick={() => handleEditUc(uc)}>
-                              <Edit className="h-4 w-4" />
-                            </Button>
-                            <Button variant="ghost" size="sm" onClick={() => handleDeleteUc(uc)}>
-                              <Trash2 className="h-4 w-4 text-red-500" />
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                    
-                    {(!generators?.length && !beneficiaries?.length) && (
-                      <tr>
-                        <td colSpan={5} className="px-4 py-8 text-center text-neutral-500">
-                          Nenhuma UC cadastrada. Clique em "Adicionar UC" para começar.
-                        </td>
-                      </tr>
-                    )}
                   </tbody>
                 </table>
               </div>
-              
-              {/* Total percentage indicator */}
-              {beneficiaries?.length > 0 && (
-                <div className="mt-4 p-4 bg-neutral-50 rounded-lg">
-                  <div className="flex justify-between items-center">
-                    <span className="text-sm text-neutral-600">Total de porcentagem distribuída:</span>
-                    <span className={`font-bold ${
-                      beneficiaries.reduce((sum, uc) => sum + (uc.compensation_percentage || 0), 0) === 100
-                        ? 'text-green-600'
-                        : 'text-red-600'
-                    }`}>
-                      {beneficiaries.reduce((sum, uc) => sum + (uc.compensation_percentage || 0), 0).toFixed(2)}%
-                    </span>
+
+              {/* Percentage bar */}
+              {beneficiaries?.length > 0 && (() => {
+                const total = beneficiaries.reduce((s, u) => s + (u.compensation_percentage || 0), 0);
+                return (
+                  <div className="p-3 bg-neutral-50 rounded-lg">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-xs text-neutral-500">Distribuicao total</span>
+                      <span className={`text-sm font-bold ${Math.abs(total - 100) < 0.1 ? 'text-emerald-600' : 'text-red-500'}`}>{total.toFixed(2)}%</span>
+                    </div>
+                    <div className="w-full bg-neutral-200 rounded-full h-2">
+                      <div className={`h-2 rounded-full transition-all ${total >= 99.9 && total <= 100.1 ? 'bg-emerald-500' : total > 100 ? 'bg-red-500' : 'bg-[#FFD600]'}`}
+                        style={{width: `${Math.min(total, 100)}%`}} />
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Vigências History */}
+              {data?.credit_distributions?.length > 0 && (
+                <div className="mt-4">
+                  <h4 className="text-sm font-semibold mb-2 text-neutral-600">Historico de Vigencias</h4>
+                  <div className="space-y-2">
+                    {data.credit_distributions.map((dist) => (
+                      <div key={dist.id} className="p-3 border rounded-lg bg-white hover:bg-neutral-50">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="font-medium text-sm">{dist.name}</p>
+                            <p className="text-xs text-neutral-400">Criada em {new Date(dist.created_at).toLocaleDateString('pt-BR')}</p>
+                          </div>
+                          <span className="text-xs bg-neutral-100 px-2 py-1 rounded">{dist.units?.length || 0} UCs</span>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
