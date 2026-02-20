@@ -165,7 +165,6 @@ const Plants = () => {
       });
     }
     setDialogOpen(true);
-    loadStatesList();
     setCitySearch('');
     setProgDetail(null);
   };
