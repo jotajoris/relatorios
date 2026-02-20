@@ -883,6 +883,14 @@ const PlantDetail = () => {
                         <><Sun className="h-4 w-4 mr-2 text-[#FFD600]" />Sincronizar Growatt</>
                       )}
                     </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setShowDownloadDialog(true)}
+                      className="text-[#1A1A1A] hover:bg-neutral-100"
+                    >
+                      <Download className="h-4 w-4 mr-2" />Baixar Periodo
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
