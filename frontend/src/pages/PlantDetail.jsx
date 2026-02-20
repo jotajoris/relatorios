@@ -795,7 +795,7 @@ const PlantDetail = () => {
                   </div>
                   
                   {/* Stats below chart */}
-                  <div className="flex justify-center gap-12 mt-4 pt-4 border-t">
+                  <div className="flex justify-center items-center gap-8 mt-4 pt-4 border-t">
                     <div className="text-center">
                       <p className="text-sm text-neutral-500">Gerado</p>
                       <p className="text-xl font-bold">{(chartData.reduce((sum, d) => sum + d.generation, 0) / 1000).toFixed(2)} MWh</p>
@@ -808,6 +808,20 @@ const PlantDetail = () => {
                           : '-'}
                       </p>
                     </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleSyncGrowattDirect}
+                      disabled={syncingGrowatt}
+                      className="border-[#FFD600] text-[#1A1A1A] hover:bg-[#FFD600]/10"
+                      data-testid="sync-growatt-btn"
+                    >
+                      {syncingGrowatt ? (
+                        <><Loader2 className="h-4 w-4 animate-spin mr-2" />Sincronizando...</>
+                      ) : (
+                        <><Sun className="h-4 w-4 mr-2 text-[#FFD600]" />Sincronizar Growatt</>
+                      )}
+                    </Button>
                   </div>
                 </CardContent>
               </Card>
