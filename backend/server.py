@@ -681,6 +681,14 @@ async def update_plant(plant_id: str, plant_data: PlantCreate, current_user: dic
     )
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Usina não encontrada")
+    
+    # Auto-calculate prognosis if city changed and no manual prognosis set
+    data = plant_data.model_dump()
+    city = data.get('city', '')
+    kwp = data.get('capacity_kwp', 0)
+    if city and kwp > 0:
+        await auto_calculate_prognosis(plant_id, city, kwp)
+    
     return await get_plant(plant_id, current_user)
 
 @api_router.delete("/plants/{plant_id}")
