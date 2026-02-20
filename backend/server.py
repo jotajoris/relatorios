@@ -475,6 +475,21 @@ async def seed_users():
 @app.on_event("startup")
 async def startup_event():
     await seed_users()
+    # Ensure Playwright browsers are installed
+    import subprocess
+    try:
+        env = os.environ.copy()
+        env['PLAYWRIGHT_BROWSERS_PATH'] = '/pw-browsers'
+        result = subprocess.run(
+            ['playwright', 'install', 'chromium'],
+            capture_output=True, text=True, timeout=120, env=env
+        )
+        if result.returncode == 0:
+            logger.info("Playwright browsers verified/installed")
+        else:
+            logger.warning(f"Playwright install: {result.stderr[:200]}")
+    except Exception as e:
+        logger.warning(f"Playwright browser install skipped: {e}")
 
 # ==================== CLIENTS ROUTES ====================
 
