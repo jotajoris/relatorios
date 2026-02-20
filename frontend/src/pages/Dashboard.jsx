@@ -250,6 +250,11 @@ const Dashboard = () => {
                       ) : (
                         <HelpCircle className="h-5 w-5 text-neutral-300 mx-auto" />
                       )}
+                      {p.last_sync && (
+                        <p className="text-[9px] text-neutral-400 mt-0.5">
+                          {new Date(p.last_sync).toLocaleDateString('pt-BR', {day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}
+                        </p>
+                      )}
                     </td>
                   </tr>
                 );
