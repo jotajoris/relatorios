@@ -974,6 +974,25 @@ const PlantDetail = () => {
                           </div>
                         </div>
                         
+                        {/* UC Invoice Status */}
+                        {summary.uc_status && summary.uc_status.length > 0 && (
+                          <div className="mb-2 space-y-0.5">
+                            {summary.uc_status.map((uc, ui) => (
+                              <div key={ui} className="flex items-center justify-between text-[10px]">
+                                <span className="text-neutral-500 truncate mr-1">{uc.uc}</span>
+                                {uc.has_invoice ? (
+                                  <CheckCircle className="h-3 w-3 text-emerald-500 flex-shrink-0" />
+                                ) : (
+                                  <button onClick={(e) => { e.stopPropagation(); navigate('/faturas'); }}
+                                    className="flex-shrink-0">
+                                    <Clock className="h-3 w-3 text-amber-400" />
+                                  </button>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
                         <Button
                           variant="outline"
                           size="sm"
