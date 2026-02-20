@@ -114,9 +114,20 @@ const Portais = () => {
 
   return (
     <div className="space-y-6" data-testid="portais-page">
-      <div>
-        <h1 className="text-2xl font-bold text-[#1A1A1A]">Portais de Monitoramento</h1>
-        <p className="text-sm text-neutral-500 mt-1">Conecte com os portais dos inversores para importar e monitorar suas usinas</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-[#1A1A1A]">Portais de Monitoramento</h1>
+          <p className="text-sm text-neutral-500 mt-1">Conecte com os portais dos inversores para importar e monitorar suas usinas</p>
+        </div>
+        <Button variant="outline" onClick={async () => {
+          toast.info('Sincronizando todas as usinas...');
+          try {
+            await api.post('/integrations/growatt/sync-all');
+            toast.success('Sincronizacao iniciada em background!');
+          } catch { toast.error('Erro'); }
+        }} className="border-[#FFD600] hover:bg-[#FFD600]/10">
+          <RefreshCw className="h-4 w-4 mr-2" />Sincronizar Todas
+        </Button>
       </div>
 
       {/* Portal Cards */}
