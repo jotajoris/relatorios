@@ -37,13 +37,48 @@ const InvoicesPage = () => {
   useEffect(() => { loadInvoices(); }, [loadInvoices]);
 
   const handleFileUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.name.toLowerCase().endsWith('.pdf')) {
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+    
+    const pdfs = files.filter(f => f.name.toLowerCase().endsWith('.pdf'));
+    if (pdfs.length === 0) {
       toast.error('Apenas arquivos PDF sao aceitos');
       return;
     }
 
+    // Single file - open edit form
+    if (pdfs.length === 1) {
+      await processSingleFile(pdfs[0]);
+    } else {
+      // Multiple files - process all and save automatically
+      setUploading(true);
+      let saved = 0, skipped = 0, errors = 0;
+      for (const file of pdfs) {
+        try {
+          const formData = new FormData();
+          formData.append('file', file);
+          const res = await api.post('/invoices/upload-pdf-auto', formData, { headers: { 'Content-Type': 'multipart/form-data' } });
+          if (res.data.success && res.data.parsed_data?.consumer_unit_id) {
+            try {
+              await api.post('/invoices/save-from-upload', res.data.parsed_data);
+              saved++;
+            } catch (err) {
+              if (err.response?.status === 409) { skipped++; }
+              else { errors++; }
+            }
+          } else { errors++; }
+        } catch { errors++; }
+      }
+      toast.success(`${saved} faturas salvas${skipped ? `, ${skipped} duplicadas ignoradas` : ''}${errors ? `, ${errors} erros` : ''}`);
+      setUploading(false);
+      loadInvoices();
+      e.target.value = '';
+      return;
+    }
+    e.target.value = '';
+  };
+
+  const processSingleFile = async (file) => {
     setUploading(true);
     const formData = new FormData();
     formData.append('file', file);
