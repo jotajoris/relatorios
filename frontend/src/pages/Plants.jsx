@@ -489,7 +489,6 @@ const Plants = () => {
                 </div>
               </div>
 
-              {/* Prognosis by Irradiance - same layout as PlantDetail */}
               <div className="p-3 bg-[#FFD600]/10 border border-[#FFD600]/30 rounded-lg space-y-3">
                 <div className="flex items-center justify-between">
                   <Label className="text-sm font-semibold">Prognostico por Irradiancia</Label>
@@ -518,7 +517,7 @@ const Plants = () => {
                 )}
               </div>
 
-              <div className="grid grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Prognostico Mensal (kWh)</Label>
                   <Input type="number" value={formData.monthly_prognosis_kwh} onChange={(e) => setFormData({...formData, monthly_prognosis_kwh: e.target.value})} placeholder="Auto-calculado" />
@@ -527,15 +526,17 @@ const Plants = () => {
                   <Label>Prognostico Anual (kWh)</Label>
                   <Input type="number" value={formData.annual_prognosis_kwh} onChange={(e) => setFormData({...formData, annual_prognosis_kwh: e.target.value})} placeholder="Auto-calculado" />
                 </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Investimento Total (R$)</Label>
                   <Input type="number" value={formData.total_investment} onChange={(e) => setFormData({...formData, total_investment: e.target.value})} placeholder="Ex: 50000" />
                 </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Data de Instalacao</Label>
-                <Input type="date" value={formData.installation_date} onChange={(e) => setFormData({...formData, installation_date: e.target.value})} />
+                <div className="space-y-2">
+                  <Label>Data de Instalacao</Label>
+                  <Input type="date" value={formData.installation_date} onChange={(e) => setFormData({...formData, installation_date: e.target.value})} />
+                </div>
               </div>
             </div>
           </div>
