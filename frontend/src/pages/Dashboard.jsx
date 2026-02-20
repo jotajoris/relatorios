@@ -66,6 +66,11 @@ const Dashboard = () => {
     if (p.performance >= 90) return 'normal';
     if (p.performance >= 50) return 'alert';
     if (p.performance > 0) return 'critical';
+    // No prognosis but has generation data = use Growatt status
+    if (p.generation_kwh > 0 && p.status === 'online') return 'normal';
+    if (p.generation_kwh > 0 && p.status === 'abnormal') return 'alert';
+    if (p.status === 'online') return 'normal';
+    if (p.status === 'offline') return 'critical';
     return 'unknown';
   };
 
