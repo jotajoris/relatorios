@@ -332,7 +332,110 @@ class GrowattOSSService:
             }
         }
 
-    async def sync_plant_history(self, plant_name: str) -> Dict[str, Any]:
+    async def get_plant_hourly_data(self, plant_name: str, date: str) -> Dict[str, Any]:
+        """Get hourly power data for a plant on a specific date by navigating the OSS portal."""
+        if not self.logged_in or not self.page:
+            return {"success": False, "error": "Nao logado"}
+        try:
+            # Find the plant and get its ID
+            plants = await self.get_plants()
+            plant = None
+            for p in plants:
+                if p.get('name','').lower() == plant_name.lower() or plant_name.lower() in p.get('name','').lower():
+                    plant = p
+                    break
+            if not plant:
+                return {"success": False, "error": f"Usina '{plant_name}' nao encontrada"}
+
+            plant_id = plant.get('id', '')
+            # Use the Growatt OSS API directly via page context
+            # The OSS portal has an internal API at /panel/plant/getPlantData
+            data = await self.page.evaluate(f'''
+                async () => {{
+                    try {{
+                        const res = await fetch('/energy/compare/getPlantCompareData', {{
+                            method: 'POST',
+                            headers: {{'Content-Type': 'application/x-www-form-urlencoded'}},
+                            body: 'plantId={plant_id}&type=0&date={date}'
+                        }});
+                        return await res.json();
+                    }} catch(e) {{
+                        return {{error: e.toString()}};
+                    }}
+                }}
+            ''')
+
+            # Also try the plant detail API
+            detail_data = await self.page.evaluate(f'''
+                async () => {{
+                    try {{
+                        const res = await fetch('/panel/plant/getPlantData', {{
+                            method: 'POST',
+                            headers: {{'Content-Type': 'application/x-www-form-urlencoded'}},
+                            body: 'plantId={plant_id}&type=1&date={date}'
+                        }});
+                        return await res.json();
+                    }} catch(e) {{
+                        return {{error: e.toString()}};
+                    }}
+                }}
+            ''')
+
+            return {
+                "success": True,
+                "plant_name": plant.get('name'),
+                "date": date,
+                "compare_data": data,
+                "detail_data": detail_data,
+            }
+        except Exception as e:
+            logger.error(f"Growatt hourly data error: {e}")
+            return {"success": False, "error": str(e)}
+
+    async def get_plant_daily_data_range(self, plant_name: str, start_date: str, end_date: str) -> Dict[str, Any]:
+        """Get daily generation data for a date range from Growatt OSS."""
+        if not self.logged_in or not self.page:
+            return {"success": False, "error": "Nao logado"}
+        try:
+            plants = await self.get_plants()
+            plant = None
+            for p in plants:
+                if p.get('name','').lower() == plant_name.lower() or plant_name.lower() in p.get('name','').lower():
+                    plant = p
+                    break
+            if not plant:
+                return {"success": False, "error": f"Usina '{plant_name}' nao encontrada"}
+
+            plant_id = plant.get('id', '')
+            # Get monthly data which gives daily values
+            # Parse the year-month from start_date
+            month_str = start_date[:7]  # YYYY-MM
+
+            data = await self.page.evaluate(f'''
+                async () => {{
+                    try {{
+                        const res = await fetch('/panel/plant/getPlantData', {{
+                            method: 'POST',
+                            headers: {{'Content-Type': 'application/x-www-form-urlencoded'}},
+                            body: 'plantId={plant_id}&type=2&date={month_str}'
+                        }});
+                        return await res.json();
+                    }} catch(e) {{
+                        return {{error: e.toString()}};
+                    }}
+                }}
+            ''')
+
+            return {
+                "success": True,
+                "plant_name": plant.get('name'),
+                "start_date": start_date,
+                "end_date": end_date,
+                "data": data,
+            }
+        except Exception as e:
+            logger.error(f"Growatt daily range error: {e}")
+            return {"success": False, "error": str(e)}
         """Navigate to plant details and extract monthly generation history."""
         if not self.logged_in or not self.page:
             return {"success": False, "error": "Nao logado"}
