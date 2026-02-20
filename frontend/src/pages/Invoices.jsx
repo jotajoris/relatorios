@@ -142,7 +142,6 @@ const InvoicesPage = () => {
       toast.error(err.response?.data?.detail || 'Erro ao enviar arquivo');
     } finally {
       setUploading(false);
-      e.target.value = '';
     }
   };
 
