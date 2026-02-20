@@ -1093,41 +1093,59 @@ const PlantDetail = () => {
                         {/* UC Invoice Status */}
                         {summary.uc_status && summary.uc_status.length > 0 && (
                           <div className="mb-2 space-y-0.5">
-                            {summary.uc_status.map((uc, ui) => (
-                              <div key={ui} className="flex items-center justify-between text-[10px]">
-                                <span className="text-neutral-500 truncate mr-1">{uc.uc}</span>
-                                {uc.has_invoice ? (
-                                  <CheckCircle className="h-3 w-3 text-emerald-500 flex-shrink-0" />
-                                ) : (
-                                  <button onClick={(e) => {
-                                    e.stopPropagation();
-                                    // Try auto-download from COPEL if credentials exist
-                                    if (data?.plant?.copel_cnpj) {
-                                      toast.info(`Tentando baixar fatura UC ${uc.uc} de ${['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][m]}/${selectedYear}...`);
-                                      api.post(`/integrations/copel/download-invoice/${plantId}`, {
-                                        uc_number: uc.uc,
-                                        reference_month: `${String(m+1).padStart(2,'0')}/${selectedYear}`,
-                                      }).then(res => {
-                                        if (res.data.success) {
-                                          toast.success(`Fatura baixada! UC ${uc.uc}`);
-                                          loadUcInvoiceStatus();
+                            {summary.uc_status.map((uc, ui) => {
+                              const key = `${uc.uc}-${month}`;
+                              const dlState = downloadingUc[key];
+                              return (
+                                <div key={ui} className="flex items-center justify-between text-[10px]">
+                                  <span className="text-neutral-500 truncate mr-1">{uc.uc}</span>
+                                  <div className="flex items-center gap-1 flex-shrink-0">
+                                    {dlState === 'unavailable' && (
+                                      <span className="text-[8px] text-red-400">indisponivel</span>
+                                    )}
+                                    {uc.has_invoice ? (
+                                      <CheckCircle className="h-3 w-3 text-emerald-500" />
+                                    ) : dlState === 'loading' ? (
+                                      <div title="Baixando fatura da concessionaria" className="cursor-help">
+                                        <Loader2 className="h-3 w-3 text-blue-500 animate-spin" />
+                                      </div>
+                                    ) : (
+                                      <button onClick={(e) => {
+                                        e.stopPropagation();
+                                        if (data?.plant?.copel_cnpj) {
+                                          setDownloadingUc(prev => ({...prev, [key]: 'loading'}));
+                                          api.post(`/integrations/copel/download-invoice/${plantId}`, {
+                                            uc_number: uc.uc,
+                                            reference_month: `${String(month).padStart(2,'0')}/${selectedYear}`,
+                                          }).then(res => {
+                                            if (res.data.success) {
+                                              toast.success(`Fatura baixada! UC ${uc.uc}`);
+                                              setDownloadingUc(prev => ({...prev, [key]: null}));
+                                              loadMonthlySummary();
+                                            }
+                                          }).catch(err => {
+                                            const msg = err.response?.data?.detail || '';
+                                            if (msg.includes('nao disponivel')) {
+                                              setDownloadingUc(prev => ({...prev, [key]: 'unavailable'}));
+                                            } else {
+                                              setDownloadingUc(prev => ({...prev, [key]: 'unavailable'}));
+                                              toast.error(msg || 'Erro ao baixar');
+                                            }
+                                          });
+                                        } else {
+                                          navigate('/faturas');
                                         }
-                                      }).catch(err => {
-                                        toast.error(err.response?.data?.detail || 'Nao foi possivel baixar');
-                                        navigate('/faturas');
-                                      });
-                                    } else {
-                                      navigate('/faturas');
-                                    }
-                                  }}
-                                    className="flex-shrink-0 hover:scale-125 transition-transform"
-                                    title={data?.plant?.copel_cnpj ? `Baixar fatura COPEL` : `Ir para Faturas`}
-                                  >
-                                    <Clock className="h-3 w-3 text-amber-400" />
-                                  </button>
-                                )}
-                              </div>
-                            ))}
+                                      }}
+                                        className="hover:scale-125 transition-transform"
+                                        title={data?.plant?.copel_cnpj ? 'Tentar baixar fatura da concessionaria' : 'Ir para upload manual'}
+                                      >
+                                        <Clock className="h-3 w-3 text-amber-400" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
                         )}
 
