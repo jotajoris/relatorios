@@ -2444,12 +2444,12 @@ async def get_growatt_hourly(
     if not plant:
         raise HTTPException(status_code=404, detail="Usina nao encontrada")
 
-    username = plant.get('growatt_username', '')
-    password = plant.get('growatt_password', '')
-    growatt_name = plant.get('growatt_plant_name', '')
+    username = plant.get('growatt_username') or ''
+    password = plant.get('growatt_password') or ''
+    growatt_name = plant.get('growatt_plant_name') or plant.get('name') or ''
 
-    if not username or not password or not growatt_name:
-        raise HTTPException(status_code=400, detail="Credenciais Growatt nao configuradas")
+    if not username or not password:
+        raise HTTPException(status_code=400, detail="Credenciais Growatt nao configuradas. Va em Configuracoes.")
 
     await reset_growatt_oss_service()
     service = get_growatt_oss_service()
