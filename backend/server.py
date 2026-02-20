@@ -2804,7 +2804,7 @@ async def download_pdf_report(
             seen_all.add(iid)
             total_savings_all_time += inv.get('amount_saved_brl', 0) or 0
     
-    total_investment = plant.get('total_investment', 0)
+    total_investment = plant.get('total_investment') or 0
     roi_monthly = (total_saved / total_investment * 100) if total_investment > 0 else 0
     roi_total = (total_savings_all_time / total_investment * 100) if total_investment > 0 else 0
     
