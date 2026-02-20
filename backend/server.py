@@ -1858,17 +1858,28 @@ async def get_monthly_summary(
         }, {'_id': 0, 'consumer_unit_id': 1}).to_list(500)
         invoice_uc_ids = set(inv.get('consumer_unit_id','') for inv in month_invoices)
 
-        # Build UC status list
+        # Build UC status list - check if each UC has an invoice for this month
+        # Build a map: uc_number -> list of consumer_unit_ids across all plants
+        uc_num_to_ids = {}
+        for u in units:
+            ucn = u.get('uc_number','')
+            if ucn not in uc_num_to_ids:
+                uc_num_to_ids[ucn] = set()
+            uc_num_to_ids[ucn].add(u['id'])
+        for m in all_matching:
+            # Find which uc_number this matching ID belongs to
+            for u in units:
+                match_uc = await db.consumer_units.find_one({'id': m['id']}, {'_id': 0, 'uc_number': 1})
+                if match_uc and match_uc.get('uc_number') in uc_num_to_ids:
+                    uc_num_to_ids[match_uc['uc_number']].add(m['id'])
+
         uc_status = []
         for u in units:
-            has = u['id'] in invoice_uc_ids
-            # Also check by matching UC IDs from other plants
-            if not has:
-                matching_ids = [m['id'] for m in all_matching if any(
-                    uu.get('uc_number') == u.get('uc_number') for uu in [u]
-                )]
-                has = any(mid in invoice_uc_ids for mid in matching_ids)
-            uc_status.append({'uc': u.get('uc_number',''), 'has_invoice': has})
+            ucn = u.get('uc_number','')
+            # Check if ANY consumer_unit_id for this uc_number has an invoice
+            possible_ids = uc_num_to_ids.get(ucn, {u['id']})
+            has = bool(possible_ids & invoice_uc_ids)
+            uc_status.append({'uc': ucn, 'has_invoice': has})
 
         result.append({
             'month': month,
