@@ -2689,6 +2689,22 @@ async def import_growatt_plants(
             'is_active': True
         })
         if existing:
+            # Update existing with Growatt credentials if missing
+            update_fields = {
+                'growatt_username': username,
+                'growatt_password': password,
+                'growatt_plant_name': gp.get('name', ''),
+                'growatt_plant_id': gp.get('growatt_id', ''),
+                'inverter_integration': 'growatt',
+                'growatt_status': gp.get('status', 'unknown'),
+            }
+            if gp.get('capacity_kwp') and not existing.get('capacity_kwp'):
+                update_fields['capacity_kwp'] = float(gp.get('capacity_kwp', 0))
+            if gp.get('city') and not existing.get('city'):
+                update_fields['city'] = gp.get('city', '')
+            if gp.get('installation_date') and not existing.get('installation_date'):
+                update_fields['installation_date'] = gp.get('installation_date', '')
+            await db.plants.update_one({'id': existing['id']}, {'$set': update_fields})
             skipped.append(gp['name'])
             continue
 
@@ -2706,6 +2722,10 @@ async def import_growatt_plants(
         doc['growatt_username'] = username
         doc['growatt_password'] = password
         doc['inverter_integration'] = 'growatt'
+        doc['growatt_status'] = gp.get('status', 'unknown')
+        doc['installation_date'] = gp.get('installation_date', '')
+        doc['total_energy_kwh'] = gp.get('total_energy_kwh', 0)
+        doc['device_count'] = gp.get('device_count', 0)
         await db.plants.insert_one(doc)
         imported.append(gp['name'])
 
