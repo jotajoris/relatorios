@@ -2365,14 +2365,14 @@ async def sync_growatt_plant_data(
         raise HTTPException(status_code=404, detail="Usina nao encontrada")
 
     # Use saved credentials or from request
-    username = (request or {}).get('username') or plant.get('growatt_username', '')
-    password = (request or {}).get('password') or plant.get('growatt_password', '')
-    growatt_name = plant.get('growatt_plant_name', '')
+    username = (request or {}).get('username') or plant.get('growatt_username') or ''
+    password = (request or {}).get('password') or plant.get('growatt_password') or ''
+    growatt_name = plant.get('growatt_plant_name') or plant.get('name') or ''
 
     if not username or not password:
-        raise HTTPException(status_code=400, detail="Credenciais Growatt nao configuradas. Va em Portais para conectar.")
+        raise HTTPException(status_code=400, detail="Credenciais Growatt nao configuradas. Va em Configuracoes da usina ou Portais para conectar.")
     if not growatt_name:
-        raise HTTPException(status_code=400, detail="Usina nao vinculada ao Growatt. Va em Portais para vincular.")
+        raise HTTPException(status_code=400, detail="Nome da usina Growatt nao configurado.")
 
     # Reset and login
     await reset_growatt_oss_service()
