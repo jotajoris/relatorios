@@ -1281,12 +1281,15 @@ async def get_plants_summary(current_user: dict = Depends(get_current_user)):
             'state': plant.get('state', ''),
             'capacity_kwp': cap,
             'installation_date': plant.get('installation_date', ''),
-            'status': plant.get('status', 'online'),
+            'status': plant.get('growatt_status') or plant.get('status', 'unknown'),
             'generation_kwh': round(total_gen, 2),
             'generation_12m_kwh': round(total_gen_12m, 2),
             'prognosis_kwh': prognosis,
             'performance': round(performance, 1),
             'logo_url': plant.get('logo_url'),
+            'growatt_plant_id': plant.get('growatt_plant_id'),
+            'last_sync': plant.get('last_growatt_sync'),
+            'has_growatt': bool(plant.get('growatt_username')),
         })
     
     return {
