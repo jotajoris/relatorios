@@ -70,14 +70,14 @@ class TokenResponse(BaseModel):
 
 class ClientBase(BaseModel):
     name: str
-    email: Optional[EmailStr] = None
+    email: Optional[str] = None
     phone: Optional[str] = None
     document: Optional[str] = None  # CPF/CNPJ
     address: Optional[str] = None
     city: Optional[str] = None
-    state: Optional[str] = "PR"
+    state: Optional[str] = None
     logo_url: Optional[str] = None
-    contact_person: Optional[str] = None  # Responsável
+    contact_person: Optional[str] = None
 
 class ClientCreate(ClientBase):
     pass
