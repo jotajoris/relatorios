@@ -3027,16 +3027,31 @@ async def download_pdf_report(
                 {'plant_id': plant_id, 'reference_month': hist_ref},
             ]
         }, {'_id': 0}).to_list(1000)
-        # Deduplicate
-        h_seen = set()
+        # Deduplicate historical invoices by uc_number+reference_month
+        h_seen_uc_ref = set()
         h_unique = []
         for hi in hist_invoices:
-            hid = hi.get('id')
-            if hid not in h_seen:
-                h_seen.add(hid)
-                h_unique.append(hi)
+            uc_num = hi.get('uc_number', '')
+            if not uc_num:
+                cu_id = hi.get('consumer_unit_id', '')
+                cu_doc = next((u for u in units if u['id'] == cu_id), None)
+                if cu_doc:
+                    uc_num = cu_doc.get('uc_number', '')
+                else:
+                    cu_doc_db = await db.consumer_units.find_one({'id': cu_id}, {'_id': 0, 'uc_number': 1})
+                    uc_num = cu_doc_db.get('uc_number', '') if cu_doc_db else ''
+            dedup_key = f"{uc_num}_{hist_ref}"
+            if dedup_key in h_seen_uc_ref and uc_num:
+                continue
+            if uc_num:
+                h_seen_uc_ref.add(dedup_key)
+            h_unique.append(hi)
         
-        hist_cons_p = sum(hi.get('energy_registered_p_kwh', 0) or 0 for hi in h_unique)
+        # Get Consumo PT from generator UC only (Grupo A)
+        hist_cons_p = 0
+        for hi in h_unique:
+            if hi.get('tariff_group') == 'A' or hi.get('is_generator'):
+                hist_cons_p += hi.get('energy_registered_p_kwh', 0) or 0
         hist_cons_fp = sum(hi.get('energy_registered_fp_kwh', 0) or 0 for hi in h_unique)
         hist_eco = sum(hi.get('amount_saved_brl', 0) or 0 for hi in h_unique)
         hist_fat = sum(hi.get('amount_total_brl', 0) or 0 for hi in h_unique)
