@@ -462,31 +462,30 @@ const Plants = () => {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label>Estado</Label>
-                  <select className="w-full h-9 rounded-md border border-neutral-200 bg-white px-3 py-1 text-sm"
-                    value={formData.state} onChange={(e) => { setFormData({...formData, state: e.target.value, city: ''}); setCitySearch(''); }}>
-                    <option value="">Selecione o estado</option>
-                    {statesList.map(s => <option key={s} value={s}>{s.replace(/_/g,' ')}</option>)}
-                  </select>
-                </div>
-                <div className="space-y-2 relative">
-                  <Label>Cidade (Irradiancia)</Label>
-                  <Input value={citySearch || formData.city} onChange={(e) => { setCitySearch(e.target.value); setShowCityDrop(true);
-                    if (!formData.state && e.target.value.length >= 2) api.get(`/irradiance/cities?q=${encodeURIComponent(e.target.value)}`).then(r => setFilteredCities(r.data.map(c=>c.city).sort())).catch(()=>{});
-                  }} onFocus={() => setShowCityDrop(true)} onBlur={() => setTimeout(()=>setShowCityDrop(false),200)} placeholder="Digite para buscar..." />
-                  {showCityDrop && cityMatches.length > 0 && (
-                    <div className="absolute z-[100] top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-xl max-h-48 overflow-y-auto">
-                      {cityMatches.map(c => (
-                        <button key={c} type="button" className={`w-full text-left px-3 py-2 text-sm hover:bg-[#FFD600]/20 border-b last:border-0 ${formData.city===c?'bg-[#FFD600]/10 font-semibold':''}`}
-                          onClick={() => { setFormData(prev=>({...prev,city:c})); setCitySearch(c); setShowCityDrop(false);
-                            api.get(`/irradiance/cities?q=${encodeURIComponent(c)}`).then(r=>{const m=r.data.find(x=>x.city===c);if(m)setFormData(prev=>({...prev,state:m.state}))}).catch(()=>{});
-                          }}>{c}</button>
-                      ))}
-                    </div>
-                  )}
-                </div>
+              <div className="space-y-2">
+                <Label>Estado</Label>
+                <select className="w-full h-9 rounded-md border border-neutral-200 bg-white px-3 py-1 text-sm"
+                  value={formData.state} onChange={(e) => { setFormData({...formData, state: e.target.value, city: ''}); setCitySearch(''); }}>
+                  <option value="">Selecione o estado</option>
+                  {statesList.map(s => <option key={s} value={s}>{s.replace(/_/g,' ')}</option>)}
+                </select>
+              </div>
+
+              <div className="space-y-2 relative">
+                <Label>Cidade (Irradiancia)</Label>
+                <Input value={citySearch || formData.city} onChange={(e) => { setCitySearch(e.target.value); setShowCityDrop(true);
+                  if (!formData.state && e.target.value.length >= 2) api.get(`/irradiance/cities?q=${encodeURIComponent(e.target.value)}`).then(r => setFilteredCities(r.data.map(c=>c.city).sort())).catch(()=>{});
+                }} onFocus={() => setShowCityDrop(true)} onBlur={() => setTimeout(()=>setShowCityDrop(false),200)} placeholder="Digite para buscar..." />
+                {showCityDrop && cityMatches.length > 0 && (
+                  <div className="absolute z-[100] top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                    {cityMatches.map(c => (
+                      <button key={c} type="button" className={`w-full text-left px-3 py-2 text-sm hover:bg-[#FFD600]/20 border-b last:border-0 ${formData.city===c?'bg-[#FFD600]/10 font-semibold':''}`}
+                        onClick={() => { setFormData(prev=>({...prev,city:c})); setCitySearch(c); setShowCityDrop(false);
+                          api.get(`/irradiance/cities?q=${encodeURIComponent(c)}`).then(r=>{const m=r.data.find(x=>x.city===c);if(m)setFormData(prev=>({...prev,state:m.state}))}).catch(()=>{});
+                        }}>{c}</button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="p-3 bg-[#FFD600]/10 border border-[#FFD600]/30 rounded-lg space-y-3">
