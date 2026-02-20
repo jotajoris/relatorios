@@ -13,7 +13,8 @@ import {
   Zap,
   ChevronDown,
   User,
-  Receipt
+  Receipt,
+  Wifi
 } from 'lucide-react';
 import {
   DropdownMenu,
