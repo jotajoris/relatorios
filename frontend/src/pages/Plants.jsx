@@ -78,9 +78,16 @@ const Plants = () => {
   const [calcingProg, setCalcingProg] = useState(false);
   const [progDetail, setProgDetail] = useState(null);
 
-  useEffect(() => {
-    api.get('/irradiance/states').then(r => setStatesList(r.data)).catch(() => {});
-  }, []);
+  // Load states when dialog opens
+  const loadStatesList = async () => {
+    if (statesList.length > 0) return;
+    try {
+      const res = await api.get('/irradiance/states');
+      setStatesList(res.data || []);
+    } catch (err) {
+      console.error('Error loading states:', err);
+    }
+  };
 
   useEffect(() => {
     if (formData.state) {
