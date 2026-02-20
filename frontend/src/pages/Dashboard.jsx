@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import { Card, CardContent } from '../components/ui/card';
@@ -6,7 +6,8 @@ import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import {
   Zap, Factory, TrendingUp, Search, ChevronRight, CheckCircle,
-  AlertTriangle, AlertCircle, HelpCircle, FileText, Users, BarChart3
+  AlertTriangle, AlertCircle, HelpCircle, FileText, Users, BarChart3,
+  RefreshCw, Loader2, Wifi
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -17,17 +18,43 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState('all');
   const [search, setSearch] = useState('');
+  const [syncing, setSyncing] = useState(false);
+  const [lastRefresh, setLastRefresh] = useState(null);
   const navigate = useNavigate();
 
-  useEffect(() => { loadData(); }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       const res = await api.get('/dashboard/plants-summary');
       setData(res.data);
+      setLastRefresh(new Date());
     } catch (err) {
-      toast.error('Erro ao carregar dashboard');
+      if (!data) toast.error('Erro ao carregar dashboard');
     } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  // Auto-refresh every 5 minutes
+  useEffect(() => {
+    const interval = setInterval(loadData, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, [loadData]);
+
+  const handleSyncAll = async () => {
+    setSyncing(true);
+    try {
+      await api.post('/integrations/growatt/sync-all');
+      toast.success('Sincronizacao iniciada! Os dados serao atualizados em alguns minutos.');
+      // Refresh after 30s to show updated data
+      setTimeout(loadData, 30000);
+    } catch (err) {
+      toast.error('Erro ao iniciar sincronizacao');
+    } finally {
+      setSyncing(false);
+    }
+  };
       setLoading(false);
     }
   };
