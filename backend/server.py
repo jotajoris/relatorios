@@ -2662,6 +2662,20 @@ async def download_pdf_report(
     total_generation = sum(d.get('generation_kwh', 0) for d in gen_data)
     prognosis = plant.get('monthly_prognosis_kwh') or 0
     
+    # Calculate month-specific prognosis from irradiance if city is set
+    kwp = plant.get('capacity_kwp', 0)
+    city_name = plant.get('city', '')
+    if city_name and kwp:
+        city_doc = await db.irradiance_cities.find_one(
+            {'city': {'$regex': f'^{city_name}$', '$options': 'i'}}, {'_id': 0}
+        )
+        if city_doc:
+            months_key = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez']
+            irr_val = city_doc.get('irradiance', {}).get(months_key[mon - 1], 0)
+            irr_prog = round(kwp * 30 * ((irr_val / 1000) - 0.1) * 0.75, 2)
+            if irr_prog > 0:
+                prognosis = irr_prog
+    
     # Build daily generation list (fill gaps with 0)
     daily_dict = {d['date']: d['generation_kwh'] for d in gen_data}
     daily_generation = []
