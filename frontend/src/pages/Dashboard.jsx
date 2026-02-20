@@ -275,13 +275,7 @@ const Dashboard = () => {
   );
 };
 
-const PerfBadge = ({ value, gen }) => {
-  // Show generation kWh if no performance %
-  if ((!value || value === 0) && gen > 0) {
-    const label = gen >= 1000 ? `${(gen/1000).toFixed(1)}k` : `${Math.round(gen)}`;
-    return <span className="inline-flex items-center justify-center px-2 h-7 rounded-full text-[10px] font-bold ring-1 text-blue-600 bg-blue-50 ring-blue-200"
-      title={`${gen.toLocaleString('pt-BR')} kWh`}>{label}</span>;
-  }
+const PerfBadge = ({ value }) => {
   if (!value || value === 0) return <span className="text-xs text-neutral-300">-</span>;
   const color = value >= 90 ? 'text-emerald-600 bg-emerald-50 ring-emerald-200'
     : value >= 70 ? 'text-amber-600 bg-amber-50 ring-amber-200'
