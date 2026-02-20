@@ -1736,6 +1736,25 @@ const PlantDetail = () => {
                 </SelectContent>
               </Select>
             </div>
+
+            {/* COPEL Credentials */}
+            <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
+              <Label className="text-sm font-semibold flex items-center gap-2">
+                <FileText className="h-4 w-4 text-blue-600" />
+                Credenciais COPEL (AVA)
+              </Label>
+              <p className="text-xs text-neutral-500">Login para download automatico de faturas</p>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <Label className="text-xs">CNPJ (somente numeros)</Label>
+                  <Input value={plantFormData.copel_cnpj || ''} onChange={e => setPlantFormData({...plantFormData, copel_cnpj: e.target.value})} placeholder="00000000000000" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Senha AVA COPEL</Label>
+                  <Input type="password" value={plantFormData.copel_password || ''} onChange={e => setPlantFormData({...plantFormData, copel_password: e.target.value})} placeholder="Senha" />
+                </div>
+              </div>
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfigDialogOpen(false)}>Cancelar</Button>
