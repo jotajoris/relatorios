@@ -214,7 +214,7 @@ const Dashboard = () => {
               })}
               {filtered.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-neutral-400">
+                  <td colSpan={9} className="py-12 text-center text-neutral-400">
                     Nenhuma usina encontrada
                   </td>
                 </tr>
