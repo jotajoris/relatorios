@@ -1415,7 +1415,7 @@ const PlantDetail = () => {
                     onClick={() => fileInputRef.current?.click()}
                   >
                     {plant.logo_url ? (
-                      <img src={`${API_URL}${plant.logo_url}`} alt="Logo" className="w-full h-full object-cover rounded-lg" />
+                      <img src={plant.logo_url?.startsWith('http') ? plant.logo_url : `${API_URL}${plant.logo_url}`} alt="Logo" className="w-full h-full object-cover rounded-lg" />
                     ) : (
                       <div className="text-center">
                         <Upload className="h-6 w-6 text-neutral-400 mx-auto" />
