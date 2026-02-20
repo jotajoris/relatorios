@@ -809,13 +809,16 @@ const PlantDetail = () => {
                       <p className="text-xl font-bold">{(chartData.reduce((sum, d) => sum + d.generation, 0) / 1000).toFixed(2)} MWh</p>
                     </div>
                     <div className="text-center">
+                      <p className="text-sm text-neutral-500">Prognostico</p>
+                      <p className="text-xl font-bold text-neutral-600">{monthPrognosis > 0 ? (monthPrognosis / 1000).toFixed(2) : '-'} MWh</p>
+                    </div>
+                    <div className="text-center">
                       <p className="text-sm text-neutral-500">Desempenho</p>
                       <p className="text-xl font-bold text-green-600">
                         {(() => {
                           const totalGen = chartData.reduce((sum, d) => sum + d.generation, 0);
-                          const totalProg = chartData.reduce((sum, d) => sum + d.prognosis, 0);
-                          if (totalProg <= 0 || totalGen <= 0) return '-';
-                          return `${((totalGen / totalProg) * 100).toFixed(2)}%`;
+                          if (monthPrognosis <= 0 || totalGen <= 0) return '-';
+                          return `${((totalGen / monthPrognosis) * 100).toFixed(2)}%`;
                         })()}
                       </p>
                     </div>
