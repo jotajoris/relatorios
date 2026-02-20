@@ -351,11 +351,19 @@ const PlantDetail = () => {
     setSaving(true);
     try {
       await api.put(`/plants/${plantId}`, plantFormData);
-      toast.success('Configurações salvas');
+      // Save COPEL credentials separately if provided
+      if (plantFormData.copel_cnpj || plantFormData.copel_password) {
+        await api.post('/integrations/copel/save-credentials', {
+          plant_id: plantId,
+          cnpj: plantFormData.copel_cnpj || '',
+          password: plantFormData.copel_password || '',
+        });
+      }
+      toast.success('Configuracoes salvas');
       setConfigDialogOpen(false);
       loadData();
     } catch (error) {
-      toast.error('Erro ao salvar configurações');
+      toast.error('Erro ao salvar configuracoes');
     } finally {
       setSaving(false);
     }
