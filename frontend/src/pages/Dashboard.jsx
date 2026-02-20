@@ -45,12 +45,11 @@ const Dashboard = () => {
   const handleSyncAll = async () => {
     setSyncing(true);
     try {
-      await api.post('/integrations/growatt/sync-all');
-      toast.success('Sincronizacao iniciada! Os dados serao atualizados em alguns minutos.');
-      // Refresh after 30s to show updated data
-      setTimeout(loadData, 30000);
+      const res = await api.post('/integrations/growatt/sync-all', {}, { timeout: 120000 });
+      toast.success(res.data.message || 'Sincronizacao concluida!');
+      loadData();
     } catch (err) {
-      toast.error('Erro ao iniciar sincronizacao');
+      toast.error(err.response?.data?.detail || 'Erro ao sincronizar');
     } finally {
       setSyncing(false);
     }
