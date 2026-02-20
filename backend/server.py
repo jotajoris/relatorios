@@ -3130,20 +3130,33 @@ async def download_pdf_report(
     total_saved = sum(i.get('amount_saved_brl', 0) for i in invoices)
     total_billed = sum(i.get('amount_total_brl', 0) for i in invoices)
     
-    # Get all-time savings for ROI - use expanded UC matching (same as monthly)
+    # Get all-time savings for ROI - deduplicate by uc_number+reference_month
     all_invoices = await db.invoices.find({
         '$or': [
             {'consumer_unit_id': {'$in': all_uc_ids}},
             {'plant_id': plant_id},
         ]
-    }, {'_id': 0, 'amount_saved_brl': 1, 'id': 1}).to_list(10000)
-    seen_all = set()
+    }, {'_id': 0, 'amount_saved_brl': 1, 'id': 1, 'consumer_unit_id': 1, 'reference_month': 1, 'uc_number': 1}).to_list(10000)
+    seen_all_uc_ref = set()
     total_savings_all_time = 0
     for inv in all_invoices:
-        iid = inv.get('id')
-        if iid not in seen_all:
-            seen_all.add(iid)
-            total_savings_all_time += inv.get('amount_saved_brl', 0) or 0
+        # Resolve uc_number
+        uc_num = inv.get('uc_number', '')
+        if not uc_num:
+            cu_id = inv.get('consumer_unit_id', '')
+            cu_doc = next((u for u in units if u['id'] == cu_id), None)
+            if cu_doc:
+                uc_num = cu_doc.get('uc_number', '')
+            else:
+                cu_doc_db = await db.consumer_units.find_one({'id': cu_id}, {'_id': 0, 'uc_number': 1})
+                uc_num = cu_doc_db.get('uc_number', '') if cu_doc_db else ''
+        ref = inv.get('reference_month', '')
+        dedup_key = f"{uc_num}_{ref}"
+        if dedup_key in seen_all_uc_ref and uc_num:
+            continue
+        if uc_num:
+            seen_all_uc_ref.add(dedup_key)
+        total_savings_all_time += inv.get('amount_saved_brl', 0) or 0
     
     total_investment = plant.get('total_investment') or 0
     roi_monthly = (total_saved / total_investment * 100) if total_investment > 0 else 0
