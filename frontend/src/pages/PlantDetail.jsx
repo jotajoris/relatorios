@@ -184,17 +184,6 @@ const PlantDetail = () => {
   const [calculatingPrognosis, setCalculatingPrognosis] = useState(false);
   const [prognosisDetail, setPrognosisDetail] = useState(null);
 
-  const loadStates = async () => {
-    try {
-      const res = await api.get('/irradiance/states');
-      if (res.data && res.data.length > 0) {
-        setStatesList(res.data);
-      }
-    } catch (err) {
-      console.error('Error loading states:', err);
-    }
-  };
-
   const loadCitiesByState = async (state) => {
     if (!state) { setFilteredCities([]); return; }
     try {
