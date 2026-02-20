@@ -1954,7 +1954,7 @@ async def calculate_prognosis(
     current_user: dict = Depends(get_current_user)
 ):
     """Calculate monthly prognosis based on city irradiance and plant capacity.
-    Formula: kWp * 30 * ((irradiance/1000) - 0.1) * 0.75
+    Formula: kWp * dias_do_mes * ((irradiance/1000) - 0.1) * 0.75
     """
     city_name = request.get('city', '')
     kwp = float(request.get('capacity_kwp', 0))
@@ -1968,17 +1968,20 @@ async def calculate_prognosis(
 
     irr = city.get('irradiance', {})
     months = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez']
+    month_days = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
     result = []
     total_annual = 0
 
-    for m in months:
+    for i, m in enumerate(months):
         irr_val = irr.get(m, 0)
+        days = month_days[i]
         daily = kwp * ((irr_val / 1000) - 0.1) * 0.75
-        monthly = daily * 30
+        monthly = daily * days
         total_annual += monthly
         result.append({
             'month': m,
             'irradiance': irr_val,
+            'days': days,
             'daily_kwh': round(daily, 2),
             'monthly_kwh': round(monthly, 2),
         })
