@@ -256,7 +256,14 @@ const PlantDetail = () => {
       const response = await api.get(`/dashboard/generation-chart/${plantId}`, {
         params: { month: chartMonth }
       });
-      setChartData(response.data);
+      const d = response.data;
+      // Handle both old format (array) and new format ({chart, month_prognosis})
+      if (Array.isArray(d)) {
+        setChartData(d);
+      } else {
+        setChartData(d.chart || []);
+        setMonthPrognosis(d.month_prognosis || 0);
+      }
     } catch (error) {
       console.error('Error loading chart data:', error);
     }
