@@ -71,6 +71,43 @@ const Plants = () => {
     loadData();
   }, []);
 
+  const [statesList, setStatesList] = useState([]);
+  const [filteredCities, setFilteredCities] = useState([]);
+  const [citySearch, setCitySearch] = useState('');
+  const [showCityDrop, setShowCityDrop] = useState(false);
+  const [calcingProg, setCalcingProg] = useState(false);
+  const [progDetail, setProgDetail] = useState(null);
+
+  useEffect(() => {
+    api.get('/irradiance/states').then(r => setStatesList(r.data)).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (formData.state) {
+      api.get(`/irradiance/cities?state=${encodeURIComponent(formData.state)}`).then(r => {
+        setFilteredCities(r.data.map(c => c.city).sort());
+      }).catch(() => {});
+    }
+  }, [formData.state]);
+
+  const cityMatches = filteredCities.filter(c => !citySearch || c.toLowerCase().includes(citySearch.toLowerCase())).slice(0, 50);
+
+  const calcPrognosis = async () => {
+    if (!formData.city || !formData.capacity_kwp) { toast.error('Preencha cidade e potencia'); return; }
+    setCalcingProg(true);
+    try {
+      const res = await api.post('/irradiance/calculate-prognosis', { city: formData.city, capacity_kwp: parseFloat(formData.capacity_kwp) });
+      setProgDetail(res.data);
+      setFormData(prev => ({
+        ...prev,
+        monthly_prognosis_kwh: res.data.average_monthly_kwh.toString(),
+        annual_prognosis_kwh: res.data.total_annual_kwh.toString(),
+      }));
+      toast.success(`Prognostico: ${(res.data.total_annual_kwh/1000).toFixed(2)} MWh/ano`);
+    } catch (err) { toast.error(err.response?.data?.detail || 'Erro'); }
+    finally { setCalcingProg(false); }
+  };
+
   const loadData = async () => {
     try {
       const [plantsRes, clientsRes] = await Promise.all([
