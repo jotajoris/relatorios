@@ -315,22 +315,10 @@ class GrowattOSSService:
         return None
     
     async def sync_plant_energy_data(self, plant_name: str) -> Dict[str, Any]:
-        """
-        Get the latest energy data for a plant
-        
-        Args:
-            plant_name: Name of the plant to sync
-            
-        Returns:
-            Sync result with energy data
-        """
+        """Get the latest energy data for a plant."""
         plant = await self.get_plant_details(plant_name)
-        
         if not plant:
-            return {
-                "success": False,
-                "error": f"Usina '{plant_name}' não encontrada"
-            }
+            return {"success": False, "error": f"Usina '{plant_name}' nao encontrada"}
         
         return {
             "success": True,
@@ -343,6 +331,65 @@ class GrowattOSSService:
                 "full_hours": plant.get('full_hours', 0),
             }
         }
+
+    async def sync_plant_history(self, plant_name: str) -> Dict[str, Any]:
+        """Navigate to plant details and extract monthly generation history."""
+        if not self.logged_in or not self.page:
+            return {"success": False, "error": "Nao logado"}
+
+        try:
+            # Find the plant in the list and click on it
+            rows = await self.page.query_selector_all('table tbody tr')
+            plant_found = False
+            for row in rows:
+                text = await row.inner_text()
+                if plant_name.lower() in text.lower():
+                    link = await row.query_selector('a')
+                    if link:
+                        await link.click()
+                        await self.page.wait_for_timeout(5000)
+                        plant_found = True
+                        break
+
+            if not plant_found:
+                return {"success": False, "error": f"Usina '{plant_name}' nao encontrada na tabela"}
+
+            # Extract monthly data from the plant detail page
+            # Try to get the energy history table
+            monthly_data = await self.page.evaluate('''
+                () => {
+                    const data = [];
+                    // Look for the energy statistics table
+                    const tables = document.querySelectorAll('table');
+                    for (const table of tables) {
+                        const rows = table.querySelectorAll('tr');
+                        for (const row of rows) {
+                            const cells = row.querySelectorAll('td');
+                            if (cells.length >= 2) {
+                                const date = cells[0]?.innerText?.trim();
+                                const energy = cells[1]?.innerText?.trim();
+                                if (date && energy && /\\d{4}-\\d{2}/.test(date)) {
+                                    data.push({date, energy});
+                                }
+                            }
+                        }
+                    }
+                    return data;
+                }
+            ''')
+
+            # Go back to plant list
+            await self.page.go_back()
+            await self.page.wait_for_timeout(3000)
+
+            return {
+                "success": True,
+                "monthly_data": monthly_data,
+                "plant_name": plant_name,
+            }
+        except Exception as e:
+            logger.error(f"Error syncing history for {plant_name}: {e}")
+            return {"success": False, "error": str(e)}
 
 
 # Singleton instance
