@@ -32,6 +32,7 @@ const navItems = [
   { path: '/usinas', label: 'Usinas', icon: Factory },
   { path: '/unidades-consumidoras', label: 'Unidades Consumidoras', icon: Zap },
   { path: '/faturas', label: 'Faturas', icon: Receipt },
+  { path: '/portais', label: 'Portais', icon: Wifi },
   { path: '/relatorios', label: 'Relatórios', icon: FileText },
   { path: '/configuracoes', label: 'Configurações', icon: Settings },
 ];
