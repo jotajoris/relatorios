@@ -1751,14 +1751,20 @@ const PlantDetail = () => {
               <div className="space-y-2 relative">
                 <Label>Cidade (Irradiancia)</Label>
                 <Input
-                  value={citySearchText || plantFormData.city || ''}
+                  value={citySearchText !== '' ? citySearchText : (plantFormData.city || '')}
                   onChange={(e) => {
                     setCitySearchText(e.target.value);
                     setShowCityDropdown(true);
+                    // If no state selected but typing, search across all states
+                    if (!plantFormData.state && e.target.value.length >= 2) {
+                      api.get(`/irradiance/cities?q=${encodeURIComponent(e.target.value)}`).then(res => {
+                        setFilteredCities(res.data.map(c => c.city).sort());
+                      }).catch(() => {});
+                    }
                   }}
-                  onFocus={() => setShowCityDropdown(true)}
-                  placeholder={filteredCities.length ? "Digite para buscar..." : "Escolha o estado primeiro"}
-                  disabled={!filteredCities.length}
+                  onFocus={() => { if (filteredCities.length || citySearchText) setShowCityDropdown(true); }}
+                  onBlur={() => setTimeout(() => setShowCityDropdown(false), 200)}
+                  placeholder="Digite para buscar..."
                 />
                 {showCityDropdown && cityMatches.length > 0 && (
                   <div className="absolute z-[100] top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-xl max-h-52 overflow-y-auto">
