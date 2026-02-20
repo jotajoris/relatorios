@@ -88,6 +88,10 @@ const Portais = () => {
         capacity_kwp: plants[i].capacity_kwp,
         city: plants[i].city,
         growatt_id: plants[i].id,
+        installation_date: plants[i].installation_date,
+        status: plants[i].status,
+        total_energy_kwh: plants[i].total_energy_kwh,
+        device_count: plants[i].device_count,
       }));
       const res = await api.post('/portals/growatt/import-plants', {
         username: credentials.username,
