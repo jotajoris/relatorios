@@ -1705,7 +1705,7 @@ async def get_plant_report_data(
     }, {'_id': 0}).sort('date', 1).to_list(100)
     
     total_generation = sum(d['generation_kwh'] for d in gen_data)
-    prognosis = plant.get('monthly_prognosis_kwh', 0)
+    prognosis = plant.get('monthly_prognosis_kwh') or 0
     performance = (total_generation / prognosis * 100) if prognosis > 0 else 0
     
     # Get consumer units
@@ -1794,7 +1794,7 @@ async def get_monthly_summary(
     if not plant:
         raise HTTPException(status_code=404, detail="Usina nao encontrada")
 
-    flat_prognosis = plant.get('monthly_prognosis_kwh', 0)
+    flat_prognosis = plant.get('monthly_prognosis_kwh') or 0
     kwp = plant.get('capacity_kwp', 0)
     city_name = plant.get('city', '')
 
@@ -2660,7 +2660,7 @@ async def download_pdf_report(
     }, {'_id': 0}).sort('date', 1).to_list(100)
     
     total_generation = sum(d.get('generation_kwh', 0) for d in gen_data)
-    prognosis = plant.get('monthly_prognosis_kwh', 0)
+    prognosis = plant.get('monthly_prognosis_kwh') or 0
     
     # Build daily generation list (fill gaps with 0)
     daily_dict = {d['date']: d['generation_kwh'] for d in gen_data}
