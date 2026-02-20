@@ -1823,10 +1823,21 @@ async def get_monthly_summary(
     uc_numbers = [u.get('uc_number','') for u in units if u.get('uc_number')]
     unit_ids = [u['id'] for u in units]
     # Also get UC IDs from other plants with same uc_numbers
-    all_matching = await db.consumer_units.find({'uc_number': {'$in': uc_numbers}}, {'_id': 0, 'id': 1}).to_list(500)
+    all_matching = await db.consumer_units.find({'uc_number': {'$in': uc_numbers}}, {'_id': 0, 'id': 1, 'uc_number': 1}).to_list(500)
     all_uc_ids = list(set(unit_ids + [u['id'] for u in all_matching]))
 
-    result = []
+    # Pre-build map: uc_number -> set of all consumer_unit_ids across plants
+    ucnum_to_ids = {}
+    for u in units:
+        ucn = u.get('uc_number','')
+        if ucn:
+            ucnum_to_ids.setdefault(ucn, set()).add(u['id'])
+    for m in all_matching:
+        ucn = m.get('uc_number','')
+        if ucn:
+            ucnum_to_ids.setdefault(ucn, set()).add(m['id'])
+
+    monthly_result = []
 
     for month in range(1, 13):
         days = cal_mod.monthrange(year, month)[1]
