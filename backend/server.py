@@ -1384,7 +1384,7 @@ async def get_generation_chart(
             'prognosis': round(daily_prognosis, 2)
         })
     
-    return {'chart': chart_data, 'month_prognosis': round(month_prog, 2), 'total_generation': round(sum(gen_dict.values()), 2)}
+    return {'chart': chart_data, 'month_prognosis': round(month_prog, 2), 'total_generation': round(sum(gen_dict.values()), 2), 'days_in_month': days_in_month}
 
 # ==================== CREDIT DISTRIBUTION LISTS ====================
 
