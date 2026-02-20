@@ -480,16 +480,23 @@ async def startup_event():
     try:
         env = os.environ.copy()
         env['PLAYWRIGHT_BROWSERS_PATH'] = '/pw-browsers'
+        # Install browser
         result = subprocess.run(
             ['playwright', 'install', 'chromium'],
-            capture_output=True, text=True, timeout=120, env=env
+            capture_output=True, text=True, timeout=180, env=env
         )
-        if result.returncode == 0:
-            logger.info("Playwright browsers verified/installed")
-        else:
-            logger.warning(f"Playwright install: {result.stderr[:200]}")
+        logger.info(f"Playwright install chromium: exit={result.returncode}")
+        if result.stderr:
+            logger.info(f"Playwright stderr: {result.stderr[:300]}")
+        # Install system dependencies
+        result2 = subprocess.run(
+            ['playwright', 'install-deps', 'chromium'],
+            capture_output=True, text=True, timeout=180, env=env
+        )
+        logger.info(f"Playwright install-deps: exit={result2.returncode}")
+        logger.info("Playwright browsers verified/installed")
     except Exception as e:
-        logger.warning(f"Playwright browser install skipped: {e}")
+        logger.warning(f"Playwright browser install issue: {e}")
     
     # Start scheduled jobs
     try:
