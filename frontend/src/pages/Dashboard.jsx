@@ -237,10 +237,10 @@ const Dashboard = () => {
                     <td className="py-3 px-4 text-sm text-neutral-600">{p.client_name}</td>
                     <td className="py-3 px-4 text-sm text-neutral-500">{p.city}{p.state ? ` - ${p.state}` : ''}</td>
                     <td className="py-3 px-4 text-sm text-neutral-500">{p.installation_date || '-'}</td>
-                    <td className="py-3 px-2 text-center"><PerfBadge value={p.perf_1d} gen={p.gen_1d_kwh} /></td>
-                    <td className="py-3 px-2 text-center"><PerfBadge value={p.perf_15d} gen={p.gen_15d_kwh} /></td>
-                    <td className="py-3 px-2 text-center"><PerfBadge value={p.perf_30d} gen={p.gen_30d_kwh} /></td>
-                    <td className="py-3 px-2 text-center"><PerfBadge value={p.perf_12m} gen={p.gen_12m_kwh} /></td>
+                    <td className="py-3 px-2 text-center"><PerfBadge value={p.perf_1d} /></td>
+                    <td className="py-3 px-2 text-center"><PerfBadge value={p.perf_15d} /></td>
+                    <td className="py-3 px-2 text-center"><PerfBadge value={p.perf_30d} /></td>
+                    <td className="py-3 px-2 text-center"><PerfBadge value={p.perf_12m} /></td>
                     <td className="py-3 px-3 text-center">
                       {status === 'critical' ? (
                         <AlertCircle className="h-5 w-5 text-red-500 mx-auto" />
