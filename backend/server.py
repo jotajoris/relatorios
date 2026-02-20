@@ -490,6 +490,13 @@ async def startup_event():
             logger.warning(f"Playwright install: {result.stderr[:200]}")
     except Exception as e:
         logger.warning(f"Playwright browser install skipped: {e}")
+    
+    # Start scheduled jobs
+    try:
+        from services.scheduler import start_scheduler
+        start_scheduler()
+    except Exception as e:
+        logger.warning(f"Scheduler start failed: {e}")
 
 # ==================== CLIENTS ROUTES ====================
 
