@@ -803,9 +803,12 @@ const PlantDetail = () => {
                     <div className="text-center">
                       <p className="text-sm text-neutral-500">Desempenho</p>
                       <p className="text-xl font-bold text-green-600">
-                        {chartData.length > 0 
-                          ? `${((chartData.reduce((sum, d) => sum + d.generation, 0) / chartData.reduce((sum, d) => sum + d.prognosis, 0)) * 100).toFixed(2)}%`
-                          : '-'}
+                        {(() => {
+                          const totalGen = chartData.reduce((sum, d) => sum + d.generation, 0);
+                          const totalProg = chartData.reduce((sum, d) => sum + d.prognosis, 0);
+                          if (totalProg <= 0 || totalGen <= 0) return '-';
+                          return `${((totalGen / totalProg) * 100).toFixed(2)}%`;
+                        })()}
                       </p>
                     </div>
                     <Button
