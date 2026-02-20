@@ -2125,6 +2125,75 @@ async def get_growatt_plant_details(request: GrowattPlantSyncRequest, current_us
         "plant": details
     }
 
+@api_router.post("/integrations/growatt/sync-plant/{plant_id}")
+async def sync_growatt_plant_data(
+    plant_id: str,
+    request: Optional[dict] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """Sync generation data from Growatt for a specific plant using saved or provided credentials."""
+    plant = await db.plants.find_one({'id': plant_id, 'is_active': True}, {'_id': 0})
+    if not plant:
+        raise HTTPException(status_code=404, detail="Usina nao encontrada")
+
+    # Use saved credentials or from request
+    username = (request or {}).get('username') or plant.get('growatt_username', '')
+    password = (request or {}).get('password') or plant.get('growatt_password', '')
+    growatt_name = plant.get('growatt_plant_name', '')
+
+    if not username or not password:
+        raise HTTPException(status_code=400, detail="Credenciais Growatt nao configuradas. Va em Portais para conectar.")
+    if not growatt_name:
+        raise HTTPException(status_code=400, detail="Usina nao vinculada ao Growatt. Va em Portais para vincular.")
+
+    # Reset and login
+    await reset_growatt_oss_service()
+    service = get_growatt_oss_service()
+    login_result = await service.login(username, password)
+    if not login_result.get('success'):
+        raise HTTPException(status_code=400, detail=login_result.get('error', 'Login Growatt falhou'))
+
+    # Sync today's data
+    sync_result = await service.sync_plant_energy_data(growatt_name)
+    records_saved = 0
+
+    if sync_result.get('success') and sync_result.get('data'):
+        data = sync_result['data']
+        if data.get('date') and data.get('generation_kwh', 0) > 0:
+            existing = await db.generation_data.find_one({'plant_id': plant_id, 'date': data['date']})
+            if existing:
+                await db.generation_data.update_one(
+                    {'plant_id': plant_id, 'date': data['date']},
+                    {'$set': {'generation_kwh': data['generation_kwh'], 'source': 'growatt'}}
+                )
+            else:
+                await db.generation_data.insert_one({
+                    'id': str(uuid.uuid4()), 'plant_id': plant_id,
+                    'date': data['date'], 'generation_kwh': data['generation_kwh'],
+                    'source': 'growatt', 'created_at': datetime.now(timezone.utc).isoformat()
+                })
+            records_saved = 1
+
+    # Update last sync timestamp
+    await db.plants.update_one({'id': plant_id}, {'$set': {
+        'last_growatt_sync': datetime.now(timezone.utc).isoformat(),
+        'growatt_status': 'online' if sync_result.get('success') else 'offline',
+    }})
+
+    await log_activity(plant_id, "growatt_sync",
+        f"Sincronizado Growatt: {records_saved} registro(s) atualizados",
+        current_user.get('name'))
+
+    await reset_growatt_oss_service()
+
+    return {
+        "success": True,
+        "records_saved": records_saved,
+        "sync_data": sync_result.get('data'),
+        "message": f"Dados sincronizados: {records_saved} registro(s)",
+    }
+
+# Keep old endpoint for backward compatibility
 @api_router.post("/integrations/growatt/sync")
 async def sync_growatt_data(request: GrowattPlantSyncRequest, current_user: dict = Depends(get_current_user)):
     """Sync generation data from Growatt for a specific plant"""
