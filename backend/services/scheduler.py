@@ -259,13 +259,13 @@ async def sync_all_growatt_plants():
 
 
 def start_scheduler():
-    """Start the APScheduler with midnight BRT job."""
+    """Start the APScheduler with scheduled jobs."""
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
     from apscheduler.triggers.cron import CronTrigger
     
     scheduler = AsyncIOScheduler()
     
-    # Run at midnight Brasília time (UTC-3) = 03:00 UTC
+    # Faturas COPEL: midnight Brasília (03:00 UTC)
     scheduler.add_job(
         download_missing_invoices,
         trigger=CronTrigger(hour=3, minute=0, timezone='America/Sao_Paulo'),
@@ -274,6 +274,15 @@ def start_scheduler():
         replace_existing=True,
     )
     
+    # Growatt sync: 6AM Brasília (09:00 UTC) - after sunrise, has yesterday's data
+    scheduler.add_job(
+        sync_all_growatt_plants,
+        trigger=CronTrigger(hour=9, minute=0, timezone='America/Sao_Paulo'),
+        id='sync_growatt',
+        name='Sync Growatt automatico (diario)',
+        replace_existing=True,
+    )
+    
     scheduler.start()
-    logger.info("Scheduler iniciado: download de faturas todo dia a meia-noite (Brasilia)")
+    logger.info("Scheduler iniciado: faturas COPEL (meia-noite) + Growatt sync (6h Brasilia)")
     return scheduler
