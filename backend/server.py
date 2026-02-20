@@ -1272,6 +1272,27 @@ async def get_plants_summary(current_user: dict = Depends(get_current_user)):
         total_capacity_mwp += cap / 1000
         total_gen_all += total_gen_12m
         
+        # Calculate performance for different periods: 1D, 15D, 30D, 12M
+        today_str = now.strftime('%Y-%m-%d')
+        d15_str = (now - timedelta(days=15)).strftime('%Y-%m-%d')
+        d30_str = (now - timedelta(days=30)).strftime('%Y-%m-%d')
+        
+        gen_1d = await db.generation_data.find(
+            {'plant_id': plant['id'], 'date': today_str}, {'_id': 0, 'generation_kwh': 1}
+        ).to_list(1)
+        gen_15d = await db.generation_data.find(
+            {'plant_id': plant['id'], 'date': {'$gte': d15_str}}, {'_id': 0, 'generation_kwh': 1}
+        ).to_list(100)
+        
+        gen_1d_total = sum(d.get('generation_kwh',0) for d in gen_1d)
+        gen_15d_total = sum(d.get('generation_kwh',0) for d in gen_15d)
+        
+        daily_prog = prognosis / 30 if prognosis > 0 else 0
+        perf_1d = round(gen_1d_total / daily_prog * 100) if daily_prog > 0 else 0
+        perf_15d = round(gen_15d_total / (daily_prog * 15) * 100) if daily_prog > 0 else 0
+        perf_30d = round(performance)
+        perf_12m = round(total_gen_12m / (prognosis * 12) * 100) if prognosis > 0 else 0
+
         summaries.append({
             'id': plant['id'],
             'name': plant['name'],
@@ -1286,6 +1307,10 @@ async def get_plants_summary(current_user: dict = Depends(get_current_user)):
             'generation_12m_kwh': round(total_gen_12m, 2),
             'prognosis_kwh': prognosis,
             'performance': round(performance, 1),
+            'perf_1d': perf_1d,
+            'perf_15d': perf_15d,
+            'perf_30d': perf_30d,
+            'perf_12m': perf_12m,
             'logo_url': plant.get('logo_url'),
             'growatt_plant_id': plant.get('growatt_plant_id'),
             'last_sync': plant.get('last_growatt_sync'),
