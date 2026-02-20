@@ -2473,9 +2473,9 @@ async def download_growatt_range(
     if not plant:
         raise HTTPException(status_code=404, detail="Usina nao encontrada")
 
-    username = plant.get('growatt_username', '')
-    password = plant.get('growatt_password', '')
-    growatt_name = plant.get('growatt_plant_name', '')
+    username = plant.get('growatt_username') or ''
+    password = plant.get('growatt_password') or ''
+    growatt_name = plant.get('growatt_plant_name') or plant.get('name') or ''
     start_date = request.get('start_date', '')
     end_date = request.get('end_date', '')
 
