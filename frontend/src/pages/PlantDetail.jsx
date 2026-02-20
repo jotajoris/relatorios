@@ -703,7 +703,7 @@ const PlantDetail = () => {
           >
             {plant.logo_url || client?.logo_url ? (
               <img 
-                src={`${API_URL}${plant.logo_url || client?.logo_url}`} 
+                src={(plant.logo_url || client?.logo_url || '').startsWith('http') ? (plant.logo_url || client?.logo_url) : `${API_URL}${plant.logo_url || client?.logo_url}`} 
                 alt="Logo" 
                 className="w-full h-full object-cover"
               />
