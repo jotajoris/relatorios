@@ -1353,8 +1353,25 @@ async def get_generation_chart(
     gen_dict = {d['date']: d['generation_kwh'] for d in gen_data}
     
     # Get plant for prognosis
-    plant = await db.plants.find_one({'id': plant_id}, {'_id': 0, 'monthly_prognosis_kwh': 1})
-    daily_prognosis = ((plant.get('monthly_prognosis_kwh') or 0) / days_in_month) if plant else 0
+    plant = await db.plants.find_one({'id': plant_id}, {'_id': 0, 'monthly_prognosis_kwh': 1, 'capacity_kwp': 1, 'city': 1})
+    flat_prog = (plant.get('monthly_prognosis_kwh') or 0) if plant else 0
+    
+    # Calculate month-specific prognosis from irradiance
+    kwp = plant.get('capacity_kwp', 0) if plant else 0
+    city_name = plant.get('city', '') if plant else ''
+    month_prog = flat_prog
+    if city_name and kwp:
+        city_doc = await db.irradiance_cities.find_one(
+            {'city': {'$regex': f'^{city_name}$', '$options': 'i'}}, {'_id': 0}
+        )
+        if city_doc:
+            months_key = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez']
+            irr_val = city_doc.get('irradiance', {}).get(months_key[mon - 1], 0)
+            irr_prog = round(kwp * 30 * ((irr_val / 1000) - 0.1) * 0.75, 2)
+            if irr_prog > 0:
+                month_prog = irr_prog
+    
+    daily_prognosis = month_prog / 30 if month_prog > 0 else 0
     
     # Build chart data
     chart_data = []
@@ -1367,7 +1384,7 @@ async def get_generation_chart(
             'prognosis': round(daily_prognosis, 2)
         })
     
-    return chart_data
+    return {'chart': chart_data, 'month_prognosis': round(month_prog, 2), 'total_generation': round(sum(gen_dict.values()), 2)}
 
 # ==================== CREDIT DISTRIBUTION LISTS ====================
 
