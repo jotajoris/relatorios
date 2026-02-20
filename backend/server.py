@@ -2829,6 +2829,9 @@ async def import_growatt_plants(
         await db.plants.insert_one(doc)
         imported.append(gp['name'])
 
+        # Auto-calculate prognosis from city irradiance
+        await auto_calculate_prognosis(plant.id, gp.get('city', ''), float(gp.get('capacity_kwp', 0)))
+
         await log_activity(plant.id, "imported_from_growatt",
             f"Usina importada da Growatt: {gp['name']} ({gp.get('capacity_kwp',0)} kWp)",
             current_user.get('name'))
