@@ -197,7 +197,7 @@ const InvoicesPage = () => {
   const filtered = invoices.filter(inv => {
     if (!searchTerm) return true;
     const term = searchTerm.toLowerCase();
-    return inv.reference_month?.toLowerCase().includes(term) || inv.consumer_unit_id?.toLowerCase().includes(term);
+    return inv.reference_month?.toLowerCase().includes(term) || inv.consumer_unit_id?.toLowerCase().includes(term) || inv.uc_number?.toLowerCase().includes(term);
   });
 
   // Editable Form View (SolarZ-style)
