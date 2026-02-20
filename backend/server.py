@@ -2195,26 +2195,32 @@ async def sync_growatt_plant_data(
     if not login_result.get('success'):
         raise HTTPException(status_code=400, detail=login_result.get('error', 'Login Growatt falhou'))
 
-    # Sync today's data
-    sync_result = await service.sync_plant_energy_data(growatt_name)
-    records_saved = 0
+    # Sync today's data (from the plant list, which already has today's generation)
+    plants_list = await service.get_plants()
+    plant_data = next((p for p in plants_list if p.get('name','').lower() == growatt_name.lower()), None)
+    
+    if not plant_data:
+        # Try partial match
+        plant_data = next((p for p in plants_list if growatt_name.lower() in p.get('name','').lower()), None)
 
-    if sync_result.get('success') and sync_result.get('data'):
-        data = sync_result['data']
-        if data.get('date') and data.get('generation_kwh', 0) > 0:
-            existing = await db.generation_data.find_one({'plant_id': plant_id, 'date': data['date']})
-            if existing:
-                await db.generation_data.update_one(
-                    {'plant_id': plant_id, 'date': data['date']},
-                    {'$set': {'generation_kwh': data['generation_kwh'], 'source': 'growatt'}}
-                )
-            else:
-                await db.generation_data.insert_one({
-                    'id': str(uuid.uuid4()), 'plant_id': plant_id,
-                    'date': data['date'], 'generation_kwh': data['generation_kwh'],
-                    'source': 'growatt', 'created_at': datetime.now(timezone.utc).isoformat()
-                })
-            records_saved = 1
+    records_saved = 0
+    today_str = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+
+    if plant_data and plant_data.get('today_energy_kwh', 0) > 0:
+        existing = await db.generation_data.find_one({'plant_id': plant_id, 'date': today_str})
+        gen_kwh = plant_data['today_energy_kwh']
+        if existing:
+            await db.generation_data.update_one(
+                {'plant_id': plant_id, 'date': today_str},
+                {'$set': {'generation_kwh': gen_kwh, 'source': 'growatt'}}
+            )
+        else:
+            await db.generation_data.insert_one({
+                'id': str(uuid.uuid4()), 'plant_id': plant_id,
+                'date': today_str, 'generation_kwh': gen_kwh,
+                'source': 'growatt', 'created_at': datetime.now(timezone.utc).isoformat()
+            })
+        records_saved = 1
 
     # Update last sync timestamp
     await db.plants.update_one({'id': plant_id}, {'$set': {
