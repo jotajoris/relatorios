@@ -1354,7 +1354,7 @@ async def get_generation_chart(
     
     # Get plant for prognosis
     plant = await db.plants.find_one({'id': plant_id}, {'_id': 0, 'monthly_prognosis_kwh': 1})
-    daily_prognosis = (plant.get('monthly_prognosis_kwh', 0) / days_in_month) if plant else 0
+    daily_prognosis = ((plant.get('monthly_prognosis_kwh') or 0) / days_in_month) if plant else 0
     
     # Build chart data
     chart_data = []
