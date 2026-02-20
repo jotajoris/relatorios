@@ -261,6 +261,12 @@ const PlantDetail = () => {
       setPlantFormData(response.data.plant || {});
       loadStates();
       
+      // Load credit distributions history
+      try {
+        const cdRes = await api.get(`/credit-distribution/${plantId}`);
+        setData(prev => ({...prev, credit_distributions: cdRes.data}));
+      } catch {}
+      
       // Load available years for reports
       try {
         const yearsRes = await api.get(`/reports/${plantId}/years`);
