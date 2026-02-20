@@ -2209,6 +2209,70 @@ async def link_growatt_plant(
         "message": f"Usina vinculada à Growatt: {growatt_plant_name}"
     }
 
+# ==================== PORTAL - IMPORT PLANTS ====================
+
+@api_router.post("/portals/growatt/import-plants")
+async def import_growatt_plants(
+    request: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Import selected Growatt plants into the system."""
+    username = request.get('username', '')
+    password = request.get('password', '')
+    selected_plants = request.get('plants', [])  # list of {name, capacity_kwp, city, growatt_id}
+    client_id = request.get('client_id', '')
+
+    if not selected_plants:
+        raise HTTPException(status_code=400, detail="Nenhuma usina selecionada")
+
+    # Verify client exists if provided
+    if client_id:
+        client = await db.clients.find_one({'id': client_id, 'is_active': True})
+        if not client:
+            raise HTTPException(status_code=404, detail="Cliente nao encontrado")
+
+    imported = []
+    skipped = []
+
+    for gp in selected_plants:
+        # Check if already exists by name
+        existing = await db.plants.find_one({
+            'name': {'$regex': f'^{gp["name"]}$', '$options': 'i'},
+            'is_active': True
+        })
+        if existing:
+            skipped.append(gp['name'])
+            continue
+
+        plant = Plant(
+            name=gp.get('name', ''),
+            client_id=client_id or '',
+            capacity_kwp=float(gp.get('capacity_kwp', 0)),
+            city=gp.get('city', ''),
+            inverter_brand='growatt',
+            growatt_plant_name=gp.get('name', ''),
+        )
+        doc = plant.model_dump()
+        doc['created_at'] = doc['created_at'].isoformat()
+        doc['growatt_plant_id'] = gp.get('growatt_id', '')
+        doc['growatt_username'] = username
+        doc['growatt_password'] = password
+        doc['inverter_integration'] = 'growatt'
+        await db.plants.insert_one(doc)
+        imported.append(gp['name'])
+
+        await log_activity(plant.id, "imported_from_growatt",
+            f"Usina importada da Growatt: {gp['name']} ({gp.get('capacity_kwp',0)} kWp)",
+            current_user.get('name'))
+
+    return {
+        "success": True,
+        "imported": imported,
+        "skipped": skipped,
+        "total_imported": len(imported),
+        "total_skipped": len(skipped),
+    }
+
 # ==================== GROWATT API (LIGHTWEIGHT) ====================
 
 from services.growatt_api_service import GrowattAPIService, GROWATT_AVAILABLE
