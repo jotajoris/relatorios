@@ -171,7 +171,13 @@ const PlantDetail = () => {
   const [plantFormData, setPlantFormData] = useState({});
 
   // City/State selection for irradiance
-  const [statesList, setStatesList] = useState([]);
+  const ESTADOS_BR = [
+    'ACRE','ALAGOAS','AMAPÁ','AMAZONAS','BAHIA','CEARÁ','DISTRITO_FEDERAL',
+    'ESPÍRITO_SANTO','GOIÁS','MARANHÃO','MATO_GROSSO','MATO_GROSSO_DO_SUL',
+    'MINAS_GERAIS','PARÁ','PARAÍBA','PARANÁ','PERNAMBUCO','PIAUÍ',
+    'RIO_DE_JANEIRO','RIO_GRANDE_DO_NORTE','RIO_GRANDE_DO_SUL','RONDÔNIA',
+    'RORAIMA','SANTA_CATARINA','SERGIPE','SÃO_PAULO','TOCANTINS'
+  ];
   const [filteredCities, setFilteredCities] = useState([]);
   const [citySearchText, setCitySearchText] = useState('');
   const [showCityDropdown, setShowCityDropdown] = useState(false);
