@@ -157,7 +157,7 @@ const Dashboard = () => {
         </Card>
       </div>
 
-      {/* Filter Tabs + Search */}
+      {/* Filter Tabs + Search + Sync */}
       <div className="flex flex-wrap items-center gap-2">
         {[
           { key: 'all', label: 'Todos', count: counts.all, color: 'bg-[#FFD600] text-[#1A1A1A]' },
@@ -173,10 +173,25 @@ const Dashboard = () => {
           </button>
         ))}
 
-        <div className="ml-auto relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400" />
-          <Input placeholder="Buscar usina, cliente, cidade..." value={search} onChange={e => setSearch(e.target.value)}
-            className="pl-9 w-64 h-9 text-sm" data-testid="dashboard-search" />
+        <div className="ml-auto flex items-center gap-2">
+          {lastRefresh && (
+            <span className="text-[10px] text-neutral-400">
+              Atualizado: {lastRefresh.toLocaleTimeString('pt-BR', {hour:'2-digit',minute:'2-digit'})}
+            </span>
+          )}
+          <Button variant="ghost" size="sm" onClick={loadData} className="h-7 w-7 p-0" title="Atualizar dados">
+            <RefreshCw className="h-3.5 w-3.5" />
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleSyncAll} disabled={syncing}
+            className="h-7 text-xs border-[#FFD600] hover:bg-[#FFD600]/10" title="Sincronizar todas as usinas Growatt">
+            {syncing ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Wifi className="h-3 w-3 mr-1 text-[#FFD600]" />}
+            {syncing ? 'Sincronizando...' : 'Sync Growatt'}
+          </Button>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400" />
+            <Input placeholder="Buscar..." value={search} onChange={e => setSearch(e.target.value)}
+              className="pl-9 w-48 h-7 text-xs" data-testid="dashboard-search" />
+          </div>
         </div>
       </div>
 
