@@ -2308,6 +2308,10 @@ async def growatt_login(request: GrowattLoginRequest, current_user: dict = Depen
         "plants": plants,
         "total": len(plants)
     }
+    except Exception as e:
+        logger.error(f"Growatt login error: {e}")
+        await reset_growatt_oss_service()
+        raise HTTPException(status_code=500, detail=f"Erro ao conectar com Growatt: {str(e)}")
 
 @api_router.post("/integrations/growatt/plants")
 async def list_growatt_plants(request: GrowattLoginRequest, current_user: dict = Depends(get_current_user)):
