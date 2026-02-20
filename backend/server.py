@@ -1869,24 +1869,15 @@ async def get_monthly_summary(
         }, {'_id': 0, 'consumer_unit_id': 1}).to_list(500)
         invoice_uc_ids = set(inv.get('consumer_unit_id','') for inv in month_invoices)
 
-        # Build UC status - for each UC, check if it has an invoice for this month
-        # Pre-build map: uc_number -> set of all consumer_unit_ids (this plant + other plants with same uc_number)
+        # Build UC status using pre-built ucnum_to_ids map
         uc_status = []
         for u in units:
             ucn = u.get('uc_number','')
-            has = u['id'] in invoice_uc_ids
-            if not has and ucn:
-                # Check other plant's UC IDs with same uc_number
-                for m_uc in all_matching:
-                    if m_uc['id'] in invoice_uc_ids:
-                        # Verify this matching UC has the same uc_number
-                        m_doc = await db.consumer_units.find_one({'id': m_uc['id']}, {'_id': 0, 'uc_number': 1})
-                        if m_doc and m_doc.get('uc_number') == ucn:
-                            has = True
-                            break
+            possible_ids = ucnum_to_ids.get(ucn, {u['id']})
+            has = bool(possible_ids & invoice_uc_ids)
             uc_status.append({'uc': ucn, 'has_invoice': has})
 
-        result.append({
+        monthly_result.append({
             'month': month,
             'year': year,
             'generation_kwh': round(gen_total, 2),
@@ -1895,7 +1886,7 @@ async def get_monthly_summary(
             'uc_status': uc_status,
         })
 
-    return result
+    return monthly_result
 
 
 # ==================== IRRADIANCE / PROGNOSIS ====================
