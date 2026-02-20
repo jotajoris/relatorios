@@ -2361,10 +2361,10 @@ async def import_growatt_plants(
             capacity_kwp=float(gp.get('capacity_kwp', 0)),
             city=gp.get('city', ''),
             inverter_brand='growatt',
-            growatt_plant_name=gp.get('name', ''),
         )
         doc = plant.model_dump()
         doc['created_at'] = doc['created_at'].isoformat()
+        doc['growatt_plant_name'] = gp.get('name', '')
         doc['growatt_plant_id'] = gp.get('growatt_id', '')
         doc['growatt_username'] = username
         doc['growatt_password'] = password
