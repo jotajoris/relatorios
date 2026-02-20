@@ -803,22 +803,31 @@ const PlantDetail = () => {
                   </div>
                   
                   {/* Stats below chart */}
-                  <div className="flex justify-center items-center gap-8 mt-4 pt-4 border-t">
+                  <div className="flex justify-center items-center gap-6 mt-4 pt-4 border-t flex-wrap">
                     <div className="text-center">
-                      <p className="text-sm text-neutral-500">Gerado</p>
-                      <p className="text-xl font-bold">{(chartData.reduce((sum, d) => sum + d.generation, 0) / 1000).toFixed(2)} MWh</p>
+                      <p className="text-xs text-neutral-500">Gerado</p>
+                      <p className="text-lg font-bold">{(chartData.reduce((sum, d) => sum + d.generation, 0) / 1000).toFixed(2)} MWh</p>
                     </div>
                     <div className="text-center">
-                      <p className="text-sm text-neutral-500">Prognostico</p>
-                      <p className="text-xl font-bold text-neutral-600">{monthPrognosis > 0 ? (monthPrognosis / 1000).toFixed(2) : '-'} MWh</p>
+                      <p className="text-xs text-neutral-500">Progn. Mensal</p>
+                      <p className="text-lg font-bold text-neutral-600">{monthPrognosis > 0 ? `${(monthPrognosis / 1000).toFixed(2)} MWh` : '-'}</p>
                     </div>
                     <div className="text-center">
-                      <p className="text-sm text-neutral-500">Desempenho</p>
-                      <p className="text-xl font-bold text-green-600">
+                      <p className="text-xs text-neutral-500">Progn. Diario</p>
+                      <p className="text-lg font-bold text-neutral-500">{monthPrognosis > 0 && chartData.length > 0 ? `${(monthPrognosis / chartData.length).toFixed(0)} kWh` : '-'}</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs text-neutral-500">Desempenho</p>
+                      <p className={`text-lg font-bold ${(() => {
+                        const totalGen = chartData.reduce((sum, d) => sum + d.generation, 0);
+                        if (monthPrognosis <= 0 || totalGen <= 0) return 'text-neutral-400';
+                        const perf = (totalGen / monthPrognosis) * 100;
+                        return perf >= 90 ? 'text-emerald-600' : perf >= 70 ? 'text-amber-500' : 'text-red-500';
+                      })()}`}>
                         {(() => {
                           const totalGen = chartData.reduce((sum, d) => sum + d.generation, 0);
                           if (monthPrognosis <= 0 || totalGen <= 0) return '-';
-                          return `${((totalGen / monthPrognosis) * 100).toFixed(2)}%`;
+                          return `${((totalGen / monthPrognosis) * 100).toFixed(1)}%`;
                         })()}
                       </p>
                     </div>
