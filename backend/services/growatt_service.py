@@ -8,6 +8,7 @@ The automation features will only work when playwright is available.
 
 import asyncio
 import logging
+import os
 from datetime import datetime, timezone
 from typing import Optional, Dict, List, Any, TYPE_CHECKING
 
