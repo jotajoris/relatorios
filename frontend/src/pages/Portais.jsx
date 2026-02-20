@@ -122,9 +122,9 @@ const Portais = () => {
         <Button variant="outline" onClick={async () => {
           toast.info('Sincronizando todas as usinas...');
           try {
-            await api.post('/integrations/growatt/sync-all');
-            toast.success('Sincronizacao iniciada em background!');
-          } catch { toast.error('Erro'); }
+            const res = await api.post('/integrations/growatt/sync-all', {}, { timeout: 120000 });
+            toast.success(res.data.message || 'Sincronizacao concluida!');
+          } catch (err) { toast.error(err.response?.data?.detail || 'Erro'); }
         }} className="border-[#FFD600] hover:bg-[#FFD600]/10">
           <RefreshCw className="h-4 w-4 mr-2" />Sincronizar Todas
         </Button>
