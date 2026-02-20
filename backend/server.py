@@ -1813,6 +1813,19 @@ async def get_monthly_summary(
                 month_prognosis[i+1] = round(kwp * 30 * ((irr_val / 1000) - 0.1) * 0.75, 2)
 
     import calendar as cal_mod
+    now = datetime.now(timezone.utc)
+    current_year = now.year
+    current_month = now.month
+    current_day = now.day
+
+    # Get all UCs for this plant
+    units = await db.consumer_units.find({'plant_id': plant_id, 'is_active': True}, {'_id': 0, 'id': 1, 'uc_number': 1}).to_list(100)
+    uc_numbers = [u.get('uc_number','') for u in units if u.get('uc_number')]
+    unit_ids = [u['id'] for u in units]
+    # Also get UC IDs from other plants with same uc_numbers
+    all_matching = await db.consumer_units.find({'uc_number': {'$in': uc_numbers}}, {'_id': 0, 'id': 1}).to_list(500)
+    all_uc_ids = list(set(unit_ids + [u['id'] for u in all_matching]))
+
     result = []
 
     for month in range(1, 13):
@@ -1827,7 +1840,35 @@ async def get_monthly_summary(
 
         gen_total = sum(d.get('generation_kwh', 0) for d in gen_docs)
         prog = month_prognosis.get(month, flat_prognosis)
-        perf = (gen_total / prog * 100) if prog > 0 else 0
+
+        # For current month: prognosis proportional to days elapsed
+        if year == current_year and month == current_month:
+            prog_adjusted = prog * (current_day / 30) if prog > 0 else 0
+            perf = (gen_total / prog_adjusted * 100) if prog_adjusted > 0 else 0
+        else:
+            perf = (gen_total / prog * 100) if prog > 0 else 0
+
+        # Get invoice status per UC for this month
+        ref_month = f"{month:02d}/{year}"
+        month_invoices = await db.invoices.find({
+            '$or': [
+                {'consumer_unit_id': {'$in': all_uc_ids}, 'reference_month': ref_month},
+                {'plant_id': plant_id, 'reference_month': ref_month},
+            ]
+        }, {'_id': 0, 'consumer_unit_id': 1}).to_list(500)
+        invoice_uc_ids = set(inv.get('consumer_unit_id','') for inv in month_invoices)
+
+        # Build UC status list
+        uc_status = []
+        for u in units:
+            has = u['id'] in invoice_uc_ids
+            # Also check by matching UC IDs from other plants
+            if not has:
+                matching_ids = [m['id'] for m in all_matching if any(
+                    uu.get('uc_number') == u.get('uc_number') for uu in [u]
+                )]
+                has = any(mid in invoice_uc_ids for mid in matching_ids)
+            uc_status.append({'uc': u.get('uc_number',''), 'has_invoice': has})
 
         result.append({
             'month': month,
@@ -1835,6 +1876,7 @@ async def get_monthly_summary(
             'generation_kwh': round(gen_total, 2),
             'prognosis_kwh': prog,
             'performance_percent': round(perf, 1),
+            'uc_status': uc_status,
         })
 
     return result
