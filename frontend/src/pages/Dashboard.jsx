@@ -163,8 +163,10 @@ const Dashboard = () => {
                 <th className="text-left py-3 px-4 text-xs font-semibold text-neutral-500 uppercase">Cliente</th>
                 <th className="text-left py-3 px-4 text-xs font-semibold text-neutral-500 uppercase">Cidade</th>
                 <th className="text-left py-3 px-4 text-xs font-semibold text-neutral-500 uppercase">Data</th>
-                <th className="text-center py-3 px-3 text-xs font-semibold text-neutral-500 uppercase">30D</th>
-                <th className="text-center py-3 px-3 text-xs font-semibold text-neutral-500 uppercase">12M</th>
+                <th className="text-center py-3 px-2 text-xs font-semibold text-neutral-500 uppercase">1D</th>
+                <th className="text-center py-3 px-2 text-xs font-semibold text-neutral-500 uppercase">15D</th>
+                <th className="text-center py-3 px-2 text-xs font-semibold text-neutral-500 uppercase">30D</th>
+                <th className="text-center py-3 px-2 text-xs font-semibold text-neutral-500 uppercase">12M</th>
                 <th className="text-center py-3 px-3 text-xs font-semibold text-neutral-500 uppercase">Aviso</th>
               </tr>
             </thead>
