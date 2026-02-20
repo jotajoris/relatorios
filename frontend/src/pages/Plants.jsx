@@ -467,7 +467,7 @@ const Plants = () => {
                   <Label>Estado</Label>
                   <select className="w-full h-9 rounded-md border border-neutral-200 bg-white px-3 py-1 text-sm"
                     value={formData.state} onChange={(e) => { setFormData({...formData, state: e.target.value, city: ''}); setCitySearch(''); }}>
-                    <option value="">Selecione</option>
+                    <option value="">Selecione o estado</option>
                     {statesList.map(s => <option key={s} value={s}>{s.replace(/_/g,' ')}</option>)}
                   </select>
                 </div>
@@ -489,7 +489,7 @@ const Plants = () => {
                 </div>
               </div>
 
-              {/* Prognosis by Irradiance */}
+              {/* Prognosis by Irradiance - same layout as PlantDetail */}
               <div className="p-3 bg-[#FFD600]/10 border border-[#FFD600]/30 rounded-lg space-y-3">
                 <div className="flex items-center justify-between">
                   <Label className="text-sm font-semibold">Prognostico por Irradiancia</Label>
@@ -501,21 +501,12 @@ const Plants = () => {
                 {progDetail && (
                   <div className="text-xs space-y-2">
                     <p className="text-neutral-500">{progDetail.city} - {progDetail.state} | {progDetail.capacity_kwp} kWp</p>
-                    <div className="grid grid-cols-4 gap-1">
+                    <div className="grid grid-cols-4 gap-2">
                       {progDetail.months?.map((m, i) => (
-                        <div key={i} className="bg-white px-2 py-1 rounded text-center border">
-                          <span className="text-neutral-400 uppercase text-[9px]">{m.month}</span>
-                          <Input type="number" className="h-6 text-[10px] text-center p-0 border-0 font-bold"
-                            defaultValue={Math.round(m.monthly_kwh)}
-                            onChange={(e) => {
-                              const newVal = parseFloat(e.target.value) || 0;
-                              const months = [...progDetail.months];
-                              months[i] = {...months[i], monthly_kwh: newVal};
-                              const total = months.reduce((s,x) => s + x.monthly_kwh, 0);
-                              setProgDetail(prev => ({...prev, months, total_annual_kwh: total, average_monthly_kwh: total/12}));
-                              setFormData(prev => ({...prev, monthly_prognosis_kwh: (total/12).toFixed(2), annual_prognosis_kwh: total.toFixed(2)}));
-                            }} />
-                          <p className="text-[7px] text-neutral-400">irr: {m.irradiance}</p>
+                        <div key={i} className="bg-white px-2 py-2 rounded-lg text-center border">
+                          <span className="text-neutral-400 uppercase text-[9px] block">{m.month}</span>
+                          <p className="font-bold text-sm">{Math.round(m.monthly_kwh).toLocaleString('pt-BR')}</p>
+                          <p className="text-[8px] text-neutral-400">irr: {m.irradiance}</p>
                         </div>
                       ))}
                     </div>
@@ -527,7 +518,7 @@ const Plants = () => {
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label>Prognostico Mensal (kWh)</Label>
                   <Input type="number" value={formData.monthly_prognosis_kwh} onChange={(e) => setFormData({...formData, monthly_prognosis_kwh: e.target.value})} placeholder="Auto-calculado" />
@@ -535,6 +526,10 @@ const Plants = () => {
                 <div className="space-y-2">
                   <Label>Prognostico Anual (kWh)</Label>
                   <Input type="number" value={formData.annual_prognosis_kwh} onChange={(e) => setFormData({...formData, annual_prognosis_kwh: e.target.value})} placeholder="Auto-calculado" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Investimento Total (R$)</Label>
+                  <Input type="number" value={formData.total_investment} onChange={(e) => setFormData({...formData, total_investment: e.target.value})} placeholder="Ex: 50000" />
                 </div>
               </div>
 
