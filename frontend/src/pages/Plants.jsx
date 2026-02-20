@@ -77,7 +77,7 @@ const Plants = () => {
         api.get('/dashboard/plants-summary'),
         api.get('/clients')
       ]);
-      setPlants(plantsRes.data);
+      setPlants(plantsRes.data?.plants || plantsRes.data || []);
       setClients(clientsRes.data);
     } catch (error) {
       toast.error('Erro ao carregar dados');
