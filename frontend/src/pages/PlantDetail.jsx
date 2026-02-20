@@ -112,6 +112,9 @@ const PlantDetail = () => {
   });
   const [selectedGrowattPlant, setSelectedGrowattPlant] = useState(null);
   const [syncingGrowatt, setSyncingGrowatt] = useState(false);
+  const [showDownloadDialog, setShowDownloadDialog] = useState(false);
+  const [downloadRange, setDownloadRange] = useState({ start: '', end: '' });
+  const [downloading, setDownloading] = useState(false);
 
   // Sync Growatt data for this plant
   const handleSyncGrowattDirect = async () => {
