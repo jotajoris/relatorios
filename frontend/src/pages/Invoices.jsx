@@ -389,7 +389,9 @@ const InvoicesPage = () => {
                       <FileText className="h-5 w-5 text-[#FFD600]" />
                     </div>
                     <div className="min-w-0">
-                      <p className="font-semibold text-sm text-[#1A1A1A] truncate">Ref: {inv.reference_month || 'N/A'}</p>
+                      <p className="font-semibold text-sm text-[#1A1A1A] truncate">
+                        Ref: {inv.reference_month || 'N/A'} <span className="text-xs font-normal text-neutral-400">| UC {inv.uc_number || '?'}</span>
+                      </p>
                       <p className="text-xs text-neutral-400">Grupo {inv.tariff_group || 'B'} | {inv.is_generator ? 'Geradora' : 'Beneficiaria'}</p>
                     </div>
                   </div>
