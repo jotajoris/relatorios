@@ -1827,7 +1827,9 @@ async def get_monthly_summary(
             months_key = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez']
             for i, mk in enumerate(months_key):
                 irr_val = irr.get(mk, 0)
-                month_prognosis[i+1] = round(kwp * 30 * ((irr_val / 1000) - 0.1) * 0.75, 2)
+                import calendar as cal_mod_inner
+                m_days = cal_mod_inner.monthrange(year, i+1)[1]
+                month_prognosis[i+1] = round(kwp * m_days * ((irr_val / 1000) - 0.1) * 0.75, 2)
 
     import calendar as cal_mod
     now = datetime.now(timezone.utc)
