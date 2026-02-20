@@ -929,9 +929,55 @@ const PlantDetail = () => {
               </Card>
             </div>
           </div>
-        </TabsContent>
 
-        {/* Tab 2: Relatórios */}
+          {/* Download Period Dialog */}
+          <Dialog open={showDownloadDialog} onOpenChange={setShowDownloadDialog}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle>Baixar Dados de Geracao</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4">
+                <p className="text-sm text-neutral-500">Selecione o periodo para baixar os dados diretamente da Growatt</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Data Inicio</Label>
+                    <Input type="date" value={downloadRange.start}
+                      onChange={e => setDownloadRange(prev => ({...prev, start: e.target.value}))} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Data Fim</Label>
+                    <Input type="date" value={downloadRange.end}
+                      onChange={e => setDownloadRange(prev => ({...prev, end: e.target.value}))} />
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  {[
+                    {label: 'Ultimo Mes', fn: () => {
+                      const d = new Date();
+                      d.setMonth(d.getMonth()-1);
+                      setDownloadRange({start: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`, end: new Date().toISOString().split('T')[0]});
+                    }},
+                    {label: 'Ultimos 3 Meses', fn: () => {
+                      const d = new Date();
+                      d.setMonth(d.getMonth()-3);
+                      setDownloadRange({start: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`, end: new Date().toISOString().split('T')[0]});
+                    }},
+                    {label: 'Ultimo Ano', fn: () => {
+                      const d = new Date();
+                      d.setFullYear(d.getFullYear()-1);
+                      setDownloadRange({start: `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-01`, end: new Date().toISOString().split('T')[0]});
+                    }},
+                  ].map(b => (
+                    <Button key={b.label} variant="outline" size="sm" onClick={b.fn} className="text-xs h-7 flex-1">{b.label}</Button>
+                  ))}
+                </div>
+                <Button onClick={handleDownloadRange} disabled={downloading} className="w-full bg-[#1A1A1A] text-white hover:bg-[#333]">
+                  {downloading ? <><Loader2 className="h-4 w-4 animate-spin mr-2" />Baixando da Growatt...</> : <><Download className="h-4 w-4 mr-2" />Baixar Dados</>}
+                </Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+        </TabsContent>
         <TabsContent value="reports" className="mt-6">
           <Card>
             <CardHeader>
