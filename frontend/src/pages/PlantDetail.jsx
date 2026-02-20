@@ -816,20 +816,33 @@ const PlantDetail = () => {
                     </div>
                     <div className="text-center">
                       <p className="text-xs text-neutral-500">Progn. Diario</p>
-                      <p className="text-lg font-bold text-neutral-500">{monthPrognosis > 0 && chartData.length > 0 ? `${(monthPrognosis / chartData.length).toFixed(0)} kWh` : '-'}</p>
+                      <p className="text-lg font-bold text-neutral-500">{monthPrognosis > 0 ? `${(monthPrognosis / daysInMonth).toFixed(0)} kWh` : '-'}</p>
                     </div>
                     <div className="text-center">
                       <p className="text-xs text-neutral-500">Desempenho</p>
                       <p className={`text-lg font-bold ${(() => {
                         const totalGen = chartData.reduce((sum, d) => sum + d.generation, 0);
-                        if (monthPrognosis <= 0 || totalGen <= 0) return 'text-neutral-400';
-                        const perf = (totalGen / monthPrognosis) * 100;
+                        // For current month: use prognosis proportional to days with data
+                        const now = new Date();
+                        const [cy, cm] = chartMonth.split('-').map(Number);
+                        const isCurrentMonth = cy === now.getFullYear() && cm === (now.getMonth() + 1);
+                        const daysElapsed = isCurrentMonth ? now.getDate() : daysInMonth;
+                        const dailyProg = monthPrognosis / daysInMonth;
+                        const progAdjusted = dailyProg * daysElapsed;
+                        if (progAdjusted <= 0 || totalGen <= 0) return 'text-neutral-400';
+                        const perf = (totalGen / progAdjusted) * 100;
                         return perf >= 90 ? 'text-emerald-600' : perf >= 70 ? 'text-amber-500' : 'text-red-500';
                       })()}`}>
                         {(() => {
                           const totalGen = chartData.reduce((sum, d) => sum + d.generation, 0);
-                          if (monthPrognosis <= 0 || totalGen <= 0) return '-';
-                          return `${((totalGen / monthPrognosis) * 100).toFixed(1)}%`;
+                          const now = new Date();
+                          const [cy, cm] = chartMonth.split('-').map(Number);
+                          const isCurrentMonth = cy === now.getFullYear() && cm === (now.getMonth() + 1);
+                          const daysElapsed = isCurrentMonth ? now.getDate() : daysInMonth;
+                          const dailyProg = monthPrognosis / daysInMonth;
+                          const progAdjusted = dailyProg * daysElapsed;
+                          if (progAdjusted <= 0 || totalGen <= 0) return '-';
+                          return `${((totalGen / progAdjusted) * 100).toFixed(1)}%`;
                         })()}
                       </p>
                     </div>
