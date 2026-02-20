@@ -181,8 +181,12 @@ const PlantDetail = () => {
   const loadStates = async () => {
     try {
       const res = await api.get('/irradiance/states');
-      setStatesList(res.data);
-    } catch { }
+      if (res.data && res.data.length > 0) {
+        setStatesList(res.data);
+      }
+    } catch (err) {
+      console.error('Error loading states:', err);
+    }
   };
 
   const loadCitiesByState = async (state) => {
