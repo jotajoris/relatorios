@@ -1858,27 +1858,21 @@ async def get_monthly_summary(
         }, {'_id': 0, 'consumer_unit_id': 1}).to_list(500)
         invoice_uc_ids = set(inv.get('consumer_unit_id','') for inv in month_invoices)
 
-        # Build UC status list - check if each UC has an invoice for this month
-        # Build a map: uc_number -> list of consumer_unit_ids across all plants
-        uc_num_to_ids = {}
-        for u in units:
-            ucn = u.get('uc_number','')
-            if ucn not in uc_num_to_ids:
-                uc_num_to_ids[ucn] = set()
-            uc_num_to_ids[ucn].add(u['id'])
-        for m in all_matching:
-            # Find which uc_number this matching ID belongs to
-            for u in units:
-                match_uc = await db.consumer_units.find_one({'id': m['id']}, {'_id': 0, 'uc_number': 1})
-                if match_uc and match_uc.get('uc_number') in uc_num_to_ids:
-                    uc_num_to_ids[match_uc['uc_number']].add(m['id'])
-
+        # Build UC status - for each UC, check if it has an invoice for this month
+        # Pre-build map: uc_number -> set of all consumer_unit_ids (this plant + other plants with same uc_number)
         uc_status = []
         for u in units:
             ucn = u.get('uc_number','')
-            # Check if ANY consumer_unit_id for this uc_number has an invoice
-            possible_ids = uc_num_to_ids.get(ucn, {u['id']})
-            has = bool(possible_ids & invoice_uc_ids)
+            has = u['id'] in invoice_uc_ids
+            if not has and ucn:
+                # Check other plant's UC IDs with same uc_number
+                for m_uc in all_matching:
+                    if m_uc['id'] in invoice_uc_ids:
+                        # Verify this matching UC has the same uc_number
+                        m_doc = await db.consumer_units.find_one({'id': m_uc['id']}, {'_id': 0, 'uc_number': 1})
+                        if m_doc and m_doc.get('uc_number') == ucn:
+                            has = True
+                            break
             uc_status.append({'uc': ucn, 'has_invoice': has})
 
         result.append({
