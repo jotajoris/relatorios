@@ -264,6 +264,7 @@ const PlantDetail = () => {
       } else {
         setChartData(d.chart || []);
         setMonthPrognosis(d.month_prognosis || 0);
+        setDaysInMonth(d.days_in_month || 30);
       }
     } catch (error) {
       console.error('Error loading chart data:', error);
