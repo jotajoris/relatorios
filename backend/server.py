@@ -2298,12 +2298,13 @@ class GrowattPlantSyncRequest(BaseModel):
 
 @api_router.post("/integrations/growatt/sync-all")
 async def sync_all_growatt(current_user: dict = Depends(get_current_user)):
-    """Trigger manual sync of all Growatt plants."""
+    """Trigger manual sync of all Growatt plants - runs synchronously."""
     from services.scheduler import sync_all_growatt_plants
-    import asyncio
-    # Run in background so we don't timeout
-    asyncio.create_task(sync_all_growatt_plants())
-    return {"success": True, "message": "Sincronizacao iniciada em background para todas as usinas Growatt"}
+    try:
+        await sync_all_growatt_plants()
+        return {"success": True, "message": "Sincronizacao concluida com sucesso"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Erro na sincronizacao: {str(e)}")
 
 
 @api_router.post("/integrations/growatt/login")
