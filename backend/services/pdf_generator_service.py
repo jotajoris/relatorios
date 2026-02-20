@@ -240,6 +240,7 @@ class SolarReportGenerator:
         pdata = [[Paragraph(h, hs) for h in headers]]
 
         sum_gen = sum_pt = sum_fp = sum_eco = sum_fat = 0
+        perf_values = []
         count = 0
         for h in hist_data:
             gk = h.get('generation_kwh',0)
@@ -250,6 +251,8 @@ class SolarReportGenerator:
             eco = h.get('economizado',0)
             fat = h.get('faturado',0)
             sum_gen += gk; sum_pt += pt; sum_fp += fp; sum_eco += eco; sum_fat += fat
+            if pf > 0:
+                perf_values.append(pf)
             count += 1
             pdata.append([
                 Paragraph(h.get('month',h.get('month_year','')), tl),
@@ -261,13 +264,14 @@ class SolarReportGenerator:
                 Paragraph(_brl(fat) if fat else "-", tv),
             ])
 
-        # SOMA row
+        # SOMA row - with average desempenho
+        avg_perf = sum(perf_values) / len(perf_values) if perf_values else 0
         sb = _ps('SB2',8,'Helvetica-Bold',BK,TA_CENTER,10)
         su = _ps('SU2',6,'Helvetica',GD,TA_CENTER,8)
         pdata.append([Paragraph('',sb)] + [Paragraph(v,sb) for v in [
-            'Soma\nGeracao','Desemp.','Soma Cons.\nPT','Soma Cons.\nFP','Soma\nEconomizado','Soma\nFaturado']])
+            'Soma\nGeracao','Media\nDesemp.','Soma Cons.\nPT','Soma Cons.\nFP','Soma\nEconomizado','Soma\nFaturado']])
         pdata.append([Paragraph('',sb)] + [Paragraph(v,sb) for v in [
-            f"{_n(sum_gen,0)}", "-", f"{_n(sum_pt,0)}", f"{_n(sum_fp,0)}", f"{_n(sum_eco,2)}", f"{_n(sum_fat,2)}"]])
+            f"{_n(sum_gen,0)}", f"{avg_perf:.0f}%", f"{_n(sum_pt,0)}", f"{_n(sum_fp,0)}", f"{_n(sum_eco,2)}", f"{_n(sum_fat,2)}"]])
         pdata.append([Paragraph('',su)] + [Paragraph(v,su) for v in ['kWh','%','kWh','kWh','R$','R$']])
 
         w = CW / 7
