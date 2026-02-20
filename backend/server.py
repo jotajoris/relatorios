@@ -2222,10 +2222,11 @@ async def sync_growatt_plant_data(
             })
         records_saved = 1
 
-    # Update last sync timestamp
+    # Update plant status
+    status = plant_data.get('status', 'unknown') if plant_data else 'unknown'
     await db.plants.update_one({'id': plant_id}, {'$set': {
         'last_growatt_sync': datetime.now(timezone.utc).isoformat(),
-        'growatt_status': 'online' if sync_result.get('success') else 'offline',
+        'growatt_status': status,
     }})
 
     await log_activity(plant_id, "growatt_sync",
@@ -2237,7 +2238,11 @@ async def sync_growatt_plant_data(
     return {
         "success": True,
         "records_saved": records_saved,
-        "sync_data": sync_result.get('data'),
+        "sync_data": {
+            "date": today_str,
+            "generation_kwh": plant_data.get('today_energy_kwh', 0) if plant_data else 0,
+            "status": status,
+        },
         "message": f"Dados sincronizados: {records_saved} registro(s)",
     }
 
