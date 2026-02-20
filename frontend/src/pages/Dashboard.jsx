@@ -237,7 +237,7 @@ const Dashboard = () => {
                     <td className="py-3 px-4 text-sm text-neutral-600">{p.client_name}</td>
                     <td className="py-3 px-4 text-sm text-neutral-500">{p.city}{p.state ? ` - ${p.state}` : ''}</td>
                     <td className="py-3 px-4 text-sm text-neutral-500">{p.installation_date || '-'}</td>
-                    <td className="py-3 px-2 text-center"><PerfBadge value={p.perf_1d} /></td>
+                    <td className="py-3 px-2 text-center"><PerfBadge value={p.perf_1d} gen={p.generation_kwh} /></td>
                     <td className="py-3 px-2 text-center"><PerfBadge value={p.perf_15d} /></td>
                     <td className="py-3 px-2 text-center"><PerfBadge value={p.perf_30d} /></td>
                     <td className="py-3 px-2 text-center"><PerfBadge value={p.perf_12m} /></td>
