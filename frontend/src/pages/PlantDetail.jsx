@@ -1098,8 +1098,30 @@ const PlantDetail = () => {
                                 {uc.has_invoice ? (
                                   <CheckCircle className="h-3 w-3 text-emerald-500 flex-shrink-0" />
                                 ) : (
-                                  <button onClick={(e) => { e.stopPropagation(); navigate('/faturas'); }}
-                                    className="flex-shrink-0">
+                                  <button onClick={(e) => {
+                                    e.stopPropagation();
+                                    // Try auto-download from COPEL if credentials exist
+                                    if (data?.plant?.copel_cnpj) {
+                                      toast.info(`Tentando baixar fatura UC ${uc.uc} de ${['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][m]}/${selectedYear}...`);
+                                      api.post(`/integrations/copel/download-invoice/${plantId}`, {
+                                        uc_number: uc.uc,
+                                        reference_month: `${String(m+1).padStart(2,'0')}/${selectedYear}`,
+                                      }).then(res => {
+                                        if (res.data.success) {
+                                          toast.success(`Fatura baixada! UC ${uc.uc}`);
+                                          loadUcInvoiceStatus();
+                                        }
+                                      }).catch(err => {
+                                        toast.error(err.response?.data?.detail || 'Nao foi possivel baixar');
+                                        navigate('/faturas');
+                                      });
+                                    } else {
+                                      navigate('/faturas');
+                                    }
+                                  }}
+                                    className="flex-shrink-0 hover:scale-125 transition-transform"
+                                    title={data?.plant?.copel_cnpj ? `Baixar fatura COPEL` : `Ir para Faturas`}
+                                  >
                                     <Clock className="h-3 w-3 text-amber-400" />
                                   </button>
                                 )}
