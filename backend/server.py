@@ -2063,6 +2063,8 @@ class GrowattPlantSyncRequest(BaseModel):
 @api_router.post("/integrations/growatt/login")
 async def growatt_login(request: GrowattLoginRequest, current_user: dict = Depends(get_current_user)):
     """Login to Growatt OSS portal and get plant list"""
+    # Always reset to start fresh
+    await reset_growatt_oss_service()
     service = get_growatt_oss_service()
     
     # Login
