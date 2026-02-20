@@ -342,11 +342,11 @@ const InvoicesPage = () => {
                 </SelectContent>
               </Select>
               <label className="cursor-pointer">
-                <input type="file" accept=".pdf" className="hidden" onChange={handleFileUpload} disabled={uploading} data-testid="invoice-file-input" />
+                <input type="file" accept=".pdf" multiple className="hidden" onChange={handleFileUpload} disabled={uploading} data-testid="invoice-file-input" />
                 <Button variant="default" className="bg-[#1A1A1A] hover:bg-[#2D2D2D] text-white gap-2" disabled={uploading} asChild>
                   <span>
                     {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-                    {uploading ? 'Processando...' : 'Enviar PDF'}
+                    {uploading ? 'Processando...' : 'Enviar PDFs'}
                   </span>
                 </Button>
               </label>
