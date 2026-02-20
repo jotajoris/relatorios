@@ -128,13 +128,33 @@ const PlantDetail = () => {
       }
     } catch (err) {
       const detail = err.response?.data?.detail || 'Erro ao sincronizar';
-      if (detail.includes('Credenciais') || detail.includes('vinculada')) {
-        toast.error(detail + ' Va em Configuracoes > Conectar ao Growatt');
-      } else {
-        toast.error(detail);
-      }
+      toast.error(detail);
     } finally {
       setSyncingGrowatt(false);
+    }
+  };
+
+  const handleDownloadRange = async () => {
+    if (!downloadRange.start || !downloadRange.end) {
+      toast.error('Selecione as datas');
+      return;
+    }
+    setDownloading(true);
+    try {
+      const res = await api.post(`/integrations/growatt/download-range/${plantId}`, {
+        start_date: downloadRange.start,
+        end_date: downloadRange.end,
+      });
+      if (res.data.success) {
+        toast.success(res.data.message);
+        setShowDownloadDialog(false);
+        loadData();
+        loadChartData();
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Erro ao baixar dados');
+    } finally {
+      setDownloading(false);
     }
   };
   
