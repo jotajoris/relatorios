@@ -2296,6 +2296,16 @@ class GrowattPlantSyncRequest(BaseModel):
     password: str
     plant_name: str
 
+@api_router.post("/integrations/growatt/sync-all")
+async def sync_all_growatt(current_user: dict = Depends(get_current_user)):
+    """Trigger manual sync of all Growatt plants."""
+    from services.scheduler import sync_all_growatt_plants
+    import asyncio
+    # Run in background so we don't timeout
+    asyncio.create_task(sync_all_growatt_plants())
+    return {"success": True, "message": "Sincronizacao iniciada em background para todas as usinas Growatt"}
+
+
 @api_router.post("/integrations/growatt/login")
 async def growatt_login(request: GrowattLoginRequest, current_user: dict = Depends(get_current_user)):
     """Login to Growatt OSS portal and get plant list"""
