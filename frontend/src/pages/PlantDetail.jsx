@@ -1449,7 +1449,7 @@ const PlantDetail = () => {
                     <p>Endereço: {plant.city} - {plant.state}, {plant.address}</p>
                   </div>
                 </div>
-                <Button variant="link" className="mt-4 text-[#FFD600] p-0" onClick={() => setConfigDialogOpen(true)}>
+                <Button variant="link" className="mt-4 text-[#FFD600] p-0" onClick={() => { setConfigDialogOpen(true); loadStates(); }}>
                   Editar Cadastro
                 </Button>
               </CardContent>
