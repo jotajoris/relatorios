@@ -3098,14 +3098,33 @@ async def download_pdf_report(
         ]
     }, {'_id': 0}).to_list(1000)
     
-    # Deduplicate by invoice id
+    # Deduplicate by invoice id AND by uc_number+reference_month
     seen = set()
+    seen_uc_ref = set()
     unique_invoices = []
     for inv in invoices:
         iid = inv.get('id')
-        if iid not in seen:
-            seen.add(iid)
-            unique_invoices.append(inv)
+        if iid in seen:
+            continue
+        seen.add(iid)
+        # Also deduplicate by UC number + reference month
+        uc_num = inv.get('uc_number', '')
+        if not uc_num:
+            # Find UC number from consumer_unit_id
+            cu_id = inv.get('consumer_unit_id', '')
+            cu_doc = next((u for u in units if u['id'] == cu_id), None)
+            if not cu_doc:
+                cu_doc_db = await db.consumer_units.find_one({'id': cu_id}, {'_id': 0, 'uc_number': 1})
+                uc_num = cu_doc_db.get('uc_number', '') if cu_doc_db else ''
+            else:
+                uc_num = cu_doc.get('uc_number', '')
+        ref = inv.get('reference_month', '')
+        uc_ref_key = f"{uc_num}_{ref}"
+        if uc_ref_key in seen_uc_ref and uc_num:
+            continue  # Skip duplicate UC+month
+        if uc_num:
+            seen_uc_ref.add(uc_ref_key)
+        unique_invoices.append(inv)
     invoices = unique_invoices
     
     total_saved = sum(i.get('amount_saved_brl', 0) for i in invoices)
