@@ -1313,24 +1313,29 @@ async def get_plants_summary(current_user: dict = Depends(get_current_user)):
         total_gen_all += total_gen_12m
         
         # Calculate performance for different periods: 1D, 15D, 30D, 12M
-        today_str = now.strftime('%Y-%m-%d')
+        # 1D = yesterday (complete day), not today (partial)
+        yesterday_str = (now - timedelta(days=1)).strftime('%Y-%m-%d')
         d15_str = (now - timedelta(days=15)).strftime('%Y-%m-%d')
         d30_str = (now - timedelta(days=30)).strftime('%Y-%m-%d')
         
         gen_1d = await db.generation_data.find(
-            {'plant_id': plant['id'], 'date': today_str}, {'_id': 0, 'generation_kwh': 1}
+            {'plant_id': plant['id'], 'date': yesterday_str}, {'_id': 0, 'generation_kwh': 1}
         ).to_list(1)
         gen_15d = await db.generation_data.find(
             {'plant_id': plant['id'], 'date': {'$gte': d15_str}}, {'_id': 0, 'generation_kwh': 1}
         ).to_list(100)
+        gen_30d = await db.generation_data.find(
+            {'plant_id': plant['id'], 'date': {'$gte': d30_str}}, {'_id': 0, 'generation_kwh': 1}
+        ).to_list(100)
         
         gen_1d_total = sum(d.get('generation_kwh',0) for d in gen_1d)
         gen_15d_total = sum(d.get('generation_kwh',0) for d in gen_15d)
+        gen_30d_total = sum(d.get('generation_kwh',0) for d in gen_30d)
         
         daily_prog = prognosis / 30 if prognosis > 0 else 0
         perf_1d = round(gen_1d_total / daily_prog * 100) if daily_prog > 0 else 0
         perf_15d = round(gen_15d_total / (daily_prog * 15) * 100) if daily_prog > 0 else 0
-        perf_30d = round(performance)
+        perf_30d = round(gen_30d_total / prognosis * 100) if prognosis > 0 else 0
         perf_12m = round(total_gen_12m / (prognosis * 12) * 100) if prognosis > 0 else 0
 
         summaries.append({
@@ -1351,6 +1356,11 @@ async def get_plants_summary(current_user: dict = Depends(get_current_user)):
             'perf_15d': perf_15d,
             'perf_30d': perf_30d,
             'perf_12m': perf_12m,
+            # Raw kWh for display when no prognosis
+            'gen_1d_kwh': round(gen_1d_total, 0),
+            'gen_15d_kwh': round(gen_15d_total, 0),
+            'gen_30d_kwh': round(gen_30d_total, 0),
+            'gen_12m_kwh': round(total_gen_12m, 0),
             'logo_url': plant.get('logo_url'),
             'growatt_plant_id': plant.get('growatt_plant_id'),
             'last_sync': plant.get('last_growatt_sync'),
