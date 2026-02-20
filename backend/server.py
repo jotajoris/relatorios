@@ -1661,6 +1661,130 @@ async def get_inverter_credentials(plant_id: str, current_user: dict = Depends(g
             c['last_sync'] = datetime.fromisoformat(c['last_sync'])
     return creds
 
+# ==================== COPEL AVA INTEGRATION ====================
+
+from services.copel_ava_service import CopelAVAService
+
+@api_router.post("/integrations/copel/save-credentials")
+async def save_copel_credentials(
+    request: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Save COPEL AVA credentials for a plant."""
+    plant_id = request.get('plant_id', '')
+    cnpj = request.get('cnpj', '')
+    password = request.get('password', '')
+
+    plant = await db.plants.find_one({'id': plant_id, 'is_active': True})
+    if not plant:
+        raise HTTPException(status_code=404, detail="Usina nao encontrada")
+
+    await db.plants.update_one({'id': plant_id}, {'$set': {
+        'copel_cnpj': cnpj,
+        'copel_password': password,
+        'copel_integration': True,
+    }})
+    return {"success": True, "message": "Credenciais COPEL salvas"}
+
+
+@api_router.post("/integrations/copel/check-invoices/{plant_id}")
+async def check_copel_invoices(
+    plant_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Login to COPEL and check available invoices for all UCs of a plant."""
+    plant = await db.plants.find_one({'id': plant_id, 'is_active': True}, {'_id': 0})
+    if not plant:
+        raise HTTPException(status_code=404, detail="Usina nao encontrada")
+
+    cnpj = plant.get('copel_cnpj', '')
+    password = plant.get('copel_password', '')
+    if not cnpj or not password:
+        raise HTTPException(status_code=400, detail="Credenciais COPEL nao configuradas. Va em Configuracoes.")
+
+    service = CopelAVAService()
+    try:
+        login_result = await service.login(cnpj, password)
+        if not login_result.get('success'):
+            raise HTTPException(status_code=400, detail=login_result.get('error', 'Login COPEL falhou'))
+
+        # Get UCs for this plant
+        units = await db.consumer_units.find(
+            {'plant_id': plant_id, 'is_active': True},
+            {'_id': 0, 'uc_number': 1, 'id': 1}
+        ).to_list(100)
+
+        all_invoices = []
+        for unit in units:
+            uc = unit.get('uc_number', '')
+            if uc:
+                invoices = await service.list_available_invoices(uc)
+                all_invoices.extend(invoices)
+
+        return {
+            "success": True,
+            "total_invoices": len(all_invoices),
+            "invoices": all_invoices,
+        }
+    finally:
+        await service.close()
+
+
+@api_router.post("/integrations/copel/download-invoice/{plant_id}")
+async def download_copel_invoice(
+    plant_id: str,
+    request: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Download and process a specific invoice from COPEL."""
+    plant = await db.plants.find_one({'id': plant_id, 'is_active': True}, {'_id': 0})
+    if not plant:
+        raise HTTPException(status_code=404, detail="Usina nao encontrada")
+
+    cnpj = plant.get('copel_cnpj', '')
+    password = plant.get('copel_password', '')
+    uc_number = request.get('uc_number', '')
+    reference_month = request.get('reference_month', '')
+
+    if not cnpj or not password:
+        raise HTTPException(status_code=400, detail="Credenciais COPEL nao configuradas")
+
+    service = CopelAVAService()
+    try:
+        login_result = await service.login(cnpj, password)
+        if not login_result.get('success'):
+            raise HTTPException(status_code=400, detail="Login COPEL falhou")
+
+        pdf_data = await service.download_invoice(uc_number, reference_month)
+        if not pdf_data:
+            raise HTTPException(status_code=404, detail=f"Fatura nao disponivel para UC {uc_number} ref {reference_month}")
+
+        # Parse the downloaded PDF
+        from services.pdf_parser_service import parse_copel_invoice
+        from io import BytesIO
+        parsed = parse_copel_invoice(BytesIO(pdf_data))
+
+        if parsed.get('success'):
+            # Find consumer unit
+            unit = await db.consumer_units.find_one(
+                {'uc_number': uc_number, 'plant_id': plant_id, 'is_active': True},
+                {'_id': 0}
+            )
+            if unit:
+                parsed['consumer_unit_id'] = unit['id']
+                parsed['plant_id'] = plant_id
+                parsed['source'] = 'copel_auto'
+
+        return {
+            "success": True,
+            "parsed_data": parsed,
+            "pdf_size": len(pdf_data),
+            "message": f"Fatura baixada e processada: UC {uc_number} ref {reference_month}",
+        }
+    finally:
+        await service.close()
+
+
 # ==================== COPEL CREDENTIALS ====================
 
 @api_router.post("/copel-credentials")
