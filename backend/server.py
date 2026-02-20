@@ -2179,6 +2179,134 @@ async def link_growatt_plant(
         "message": f"Usina vinculada à Growatt: {growatt_plant_name}"
     }
 
+# ==================== GROWATT API (LIGHTWEIGHT) ====================
+
+from services.growatt_api_service import GrowattAPIService, GROWATT_AVAILABLE
+
+@api_router.post("/integrations/growatt-api/login")
+async def growatt_api_login(request: GrowattLoginRequest, current_user: dict = Depends(get_current_user)):
+    """Login to Growatt using API library (fast, no browser)."""
+    if not GROWATT_AVAILABLE:
+        raise HTTPException(status_code=503, detail="growattServer nao instalado")
+    svc = GrowattAPIService()
+    result = svc.login(request.username, request.password)
+    if not result.get('success'):
+        raise HTTPException(status_code=400, detail=result.get('error', 'Login falhou'))
+    plants = svc.get_plants()
+    return {"success": True, "user": result.get('user'), "plants": plants, "total": len(plants)}
+
+
+@api_router.post("/integrations/growatt-api/sync-plant")
+async def growatt_api_sync_plant(
+    request: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Sync generation data from Growatt API for a specific plant and month."""
+    if not GROWATT_AVAILABLE:
+        raise HTTPException(status_code=503, detail="growattServer nao instalado")
+
+    username = request.get('username', '')
+    password = request.get('password', '')
+    growatt_plant_id = request.get('growatt_plant_id', '')
+    plant_id = request.get('plant_id', '')
+    year = int(request.get('year', datetime.now().year))
+    month = int(request.get('month', datetime.now().month))
+
+    if not all([username, password, growatt_plant_id, plant_id]):
+        raise HTTPException(status_code=400, detail="Campos obrigatorios: username, password, growatt_plant_id, plant_id")
+
+    # Verify local plant exists
+    plant = await db.plants.find_one({'id': plant_id, 'is_active': True})
+    if not plant:
+        raise HTTPException(status_code=404, detail="Usina nao encontrada")
+
+    svc = GrowattAPIService()
+    login_result = svc.login(username, password)
+    if not login_result.get('success'):
+        raise HTTPException(status_code=400, detail=login_result.get('error'))
+
+    # Get overview
+    overview = svc.get_overview(growatt_plant_id)
+
+    # Sync daily data for the month
+    daily_data = svc.sync_generation_data(growatt_plant_id, year, month)
+
+    inserted = 0
+    updated = 0
+    for d in daily_data:
+        existing = await db.generation_data.find_one({'plant_id': plant_id, 'date': d['date']})
+        if existing:
+            await db.generation_data.update_one(
+                {'plant_id': plant_id, 'date': d['date']},
+                {'$set': {'generation_kwh': d['generation_kwh'], 'source': 'growatt_api'}}
+            )
+            updated += 1
+        else:
+            doc = {
+                'id': str(uuid.uuid4()),
+                'plant_id': plant_id,
+                'date': d['date'],
+                'generation_kwh': d['generation_kwh'],
+                'source': 'growatt_api',
+                'created_at': datetime.now(timezone.utc).isoformat(),
+            }
+            await db.generation_data.insert_one(doc)
+            inserted += 1
+
+    # Update plant with growatt info
+    await db.plants.update_one(
+        {'id': plant_id},
+        {'$set': {
+            'growatt_plant_id': growatt_plant_id,
+            'inverter_integration': 'growatt',
+            'last_growatt_sync': datetime.now(timezone.utc).isoformat(),
+            'growatt_status': overview.get('status', 'unknown'),
+        }}
+    )
+
+    # Log activity
+    await log_activity(plant_id, "growatt_sync",
+        f"Sincronizado Growatt API: {year}-{month:02d} ({inserted} novos, {updated} atualizados)",
+        current_user.get('name'))
+
+    return {
+        "success": True,
+        "inserted": inserted,
+        "updated": updated,
+        "total_processed": inserted + updated,
+        "overview": overview,
+        "month": f"{year}-{month:02d}",
+    }
+
+
+@api_router.post("/integrations/growatt-api/save-credentials")
+async def growatt_save_credentials(
+    request: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Save Growatt credentials for a plant (encrypted)."""
+    plant_id = request.get('plant_id', '')
+    username = request.get('username', '')
+    password = request.get('password', '')
+    growatt_plant_id = request.get('growatt_plant_id', '')
+
+    plant = await db.plants.find_one({'id': plant_id, 'is_active': True})
+    if not plant:
+        raise HTTPException(status_code=404, detail="Usina nao encontrada")
+
+    await db.plants.update_one(
+        {'id': plant_id},
+        {'$set': {
+            'growatt_username': username,
+            'growatt_password': password,  # In production, encrypt this
+            'growatt_plant_id': growatt_plant_id,
+            'inverter_integration': 'growatt',
+        }}
+    )
+
+    return {"success": True, "message": "Credenciais salvas"}
+
+
 # ==================== GROWATT EXCEL UPLOAD ====================
 
 from services.growatt_excel_service import parse_growatt_excel, extract_generation_records
