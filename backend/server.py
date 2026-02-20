@@ -558,6 +558,28 @@ os.makedirs(LOGO_UPLOAD_DIR, exist_ok=True)
 from services.cloudinary_service import init_cloudinary, upload_logo as cloudinary_upload, get_logo_thumbnail_url
 init_cloudinary()
 
+async def auto_calculate_prognosis(plant_id: str, city: str, capacity_kwp: float):
+    """Auto-calculate and save monthly/annual prognosis based on city irradiance."""
+    if not city or capacity_kwp <= 0:
+        return
+    import re as re_mod
+    city_doc = await db.irradiance_cities.find_one(
+        {'city': {'$regex': f'^{re_mod.escape(city)}', '$options': 'i'}},
+        {'_id': 0, 'irradiance': 1, 'city': 1}
+    )
+    if not city_doc:
+        return
+    irr = city_doc.get('irradiance', {})
+    month_days = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    months_key = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez']
+    total = sum(capacity_kwp * month_days[i] * ((irr.get(mk, 0) / 1000) - 0.1) * 0.75 for i, mk in enumerate(months_key))
+    avg = total / 12
+    await db.plants.update_one({'id': plant_id}, {'$set': {
+        'monthly_prognosis_kwh': round(avg, 2),
+        'annual_prognosis_kwh': round(total, 2),
+        'city': city_doc['city'],  # Use correct full name from DB
+    }})
+
 @api_router.post("/upload/logo/{entity_type}/{entity_id}")
 async def upload_logo(
     entity_type: str,
