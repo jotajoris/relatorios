@@ -1216,11 +1216,12 @@ async def save_invoice_from_upload(invoice_data: dict, current_user: dict = Depe
     
     doc = invoice.model_dump()
     doc['created_at'] = doc['created_at'].isoformat()
+    doc['uc_number'] = unit.get('uc_number', '')
     await db.invoices.insert_one(doc)
     
     return {
         "success": True,
-        "message": "Fatura salva com sucesso",
+        "message": f"Fatura salva: UC {unit.get('uc_number','')} ref {ref_month}",
         "invoice_id": invoice.id
     }
 
