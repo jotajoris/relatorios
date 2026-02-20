@@ -2403,42 +2403,102 @@ async def sync_growatt_plant_data(
     if not login_result.get('success'):
         raise HTTPException(status_code=400, detail=login_result.get('error', 'Login Growatt falhou'))
 
-    # Sync today's data (from the plant list, which already has today's generation)
+    # Get plant info from Growatt list
     plants_list = await service.get_plants()
     plant_data = next((p for p in plants_list if p.get('name','').lower() == growatt_name.lower()), None)
-    
     if not plant_data:
-        # Try partial match
         plant_data = next((p for p in plants_list if growatt_name.lower() in p.get('name','').lower()), None)
 
     records_saved = 0
     today_str = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    growatt_plant_id = plant_data.get('id', '') if plant_data else ''
 
+    # Update plant info from Growatt (capacity, installation date, status)
+    update_fields = {
+        'last_growatt_sync': datetime.now(timezone.utc).isoformat(),
+        'growatt_status': plant_data.get('status', 'unknown') if plant_data else 'unknown',
+    }
+    if plant_data:
+        if plant_data.get('capacity_kwp') and plant_data['capacity_kwp'] > 0:
+            update_fields['capacity_kwp'] = plant_data['capacity_kwp']
+        if plant_data.get('installation_date'):
+            update_fields['installation_date'] = plant_data['installation_date']
+        if plant_data.get('city'):
+            update_fields['city'] = plant_data['city']
+        if growatt_plant_id:
+            update_fields['growatt_plant_id'] = growatt_plant_id
+
+    # Save today's generation from the list
     if plant_data and plant_data.get('today_energy_kwh', 0) > 0:
-        existing = await db.generation_data.find_one({'plant_id': plant_id, 'date': today_str})
-        gen_kwh = plant_data['today_energy_kwh']
-        if existing:
-            await db.generation_data.update_one(
-                {'plant_id': plant_id, 'date': today_str},
-                {'$set': {'generation_kwh': gen_kwh, 'source': 'growatt'}}
-            )
-        else:
-            await db.generation_data.insert_one({
-                'id': str(uuid.uuid4()), 'plant_id': plant_id,
-                'date': today_str, 'generation_kwh': gen_kwh,
-                'source': 'growatt', 'created_at': datetime.now(timezone.utc).isoformat()
-            })
+        await db.generation_data.update_one(
+            {'plant_id': plant_id, 'date': today_str},
+            {'$set': {'generation_kwh': plant_data['today_energy_kwh'], 'source': 'growatt'}},
+            upsert=True
+        )
         records_saved = 1
 
-    # Update plant status
-    status = plant_data.get('status', 'unknown') if plant_data else 'unknown'
-    await db.plants.update_one({'id': plant_id}, {'$set': {
-        'last_growatt_sync': datetime.now(timezone.utc).isoformat(),
-        'growatt_status': status,
-    }})
+    # Fetch FULL HISTORY via Growatt internal API (monthly data)
+    if growatt_plant_id:
+        from dateutil.relativedelta import relativedelta
+        install_date = plant_data.get('installation_date', '') if plant_data else ''
+        # Parse install date to determine start
+        start_date = None
+        if install_date:
+            for fmt in ['%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y', '%Y/%m/%d']:
+                try:
+                    start_date = datetime.strptime(install_date, fmt)
+                    break
+                except: pass
+        if not start_date:
+            start_date = datetime.now() - timedelta(days=365)  # Default: last 12 months
+
+        current = start_date.replace(day=1)
+        end = datetime.now()
+        
+        while current <= end:
+            month_str = current.strftime('%Y-%m')
+            try:
+                data = await service.page.evaluate(f'''
+                    async () => {{
+                        try {{
+                            const res = await fetch('/panel/plant/getPlantData', {{
+                                method: 'POST',
+                                headers: {{'Content-Type': 'application/x-www-form-urlencoded'}},
+                                body: 'plantId={growatt_plant_id}&type=2&date={month_str}'
+                            }});
+                            return await res.json();
+                        }} catch(e) {{ return {{error: e.toString()}}; }}
+                    }}
+                ''')
+                
+                obj = data.get('obj', {}) if data else {}
+                energys = obj.get('energys', [])
+                dates_list = obj.get('dates', [])
+                
+                if energys and dates_list:
+                    for i, val in enumerate(energys):
+                        if i < len(dates_list) and val:
+                            try:
+                                gen_kwh = float(val)
+                                if gen_kwh > 0:
+                                    day_date = dates_list[i]
+                                    await db.generation_data.update_one(
+                                        {'plant_id': plant_id, 'date': day_date},
+                                        {'$set': {'generation_kwh': gen_kwh, 'source': 'growatt'}},
+                                        upsert=True
+                                    )
+                                    records_saved += 1
+                            except (ValueError, TypeError):
+                                pass
+            except Exception as e:
+                logger.warning(f"Growatt history {month_str}: {e}")
+            
+            current += relativedelta(months=1)
+
+    await db.plants.update_one({'id': plant_id}, {'$set': update_fields})
 
     await log_activity(plant_id, "growatt_sync",
-        f"Sincronizado Growatt: {records_saved} registro(s) atualizados",
+        f"Sincronizado Growatt: {records_saved} registro(s) ({plant_data.get('status','?') if plant_data else '?'})",
         current_user.get('name'))
 
     await reset_growatt_oss_service()
@@ -2449,9 +2509,11 @@ async def sync_growatt_plant_data(
         "sync_data": {
             "date": today_str,
             "generation_kwh": plant_data.get('today_energy_kwh', 0) if plant_data else 0,
-            "status": status,
+            "status": plant_data.get('status', 'unknown') if plant_data else 'unknown',
+            "capacity_kwp": plant_data.get('capacity_kwp', 0) if plant_data else 0,
+            "installation_date": plant_data.get('installation_date', '') if plant_data else '',
         },
-        "message": f"Dados sincronizados: {records_saved} registro(s)",
+        "message": f"Sincronizado: {records_saved} registros de geracao importados",
     }
 
 
