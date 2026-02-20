@@ -163,7 +163,11 @@ const InvoicesPage = () => {
       setParsedMeta(null);
       loadInvoices();
     } catch (err) {
-      toast.error(err.response?.data?.detail || 'Erro ao salvar fatura');
+      if (err.response?.status === 409) {
+        toast.error(err.response.data.detail || 'Fatura duplicada');
+      } else {
+        toast.error(err.response?.data?.detail || 'Erro ao salvar fatura');
+      }
     } finally {
       setSavingInvoice(false);
     }
