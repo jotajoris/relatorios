@@ -462,47 +462,80 @@ const Plants = () => {
                 />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="city">Cidade</Label>
-                <Input
-                  id="city"
-                  value={formData.city}
-                  onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                  placeholder="Ex: Curitiba"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Estado</Label>
+                  <select className="w-full h-9 rounded-md border border-neutral-200 bg-white px-3 py-1 text-sm"
+                    value={formData.state} onChange={(e) => { setFormData({...formData, state: e.target.value, city: ''}); setCitySearch(''); }}>
+                    <option value="">Selecione</option>
+                    {statesList.map(s => <option key={s} value={s}>{s.replace(/_/g,' ')}</option>)}
+                  </select>
+                </div>
+                <div className="space-y-2 relative">
+                  <Label>Cidade (Irradiancia)</Label>
+                  <Input value={citySearch || formData.city} onChange={(e) => { setCitySearch(e.target.value); setShowCityDrop(true);
+                    if (!formData.state && e.target.value.length >= 2) api.get(`/irradiance/cities?q=${encodeURIComponent(e.target.value)}`).then(r => setFilteredCities(r.data.map(c=>c.city).sort())).catch(()=>{});
+                  }} onFocus={() => setShowCityDrop(true)} onBlur={() => setTimeout(()=>setShowCityDrop(false),200)} placeholder="Digite para buscar..." />
+                  {showCityDrop && cityMatches.length > 0 && (
+                    <div className="absolute z-[100] top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-xl max-h-48 overflow-y-auto">
+                      {cityMatches.map(c => (
+                        <button key={c} type="button" className={`w-full text-left px-3 py-2 text-sm hover:bg-[#FFD600]/20 border-b last:border-0 ${formData.city===c?'bg-[#FFD600]/10 font-semibold':''}`}
+                          onClick={() => { setFormData(prev=>({...prev,city:c})); setCitySearch(c); setShowCityDrop(false);
+                            api.get(`/irradiance/cities?q=${encodeURIComponent(c)}`).then(r=>{const m=r.data.find(x=>x.city===c);if(m)setFormData(prev=>({...prev,state:m.state}))}).catch(()=>{});
+                          }}>{c}</button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="state">Estado</Label>
-                <Input
-                  id="state"
-                  value={formData.state}
-                  onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                  placeholder="Ex: PR"
-                  maxLength={2}
-                />
+              {/* Prognosis by Irradiance */}
+              <div className="p-3 bg-[#FFD600]/10 border border-[#FFD600]/30 rounded-lg space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-semibold">Prognostico por Irradiancia</Label>
+                  <Button size="sm" variant="outline" onClick={calcPrognosis} disabled={calcingProg} type="button"
+                    className="bg-[#FFD600] hover:bg-[#EAB308] text-[#1A1A1A] text-xs h-7">
+                    {calcingProg ? 'Calculando...' : 'Calcular'}
+                  </Button>
+                </div>
+                {progDetail && (
+                  <div className="text-xs space-y-2">
+                    <p className="text-neutral-500">{progDetail.city} - {progDetail.state} | {progDetail.capacity_kwp} kWp</p>
+                    <div className="grid grid-cols-4 gap-1">
+                      {progDetail.months?.map((m, i) => (
+                        <div key={i} className="bg-white px-2 py-1 rounded text-center border">
+                          <span className="text-neutral-400 uppercase text-[9px]">{m.month}</span>
+                          <Input type="number" className="h-6 text-[10px] text-center p-0 border-0 font-bold"
+                            defaultValue={Math.round(m.monthly_kwh)}
+                            onChange={(e) => {
+                              const newVal = parseFloat(e.target.value) || 0;
+                              const months = [...progDetail.months];
+                              months[i] = {...months[i], monthly_kwh: newVal};
+                              const total = months.reduce((s,x) => s + x.monthly_kwh, 0);
+                              setProgDetail(prev => ({...prev, months, total_annual_kwh: total, average_monthly_kwh: total/12}));
+                              setFormData(prev => ({...prev, monthly_prognosis_kwh: (total/12).toFixed(2), annual_prognosis_kwh: total.toFixed(2)}));
+                            }} />
+                          <p className="text-[7px] text-neutral-400">irr: {m.irradiance}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="font-semibold text-center">
+                      Media: {Number(progDetail.average_monthly_kwh).toLocaleString('pt-BR',{maximumFractionDigits:0})} kWh/mes |
+                      Anual: {(progDetail.total_annual_kwh/1000).toFixed(2)} MWh
+                    </p>
+                  </div>
+                )}
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="monthly_prognosis">Prognóstico Mensal (kWh)</Label>
-                <Input
-                  id="monthly_prognosis"
-                  type="number"
-                  value={formData.monthly_prognosis_kwh}
-                  onChange={(e) => setFormData({ ...formData, monthly_prognosis_kwh: e.target.value })}
-                  placeholder="Ex: 1500"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="annual_prognosis">Prognóstico Anual (kWh)</Label>
-                <Input
-                  id="annual_prognosis"
-                  type="number"
-                  value={formData.annual_prognosis_kwh}
-                  onChange={(e) => setFormData({ ...formData, annual_prognosis_kwh: e.target.value })}
-                  placeholder="Ex: 18000"
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Prognostico Mensal (kWh)</Label>
+                  <Input type="number" value={formData.monthly_prognosis_kwh} onChange={(e) => setFormData({...formData, monthly_prognosis_kwh: e.target.value})} placeholder="Auto-calculado" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Prognostico Anual (kWh)</Label>
+                  <Input type="number" value={formData.annual_prognosis_kwh} onChange={(e) => setFormData({...formData, annual_prognosis_kwh: e.target.value})} placeholder="Auto-calculado" />
+                </div>
               </div>
 
               <div className="space-y-2">
