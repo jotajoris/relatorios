@@ -2276,6 +2276,124 @@ async def sync_growatt_plant_data(
         "message": f"Dados sincronizados: {records_saved} registro(s)",
     }
 
+
+@api_router.get("/integrations/growatt/hourly/{plant_id}")
+async def get_growatt_hourly(
+    plant_id: str,
+    date: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get hourly generation data from Growatt for a specific date."""
+    plant = await db.plants.find_one({'id': plant_id, 'is_active': True}, {'_id': 0})
+    if not plant:
+        raise HTTPException(status_code=404, detail="Usina nao encontrada")
+
+    username = plant.get('growatt_username', '')
+    password = plant.get('growatt_password', '')
+    growatt_name = plant.get('growatt_plant_name', '')
+
+    if not username or not password or not growatt_name:
+        raise HTTPException(status_code=400, detail="Credenciais Growatt nao configuradas")
+
+    await reset_growatt_oss_service()
+    service = get_growatt_oss_service()
+    login_result = await service.login(username, password)
+    if not login_result.get('success'):
+        raise HTTPException(status_code=400, detail="Login Growatt falhou")
+
+    result = await service.get_plant_hourly_data(growatt_name, date)
+    await reset_growatt_oss_service()
+    return result
+
+
+@api_router.post("/integrations/growatt/download-range/{plant_id}")
+async def download_growatt_range(
+    plant_id: str,
+    request: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Download and save generation data from Growatt for a date range."""
+    plant = await db.plants.find_one({'id': plant_id, 'is_active': True}, {'_id': 0})
+    if not plant:
+        raise HTTPException(status_code=404, detail="Usina nao encontrada")
+
+    username = plant.get('growatt_username', '')
+    password = plant.get('growatt_password', '')
+    growatt_name = plant.get('growatt_plant_name', '')
+    start_date = request.get('start_date', '')
+    end_date = request.get('end_date', '')
+
+    if not username or not password or not growatt_name:
+        raise HTTPException(status_code=400, detail="Credenciais Growatt nao configuradas")
+    if not start_date or not end_date:
+        raise HTTPException(status_code=400, detail="Datas obrigatorias")
+
+    await reset_growatt_oss_service()
+    service = get_growatt_oss_service()
+    login_result = await service.login(username, password)
+    if not login_result.get('success'):
+        raise HTTPException(status_code=400, detail="Login Growatt falhou")
+
+    # Get data for each month in the range
+    from dateutil.relativedelta import relativedelta
+    start = datetime.strptime(start_date, '%Y-%m-%d')
+    end = datetime.strptime(end_date, '%Y-%m-%d')
+    
+    records_saved = 0
+    current = start.replace(day=1)
+    
+    while current <= end:
+        month_str = current.strftime('%Y-%m')
+        result = await service.get_plant_daily_data_range(growatt_name, f"{month_str}-01", f"{month_str}-28")
+        
+        if result.get('success') and result.get('data'):
+            raw = result['data']
+            # Parse the Growatt response - it contains daily generation values
+            obj = raw.get('obj', {})
+            # Try different response formats
+            energys = obj.get('energys', []) or obj.get('energy', [])
+            dates = obj.get('dates', [])
+            
+            if energys and dates:
+                for i, val in enumerate(energys):
+                    if i < len(dates) and val and float(val) > 0:
+                        day_date = dates[i]
+                        gen_kwh = float(val)
+                        existing = await db.generation_data.find_one({'plant_id': plant_id, 'date': day_date})
+                        if existing:
+                            await db.generation_data.update_one(
+                                {'plant_id': plant_id, 'date': day_date},
+                                {'$set': {'generation_kwh': gen_kwh, 'source': 'growatt'}}
+                            )
+                        else:
+                            await db.generation_data.insert_one({
+                                'id': str(uuid.uuid4()), 'plant_id': plant_id,
+                                'date': day_date, 'generation_kwh': gen_kwh,
+                                'source': 'growatt', 'created_at': datetime.now(timezone.utc).isoformat()
+                            })
+                        records_saved += 1
+        
+        current += relativedelta(months=1)
+
+    await db.plants.update_one({'id': plant_id}, {'$set': {
+        'last_growatt_sync': datetime.now(timezone.utc).isoformat(),
+    }})
+
+    await log_activity(plant_id, "growatt_download",
+        f"Download Growatt: {start_date} a {end_date} ({records_saved} registros)",
+        current_user.get('name'))
+    
+    await reset_growatt_oss_service()
+
+    return {
+        "success": True,
+        "records_saved": records_saved,
+        "start_date": start_date,
+        "end_date": end_date,
+        "message": f"{records_saved} registros baixados e salvos",
+    }
+
+
 # Keep old endpoint for backward compatibility
 @api_router.post("/integrations/growatt/sync")
 async def sync_growatt_data(request: GrowattPlantSyncRequest, current_user: dict = Depends(get_current_user)):
