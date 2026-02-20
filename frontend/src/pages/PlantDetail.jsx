@@ -207,10 +207,18 @@ const PlantDetail = () => {
     loadCitiesByState(state);
   };
 
-  const handleCityClick = (city) => {
+  const handleCityClick = async (city) => {
     setPlantFormData(prev => ({...prev, city}));
     setCitySearchText(city);
     setShowCityDropdown(false);
+    // Auto-find state for this city
+    try {
+      const res = await api.get(`/irradiance/cities?q=${encodeURIComponent(city)}`);
+      const match = res.data.find(c => c.city === city);
+      if (match) {
+        setPlantFormData(prev => ({...prev, city, state: match.state}));
+      }
+    } catch {}
   };
 
   const cityMatches = filteredCities.filter(c => 
