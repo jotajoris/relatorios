@@ -2289,25 +2289,23 @@ class GrowattPlantSyncRequest(BaseModel):
 async def growatt_login(request: GrowattLoginRequest, current_user: dict = Depends(get_current_user)):
     """Login to Growatt OSS portal and get plant list"""
     try:
-        # Always reset to start fresh
         await reset_growatt_oss_service()
         service = get_growatt_oss_service()
-        
-        # Login
         login_result = await service.login(request.username, request.password)
     
-    if not login_result.get('success'):
-        raise HTTPException(status_code=400, detail=login_result.get('error', 'Login Growatt falhou'))
+        if not login_result.get('success'):
+            raise HTTPException(status_code=400, detail=login_result.get('error', 'Login Growatt falhou'))
     
-    # Get plants after successful login
-    plants = await service.get_plants()
+        plants = await service.get_plants()
     
-    return {
-        "success": True,
-        "message": "Login realizado com sucesso",
-        "plants": plants,
-        "total": len(plants)
-    }
+        return {
+            "success": True,
+            "message": "Login realizado com sucesso",
+            "plants": plants,
+            "total": len(plants)
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Growatt login error: {e}")
         await reset_growatt_oss_service()
