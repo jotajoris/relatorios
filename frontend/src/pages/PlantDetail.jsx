@@ -1748,7 +1748,7 @@ const PlantDetail = () => {
                   onChange={handleStateSelect}
                 >
                   <option value="">Selecione o estado</option>
-                  {statesList.map(s => (
+                  {ESTADOS_BR.map(s => (
                     <option key={s} value={s}>{s.replace(/_/g, ' ')}</option>
                   ))}
                 </select>
