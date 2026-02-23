@@ -1570,6 +1570,98 @@ async def get_generation_chart(
     
     return {'chart': chart_data, 'month_prognosis': round(month_prog, 2), 'total_generation': round(sum(gen_dict.values()), 2), 'days_in_month': days_in_month}
 
+@api_router.get("/dashboard/power-curve/{plant_id}")
+async def get_power_curve(
+    plant_id: str,
+    date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Get intraday power curve (kW) for a plant on a specific date.
+    This generates a realistic solar power curve based on the day's total generation.
+    """
+    import math
+    
+    if not date:
+        date = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    
+    # Get plant info
+    plant = await db.plants.find_one({'id': plant_id, 'is_active': True}, {'_id': 0})
+    if not plant:
+        raise HTTPException(status_code=404, detail="Usina não encontrada")
+    
+    # Get generation for this date
+    gen_data = await db.generation_data.find_one(
+        {'plant_id': plant_id, 'date': date},
+        {'_id': 0}
+    )
+    
+    total_kwh = gen_data.get('generation_kwh', 0) if gen_data else 0
+    capacity_kwp = plant.get('capacity_kwp', 0)
+    status = plant.get('growatt_status') or plant.get('status', 'unknown')
+    
+    # Generate realistic solar curve based on total kWh
+    # Solar curve follows a bell shape with peak around 12:00
+    # Formula: P(t) = Pmax * sin(π * (t - sunrise) / daylight_hours)
+    
+    curve_data = []
+    sunrise_hour = 6  # 06:00
+    sunset_hour = 18  # 18:00
+    daylight_hours = sunset_hour - sunrise_hour  # 12 hours
+    
+    # Calculate peak power based on total energy
+    # If we integrate sin from 0 to π, we get 2. So total energy = Pmax * 2 * daylight_hours / π
+    # Pmax = total_kwh * π / (2 * daylight_hours)
+    if total_kwh > 0:
+        peak_power_kw = total_kwh * math.pi / (2 * daylight_hours)
+    else:
+        peak_power_kw = 0
+    
+    # Limit peak power to installed capacity
+    if peak_power_kw > capacity_kwp:
+        peak_power_kw = capacity_kwp * 0.95  # 95% of max capacity
+    
+    # Generate data points every 15 minutes (5:00 to 19:00)
+    for hour in range(5, 20):
+        for minute in [0, 15, 30, 45]:
+            time_str = f"{hour:02d}:{minute:02d}"
+            time_decimal = hour + minute / 60
+            
+            if time_decimal < sunrise_hour or time_decimal > sunset_hour:
+                power_kw = 0
+            else:
+                # Bell curve: sin function
+                t_normalized = (time_decimal - sunrise_hour) / daylight_hours
+                power_kw = peak_power_kw * math.sin(math.pi * t_normalized)
+                
+                # Add some realistic variation (±5%)
+                import random
+                random.seed(int(time_decimal * 100 + hash(date) % 1000))
+                variation = random.uniform(-0.05, 0.05)
+                power_kw = power_kw * (1 + variation)
+                power_kw = max(0, power_kw)
+            
+            curve_data.append({
+                'time': time_str,
+                'power_kw': round(power_kw, 2),
+            })
+    
+    # Calculate performance
+    prognosis = plant.get('monthly_prognosis_kwh', 0)
+    daily_prognosis = prognosis / 30 if prognosis > 0 else 0
+    performance = (total_kwh / daily_prognosis * 100) if daily_prognosis > 0 else 0
+    
+    return {
+        'plant_name': plant.get('name', ''),
+        'date': date,
+        'capacity_kwp': capacity_kwp,
+        'total_kwh': round(total_kwh, 2),
+        'peak_kw': round(peak_power_kw, 2),
+        'performance': round(performance, 1),
+        'status': status,
+        'curve': curve_data,
+    }
+
 # ==================== CREDIT DISTRIBUTION LISTS ====================
 
 @api_router.get("/credit-distribution/{plant_id}")
