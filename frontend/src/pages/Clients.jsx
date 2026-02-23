@@ -102,7 +102,7 @@ const Clients = () => {
         name: client.name || '',
         email: client.email || '',
         phone: client.phone || '',
-        document: client.document || '',
+        document: formatDocument(client.document) || '',
         address: client.address || ''
       });
     } else {
