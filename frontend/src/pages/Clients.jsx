@@ -347,9 +347,15 @@ const Clients = () => {
               <Input
                 id="document"
                 value={formData.document}
-                onChange={(e) => setFormData({ ...formData, document: e.target.value })}
-                placeholder="000.000.000-00"
+                onChange={handleDocumentChange}
+                placeholder="000.000.000-00 ou 00.000.000/0000-00"
+                maxLength={18}
               />
+              <p className="text-xs text-neutral-500">
+                {formData.document?.replace(/\D/g, '').length === 11 ? 'CPF' : 
+                 formData.document?.replace(/\D/g, '').length === 14 ? 'CNPJ' : 
+                 'Digite 11 dígitos para CPF ou 14 para CNPJ'}
+              </p>
             </div>
 
             <div className="space-y-2">
