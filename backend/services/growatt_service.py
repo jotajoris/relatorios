@@ -509,44 +509,6 @@ class GrowattOSSService:
         except Exception as e:
             logger.error(f"Error getting plantId by navigation: {e}")
             return None
-                        }
-                        
-                        // Check in hidden inputs
-                        const hiddenInputs = document.querySelectorAll('input[type="hidden"]');
-                        for (const input of hiddenInputs) {
-                            if (input.name?.toLowerCase().includes('plantid')) {
-                                return input.value;
-                            }
-                        }
-                        
-                        // Check data attributes
-                        const elementsWithData = document.querySelectorAll('[data-plantid], [data-id]');
-                        for (const el of elementsWithData) {
-                            const id = el.getAttribute('data-plantid') || el.getAttribute('data-id');
-                            if (id && /^\\d+$/.test(id)) return id;
-                        }
-                        
-                        return null;
-                    }
-                ''')
-                
-                if plant_id:
-                    logger.info(f"Found plantId {plant_id} for '{plant_name}' from page content")
-                    # Navigate back
-                    await self.page.goto('https://server.growatt.com/index')
-                    await self.page.wait_for_selector('table', timeout=10000)
-                    return plant_id
-                
-                # Navigate back even if we didn't find the ID
-                await self.page.goto('https://server.growatt.com/index')
-                await self.page.wait_for_selector('table', timeout=10000)
-            
-            logger.warning(f"Could not find plantId for '{plant_name}'")
-            return None
-            
-        except Exception as e:
-            logger.error(f"Error getting plantId by navigation: {e}")
-            return None
 
     async def sync_plant_energy_data(self, plant_name: str) -> Dict[str, Any]:
         """Get the latest energy data for a plant."""
