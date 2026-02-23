@@ -3096,6 +3096,129 @@ async def get_import_history(plant_id: str, current_user: dict = Depends(get_cur
     return history
 
 
+@api_router.get("/integrations/growatt/power-curve/{plant_id}")
+async def get_growatt_power_curve(
+    plant_id: str,
+    date: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Fetch real-time power curve data from Growatt OSS portal.
+    This gets the actual power readings from all inverters combined.
+    """
+    import math
+    
+    if not date:
+        date = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    
+    plant = await db.plants.find_one({'id': plant_id, 'is_active': True}, {'_id': 0})
+    if not plant:
+        raise HTTPException(status_code=404, detail="Usina nao encontrada")
+    
+    username = plant.get('growatt_username') or ''
+    password = plant.get('growatt_password') or ''
+    growatt_name = plant.get('growatt_plant_name') or plant.get('name') or ''
+    growatt_plant_id = plant.get('growatt_plant_id') or ''
+    
+    if not username or not password:
+        return {"success": False, "error": "Credenciais Growatt não configuradas", "curve": []}
+    
+    try:
+        await reset_growatt_oss_service()
+        service = get_growatt_oss_service()
+        login_result = await service.login(username, password)
+        
+        if not login_result.get('success'):
+            return {"success": False, "error": "Falha no login Growatt", "curve": []}
+        
+        # Get real plantId if we don't have it
+        if not growatt_plant_id:
+            plants_list = await service.get_plants()
+            for p in plants_list:
+                if growatt_name.lower() in p.get('name', '').lower():
+                    growatt_plant_id = p.get('plant_id') or p.get('id', '')
+                    # Update plant with real ID
+                    if growatt_plant_id:
+                        await db.plants.update_one({'id': plant_id}, {'$set': {'growatt_plant_id': growatt_plant_id}})
+                    break
+        
+        if not growatt_plant_id:
+            return {"success": False, "error": "ID da usina Growatt não encontrado", "curve": []}
+        
+        # Fetch power data using Growatt's internal API
+        # type=0 = power (instant), type=1 = energy (daily)
+        power_data = await service.page.evaluate(f'''
+            async () => {{
+                try {{
+                    // Try getPlantPower endpoint (gives power over time)
+                    const res = await fetch('/panel/plant/getPlantData', {{
+                        method: 'POST',
+                        headers: {{'Content-Type': 'application/x-www-form-urlencoded'}},
+                        body: 'plantId={growatt_plant_id}&type=0&date={date}'
+                    }});
+                    return await res.json();
+                }} catch(e) {{
+                    return {{error: e.toString()}};
+                }}
+            }}
+        ''')
+        
+        await reset_growatt_oss_service()
+        
+        # Parse the response
+        curve_points = []
+        total_kwh = 0
+        peak_kw = 0
+        
+        if power_data and not power_data.get('error'):
+            obj = power_data.get('obj', {})
+            powers = obj.get('powers', [])  # Power in W at each interval
+            times = obj.get('times', [])    # Time strings
+            
+            if powers and times:
+                for i, (time_str, power_w) in enumerate(zip(times, powers)):
+                    try:
+                        power_kw = float(power_w) / 1000 if power_w else 0
+                        curve_points.append({
+                            'time': time_str,
+                            'power_kw': round(power_kw, 2)
+                        })
+                        if power_kw > peak_kw:
+                            peak_kw = power_kw
+                    except (ValueError, TypeError):
+                        pass
+            
+            # Get energy data too
+            energys = obj.get('energys', [])
+            if energys:
+                try:
+                    total_kwh = sum(float(e) for e in energys if e)
+                except:
+                    pass
+        
+        # Calculate performance
+        prognosis = plant.get('monthly_prognosis_kwh', 0)
+        daily_prognosis = prognosis / 30 if prognosis > 0 else 0
+        performance = (total_kwh / daily_prognosis * 100) if daily_prognosis > 0 and total_kwh > 0 else 0
+        
+        return {
+            "success": True,
+            "plant_name": plant.get('name', ''),
+            "date": date,
+            "capacity_kwp": plant.get('capacity_kwp', 0),
+            "total_kwh": round(total_kwh, 2),
+            "peak_kw": round(peak_kw, 2),
+            "performance": round(performance, 1),
+            "status": plant.get('growatt_status') or plant.get('status', 'unknown'),
+            "curve": curve_points,
+            "source": "growatt_api"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error fetching Growatt power curve: {e}")
+        return {"success": False, "error": str(e), "curve": []}
+
+
 # Keep old endpoint for backward compatibility
 @api_router.post("/integrations/growatt/sync")
 async def sync_growatt_data(request: GrowattPlantSyncRequest, current_user: dict = Depends(get_current_user)):
