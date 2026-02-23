@@ -138,6 +138,16 @@ const PlantDetail = () => {
   const [powerCurveData, setPowerCurveData] = useState(null);
   const [powerCurveDate, setPowerCurveDate] = useState(new Date().toISOString().split('T')[0]);
   const [loadingPowerCurve, setLoadingPowerCurve] = useState(false);
+  
+  // Import from Growatt state
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [importRange, setImportRange] = useState({ 
+    start: new Date(new Date().setMonth(new Date().getMonth() - 6)).toISOString().split('T')[0],
+    end: new Date().toISOString().split('T')[0]
+  });
+  const [importing, setImporting] = useState(false);
+  const [importHistory, setImportHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
   // Sync Growatt data for this plant
   const handleSyncGrowattDirect = async () => {
