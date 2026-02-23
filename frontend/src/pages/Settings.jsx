@@ -911,6 +911,126 @@ const Settings = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Client Login Dialog */}
+      <Dialog open={clientLoginDialogOpen} onOpenChange={setClientLoginDialogOpen}>
+        <DialogContent className="sm:max-w-lg bg-white">
+          <DialogHeader>
+            <DialogTitle className="font-heading flex items-center gap-2">
+              <Users className="h-5 w-5 text-[#EAB308]" />
+              {editingLogin ? 'Editar Login' : 'Novo Login de Cliente'}
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="flex items-center gap-3 p-3 bg-neutral-50 rounded-lg">
+              <input
+                type="checkbox"
+                id="is_installer"
+                checked={clientLoginForm.is_installer}
+                onChange={(e) => setClientLoginForm({ ...clientLoginForm, is_installer: e.target.checked })}
+                className="h-4 w-4 accent-[#EAB308]"
+              />
+              <label htmlFor="is_installer" className="text-sm font-medium text-neutral-700">
+                Login de Instalador (aparece no topo da lista)
+              </label>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>App / Portal *</Label>
+                <Select
+                  value={clientLoginForm.inverter_app}
+                  onValueChange={(value) => setClientLoginForm({ ...clientLoginForm, inverter_app: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Growatt">Growatt</SelectItem>
+                    <SelectItem value="FusionSolar">FusionSolar (Huawei)</SelectItem>
+                    <SelectItem value="Sungrow">Sungrow</SelectItem>
+                    <SelectItem value="Deye">Deye</SelectItem>
+                    <SelectItem value="Solis">Solis Cloud</SelectItem>
+                    <SelectItem value="SolarMan">SolarMan</SelectItem>
+                    <SelectItem value="iSolarCloud">iSolarCloud</SelectItem>
+                    <SelectItem value="SAJ">SAJ</SelectItem>
+                    <SelectItem value="Outro">Outro</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Unidade ON</Label>
+                <Select
+                  value={clientLoginForm.on_unit}
+                  onValueChange={(value) => setClientLoginForm({ ...clientLoginForm, on_unit: value })}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="ON CWB">ON CWB</SelectItem>
+                    <SelectItem value="ON CG">ON CG</SelectItem>
+                    <SelectItem value="Outro">Outro</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Nome do Cliente</Label>
+              <Input
+                value={clientLoginForm.client_name}
+                onChange={(e) => setClientLoginForm({ ...clientLoginForm, client_name: e.target.value })}
+                placeholder="Nome do cliente ou empresa"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Login *</Label>
+                <Input
+                  value={clientLoginForm.login}
+                  onChange={(e) => setClientLoginForm({ ...clientLoginForm, login: e.target.value })}
+                  placeholder="Email ou usuário"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Senha *</Label>
+                <Input
+                  value={clientLoginForm.password}
+                  onChange={(e) => setClientLoginForm({ ...clientLoginForm, password: e.target.value })}
+                  placeholder="Senha"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Site/URL do Portal</Label>
+              <Input
+                value={clientLoginForm.site_url}
+                onChange={(e) => setClientLoginForm({ ...clientLoginForm, site_url: e.target.value })}
+                placeholder="https://server.growatt.com"
+              />
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setClientLoginDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleSaveClientLogin} 
+              disabled={savingClientLogin}
+              className="bg-[#1A1A1A] hover:bg-neutral-800 text-white"
+            >
+              {savingClientLogin ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
