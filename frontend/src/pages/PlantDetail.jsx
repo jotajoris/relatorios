@@ -2505,24 +2505,14 @@ const PlantDetail = () => {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div>
-              <Label className="text-sm text-neutral-600">Selecione o período que deseja importar:</Label>
-              <div className="flex items-center gap-2 mt-2">
-                <Input
-                  type="date"
-                  value={importRange.start}
-                  onChange={e => setImportRange(prev => ({ ...prev, start: e.target.value }))}
-                  className="flex-1"
-                />
-                <span className="text-neutral-400">→</span>
-                <Input
-                  type="date"
-                  value={importRange.end}
-                  onChange={e => setImportRange(prev => ({ ...prev, end: e.target.value }))}
-                  className="flex-1"
-                  max={new Date().toISOString().split('T')[0]}
-                />
-              </div>
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <p className="text-sm text-amber-800">
+                <strong>Nota:</strong> A API do Growatt tem limitações que impedem o download de histórico. 
+                Use esta função para sincronizar os <strong>dados do dia atual</strong>.
+              </p>
+              <p className="text-sm text-amber-700 mt-1">
+                Para dados históricos, baixe do portal Growatt e use "Enviar arquivo de geração".
+              </p>
             </div>
             
             <div className="border rounded-lg">
