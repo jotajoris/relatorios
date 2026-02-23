@@ -42,6 +42,17 @@ api_router = APIRouter(prefix="/api")
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# ==================== HEALTH CHECK (must respond fast) ====================
+@app.get("/health")
+async def health_check():
+    """Health check endpoint - responds immediately without DB check"""
+    return {"status": "healthy", "service": "solar-management-api"}
+
+@app.get("/api/health")
+async def api_health_check():
+    """API Health check endpoint"""
+    return {"status": "healthy", "service": "solar-management-api"}
+
 # ==================== MODELS ====================
 
 class UserBase(BaseModel):
