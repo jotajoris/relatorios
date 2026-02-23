@@ -318,13 +318,16 @@ async def sync_all_growatt_plants():
 
 def start_scheduler():
     """Start the APScheduler with scheduled jobs."""
+    global _scheduler, _current_sync_interval
+    
     from apscheduler.schedulers.asyncio import AsyncIOScheduler
     from apscheduler.triggers.cron import CronTrigger
+    from apscheduler.triggers.interval import IntervalTrigger
     
-    scheduler = AsyncIOScheduler()
+    _scheduler = AsyncIOScheduler()
     
     # Faturas COPEL: midnight Brasília (03:00 UTC)
-    scheduler.add_job(
+    _scheduler.add_job(
         download_missing_invoices,
         trigger=CronTrigger(hour=3, minute=0, timezone='America/Sao_Paulo'),
         id='download_invoices',
@@ -332,15 +335,38 @@ def start_scheduler():
         replace_existing=True,
     )
     
-    # Growatt sync: 6AM Brasília (09:00 UTC) - after sunrise, has yesterday's data
-    scheduler.add_job(
+    # Growatt sync: every X minutes (default 30)
+    # Will be updated when settings are loaded
+    _scheduler.add_job(
         sync_all_growatt_plants,
-        trigger=CronTrigger(hour=9, minute=0, timezone='America/Sao_Paulo'),
-        id='sync_growatt',
-        name='Sync Growatt automatico (diario)',
+        trigger=IntervalTrigger(minutes=_current_sync_interval),
+        id='sync_growatt_interval',
+        name=f'Sync Growatt automatico (cada {_current_sync_interval} min)',
         replace_existing=True,
     )
     
-    scheduler.start()
-    logger.info("Scheduler iniciado: faturas COPEL (meia-noite) + Growatt sync (6h Brasilia)")
-    return scheduler
+    _scheduler.start()
+    logger.info(f"Scheduler iniciado: faturas COPEL (meia-noite) + Growatt sync (cada {_current_sync_interval} min)")
+    
+    # Load interval from DB after scheduler starts
+    async def load_interval():
+        global _current_sync_interval
+        interval = await get_sync_interval_from_db()
+        if interval != _current_sync_interval:
+            await set_sync_interval(interval)
+    
+    asyncio.get_event_loop().create_task(load_interval())
+    
+    return _scheduler
+
+
+def get_scheduler():
+    """Get the scheduler instance."""
+    global _scheduler
+    return _scheduler
+
+
+def get_current_interval():
+    """Get the current sync interval in minutes."""
+    global _current_sync_interval
+    return _current_sync_interval
