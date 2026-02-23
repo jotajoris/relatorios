@@ -232,6 +232,9 @@ class GrowattOSSService:
                 plants = []
                 for idx, p in enumerate(all_plants):
                     if p.get('plantName'):
+                        # Log raw plant data to understand the structure
+                        logger.debug(f"Raw plant data keys: {p.keys()}")
+                        
                         pv_power = p.get('pvPower', '0')
                         pv_power_kwp = float(pv_power.replace('kWp', '').replace(',', '.').strip() or 0)
                         
@@ -245,12 +248,14 @@ class GrowattOSSService:
                         normalized_status = "online" if status == 'online' else ("abnormal" if status == 'abnormal' else "offline")
                         
                         # The plantId field from Growatt is the real ID needed for API calls
-                        real_plant_id = p.get('plantId') or p.get('id') or p.get('number', '')
-                        logger.debug(f"Plant {p.get('plantName')}: plantId={real_plant_id}, number={p.get('number')}")
+                        # Try different field names
+                        real_plant_id = p.get('plantId') or p.get('id') or p.get('plantid') or p.get('number', '')
+                        if idx == 0:  # Log first plant's all fields
+                            logger.info(f"First plant fields: {list(p.keys())}")
                         
                         plants.append({
                             "id": p.get('number', ''),
-                            "plant_id": real_plant_id,  # Real Growatt plantId for API calls
+                            "plant_id": str(real_plant_id),  # Real Growatt plantId for API calls
                             "name": p.get('plantName', ''),
                             "alias": p.get('alias', ''),
                             "username": p.get('userName', ''),
