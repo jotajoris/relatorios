@@ -413,7 +413,10 @@ class GrowattOSSService:
             if not plant:
                 return {"success": False, "error": f"Usina '{plant_name}' nao encontrada"}
 
-            plant_id = plant.get('id', '')
+            # Use the real plant_id for API calls, not the row number
+            plant_id = plant.get('plant_id') or plant.get('id', '')
+            logger.info(f"Getting daily data for plant '{plant.get('name')}' with plantId={plant_id}")
+            
             # Get monthly data which gives daily values
             # Parse the year-month from start_date
             month_str = start_date[:7]  # YYYY-MM
@@ -426,12 +429,16 @@ class GrowattOSSService:
                             headers: {{'Content-Type': 'application/x-www-form-urlencoded'}},
                             body: 'plantId={plant_id}&type=2&date={month_str}'
                         }});
-                        return await res.json();
+                        const json = await res.json();
+                        console.log('Growatt API response:', JSON.stringify(json));
+                        return json;
                     }} catch(e) {{
                         return {{error: e.toString()}};
                     }}
                 }}
             ''')
+            
+            logger.info(f"Growatt getPlantData response: {data}")
 
             return {
                 "success": True,
