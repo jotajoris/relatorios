@@ -36,7 +36,10 @@ import {
   Trash2,
   Edit,
   Users,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Clock,
+  Timer,
+  Wifi
 } from 'lucide-react';
 
 const Settings = () => {
