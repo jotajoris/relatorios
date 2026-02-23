@@ -1658,41 +1658,41 @@ async def get_power_curve(
                         total_kwh_from_data = 0
                         
                         for time_str, power_w in zip(times, powers):
-                                try:
-                                    power_kw = float(power_w) / 1000 if power_w else 0
-                                    curve_points.append({
-                                        'time': time_str,
-                                        'power_kw': round(power_kw, 2)
-                                    })
-                                    if power_kw > peak_kw:
-                                        peak_kw = power_kw
-                                except (ValueError, TypeError):
-                                    pass
-                            
-                            # Get total energy for the day
-                            gen_data = await db.generation_data.find_one(
-                                {'plant_id': plant_id, 'date': date}, {'_id': 0}
-                            )
-                            total_kwh = gen_data.get('generation_kwh', 0) if gen_data else 0
-                            
-                            # Calculate performance
-                            prognosis = plant.get('monthly_prognosis_kwh', 0)
-                            daily_prognosis = prognosis / 30 if prognosis > 0 else 0
-                            performance = (total_kwh / daily_prognosis * 100) if daily_prognosis > 0 and total_kwh > 0 else 0
-                            
-                            logger.info(f"Returning REAL Growatt power curve with {len(curve_points)} points, peak={peak_kw}kW")
-                            
-                            return {
-                                'plant_name': plant.get('name', ''),
-                                'date': date,
-                                'capacity_kwp': plant.get('capacity_kwp', 0),
-                                'total_kwh': round(total_kwh, 2),
-                                'peak_kw': round(peak_kw, 2),
-                                'performance': round(performance, 1),
-                                'status': plant.get('growatt_status') or plant.get('status', 'unknown'),
-                                'curve': curve_points,
-                                'source': 'growatt_real'
-                            }
+                            try:
+                                power_kw = float(power_w) / 1000 if power_w else 0
+                                curve_points.append({
+                                    'time': time_str,
+                                    'power_kw': round(power_kw, 2)
+                                })
+                                if power_kw > peak_kw:
+                                    peak_kw = power_kw
+                            except (ValueError, TypeError):
+                                pass
+                        
+                        # Get total energy for the day
+                        gen_data = await db.generation_data.find_one(
+                            {'plant_id': plant_id, 'date': date}, {'_id': 0}
+                        )
+                        total_kwh = gen_data.get('generation_kwh', 0) if gen_data else 0
+                        
+                        # Calculate performance
+                        prognosis = plant.get('monthly_prognosis_kwh', 0)
+                        daily_prognosis = prognosis / 30 if prognosis > 0 else 0
+                        performance = (total_kwh / daily_prognosis * 100) if daily_prognosis > 0 and total_kwh > 0 else 0
+                        
+                        logger.info(f"Returning REAL Growatt power curve with {len(curve_points)} points, peak={peak_kw}kW")
+                        
+                        return {
+                            'plant_name': plant.get('name', ''),
+                            'date': date,
+                            'capacity_kwp': plant.get('capacity_kwp', 0),
+                            'total_kwh': round(total_kwh, 2),
+                            'peak_kw': round(peak_kw, 2),
+                            'performance': round(performance, 1),
+                            'status': plant.get('growatt_status') or plant.get('status', 'unknown'),
+                            'curve': curve_points,
+                            'source': 'growatt_real'
+                        }
         except Exception as e:
             logger.warning(f"Could not fetch real Growatt power curve: {e}")
             # Fall through to simulated curve
