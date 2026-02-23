@@ -3479,11 +3479,22 @@ async def download_pdf_report(
 # Include the router in the main app
 app.include_router(api_router)
 
+# CORS Configuration - explicitly allow onusinas.com and common origins
+cors_origins = [
+    "https://onusinas.com",
+    "https://www.onusinas.com",
+    "http://onusinas.com",
+    "http://www.onusinas.com",
+    "https://energy-hub-24.emergent.host",
+    "http://localhost:3000",
+    "http://localhost:5173",
+]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
+    allow_origins=cors_origins,
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allow_headers=["*"],
     expose_headers=["*"],
 )
