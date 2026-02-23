@@ -2126,12 +2126,12 @@ async def get_sync_status(current_user: dict = Depends(get_current_user)):
     }
 
 @api_router.post("/sync/growatt/all")
-async def sync_all_growatt_now(background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
+async def sync_all_growatt_now(current_user: dict = Depends(get_current_user)):
     """Manually trigger Growatt sync for all plants."""
     from services.scheduler import sync_all_growatt_plants
     
-    # Run in background to not block the request
-    background_tasks.add_task(asyncio.create_task, sync_all_growatt_plants())
+    # Run in background using asyncio.create_task (not BackgroundTasks, which runs sync)
+    asyncio.create_task(sync_all_growatt_plants())
     
     return {"status": "started", "message": "Sincronização iniciada em background"}
 
