@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import api from '../services/api';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -31,7 +31,12 @@ import {
   AlertCircle,
   Sun,
   Download,
-  Link2
+  Link2,
+  Upload,
+  Trash2,
+  Edit,
+  Users,
+  FileSpreadsheet
 } from 'lucide-react';
 
 const Settings = () => {
