@@ -96,8 +96,15 @@ const Settings = () => {
   });
   const [savingCopel, setSavingCopel] = useState(false);
 
+  // Sync interval state
+  const [syncInterval, setSyncInterval] = useState(30);
+  const [syncStatus, setSyncStatus] = useState(null);
+  const [savingSyncInterval, setSavingSyncInterval] = useState(false);
+  const [loadingSyncStatus, setLoadingSyncStatus] = useState(true);
+
   useEffect(() => {
     loadData();
+    loadSyncSettings();
   }, []);
 
   const loadData = async () => {
