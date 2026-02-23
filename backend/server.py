@@ -16,6 +16,9 @@ import jwt
 import pandas as pd
 from io import BytesIO
 
+# Import Growatt service early for power curve endpoint
+from services.growatt_service import get_growatt_oss_service, reset_growatt_oss_service
+
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
