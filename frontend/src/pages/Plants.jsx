@@ -487,6 +487,7 @@ const Plants = () => {
                 />
               </div>
 
+              {/* Linha 1: Estado + Cidade */}
               <div className="space-y-2">
                 <Label>Estado</Label>
                 <select className="w-full h-9 rounded-md border border-neutral-200 bg-white px-3 py-1 text-sm"
@@ -506,7 +507,8 @@ const Plants = () => {
                 </select>
               </div>
 
-              <div className="p-3 bg-[#FFD600]/10 border border-[#FFD600]/30 rounded-lg space-y-3">
+              {/* Linha 2: Calcular Prognóstico */}
+              <div className="col-span-2 p-3 bg-[#FFD600]/10 border border-[#FFD600]/30 rounded-lg">
                 <div className="flex items-center justify-between">
                   <Label className="text-sm font-semibold">Prognostico por Irradiancia</Label>
                   <Button size="sm" variant="outline" onClick={calcPrognosis} disabled={calcingProg} type="button"
@@ -515,7 +517,7 @@ const Plants = () => {
                   </Button>
                 </div>
                 {progDetail && (
-                  <div className="text-xs space-y-2">
+                  <div className="text-xs space-y-2 mt-3">
                     <p className="text-neutral-500">{progDetail.city} - {progDetail.state} | {progDetail.capacity_kwp} kWp</p>
                     <div className="grid grid-cols-4 gap-2">
                       {progDetail.months?.map((m, i) => (
@@ -534,23 +536,26 @@ const Plants = () => {
                 )}
               </div>
 
-              <div className="space-y-2">
-                <Label>Prognostico Mensal (kWh)</Label>
+              {/* Linha 3: Prognóstico Mensal */}
+              <div className="col-span-2 space-y-2">
+                <Label>Prognóstico Mensal (kWh)</Label>
                 <Input type="number" value={formData.monthly_prognosis_kwh} onChange={(e) => setFormData({...formData, monthly_prognosis_kwh: e.target.value})} placeholder="Auto-calculado" />
               </div>
 
-              <div className="space-y-2">
-                <Label>Prognostico Anual (kWh)</Label>
+              {/* Linha 4: Prognóstico Anual */}
+              <div className="col-span-2 space-y-2">
+                <Label>Prognóstico Anual (kWh)</Label>
                 <Input type="number" value={formData.annual_prognosis_kwh} onChange={(e) => setFormData({...formData, annual_prognosis_kwh: e.target.value})} placeholder="Auto-calculado" />
               </div>
 
+              {/* Linha 5: Investimento Total + Data de Instalação */}
               <div className="space-y-2">
                 <Label>Investimento Total (R$)</Label>
                 <Input type="number" value={formData.total_investment} onChange={(e) => setFormData({...formData, total_investment: e.target.value})} placeholder="Ex: 50000" />
               </div>
 
               <div className="space-y-2">
-                <Label>Data de Instalacao</Label>
+                <Label>Data de Instalação</Label>
                 <Input type="date" value={formData.installation_date} onChange={(e) => setFormData({...formData, installation_date: e.target.value})} />
               </div>
             </div>
