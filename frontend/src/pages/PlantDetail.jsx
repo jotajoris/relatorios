@@ -367,6 +367,20 @@ const PlantDetail = () => {
     }
   };
 
+  const loadPowerCurve = async () => {
+    setLoadingPowerCurve(true);
+    try {
+      const response = await api.get(`/dashboard/power-curve/${plantId}`, {
+        params: { date: powerCurveDate }
+      });
+      setPowerCurveData(response.data);
+    } catch (error) {
+      console.error('Error loading power curve:', error);
+    } finally {
+      setLoadingPowerCurve(false);
+    }
+  };
+
   const loadMonthlySummary = async () => {
     try {
       const res = await api.get(`/plants/${plantId}/monthly-summary?year=${selectedYear}`);
