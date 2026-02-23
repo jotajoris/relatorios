@@ -1609,6 +1609,13 @@ async def get_power_curve(
     sunset_hour = 18  # 18:00
     daylight_hours = sunset_hour - sunrise_hour  # 12 hours
     
+    # Check if this is today - limit data to current time
+    today_str = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    is_today = (date == today_str)
+    current_hour = datetime.now(timezone.utc).hour - 3  # Brasília timezone (UTC-3)
+    current_minute = datetime.now(timezone.utc).minute
+    current_time_decimal = current_hour + current_minute / 60
+    
     # Calculate peak power based on total energy
     # If we integrate sin from 0 to π, we get 2. So total energy = Pmax * 2 * daylight_hours / π
     # Pmax = total_kwh * π / (2 * daylight_hours)
@@ -1626,6 +1633,10 @@ async def get_power_curve(
         for minute in [0, 15, 30, 45]:
             time_str = f"{hour:02d}:{minute:02d}"
             time_decimal = hour + minute / 60
+            
+            # If today, don't show future data
+            if is_today and time_decimal > current_time_decimal:
+                break
             
             if time_decimal < sunrise_hour or time_decimal > sunset_hour:
                 power_kw = 0
@@ -1645,6 +1656,10 @@ async def get_power_curve(
                 'time': time_str,
                 'power_kw': round(power_kw, 2),
             })
+        
+        # If today and we've passed current time, stop
+        if is_today and hour >= current_hour:
+            break
     
     # Calculate performance
     prognosis = plant.get('monthly_prognosis_kwh', 0)
