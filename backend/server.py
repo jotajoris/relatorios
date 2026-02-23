@@ -2993,15 +2993,24 @@ async def download_growatt_range(
     
     while current <= end:
         month_str = current.strftime('%Y-%m')
+        logger.info(f"Downloading Growatt data for {growatt_name}, month: {month_str}")
         result = await service.get_plant_daily_data_range(growatt_name, f"{month_str}-01", f"{month_str}-28")
+        
+        logger.info(f"Growatt API result: success={result.get('success')}, has_data={bool(result.get('data'))}")
+        if result.get('data'):
+            logger.info(f"Growatt API response keys: {result.get('data', {}).keys() if isinstance(result.get('data'), dict) else type(result.get('data'))}")
         
         if result.get('success') and result.get('data'):
             raw = result['data']
             # Parse the Growatt response - it contains daily generation values
             obj = raw.get('obj', {})
+            logger.info(f"Growatt obj keys: {obj.keys() if isinstance(obj, dict) else 'not a dict'}")
+            
             # Try different response formats
-            energys = obj.get('energys', []) or obj.get('energy', [])
-            dates = obj.get('dates', [])
+            energys = obj.get('energys', []) or obj.get('energy', []) or obj.get('chartData', [])
+            dates = obj.get('dates', []) or obj.get('date', [])
+            
+            logger.info(f"Growatt energys count: {len(energys) if energys else 0}, dates count: {len(dates) if dates else 0}")
             
             if energys and dates:
                 for i, val in enumerate(energys):
