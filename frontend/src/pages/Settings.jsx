@@ -374,11 +374,20 @@ const Settings = () => {
   };
 
   // Sort logins: installer first, then by client name
-  const sortedClientLogins = [...clientLogins].sort((a, b) => {
-    if (a.is_installer && !b.is_installer) return -1;
-    if (!a.is_installer && b.is_installer) return 1;
-    return (a.client_name || '').localeCompare(b.client_name || '');
-  });
+  const sortedClientLogins = [...clientLogins]
+    .filter(login => {
+      if (!clientLoginSearch) return true;
+      const search = clientLoginSearch.toLowerCase();
+      return (
+        (login.client_name || '').toLowerCase().includes(search) ||
+        (login.login || '').toLowerCase().includes(search)
+      );
+    })
+    .sort((a, b) => {
+      if (a.is_installer && !b.is_installer) return -1;
+      if (!a.is_installer && b.is_installer) return 1;
+      return (a.client_name || '').localeCompare(b.client_name || '');
+    });
 
   if (loading) {
     return (
