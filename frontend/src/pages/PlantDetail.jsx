@@ -178,6 +178,25 @@ const PlantDetail = () => {
     'RIO_DE_JANEIRO','RIO_GRANDE_DO_NORTE','RIO_GRANDE_DO_SUL','RONDÔNIA',
     'RORAIMA','SANTA_CATARINA','SERGIPE','SÃO_PAULO','TOCANTINS'
   ];
+  
+  // Mapping from state abbreviations to full names
+  const STATE_ABBREV_MAP = {
+    'AC': 'ACRE', 'AL': 'ALAGOAS', 'AP': 'AMAPÁ', 'AM': 'AMAZONAS',
+    'BA': 'BAHIA', 'CE': 'CEARÁ', 'DF': 'DISTRITO_FEDERAL', 'ES': 'ESPÍRITO_SANTO',
+    'GO': 'GOIÁS', 'MA': 'MARANHÃO', 'MT': 'MATO_GROSSO', 'MS': 'MATO_GROSSO_DO_SUL',
+    'MG': 'MINAS_GERAIS', 'PA': 'PARÁ', 'PB': 'PARAÍBA', 'PR': 'PARANÁ',
+    'PE': 'PERNAMBUCO', 'PI': 'PIAUÍ', 'RJ': 'RIO_DE_JANEIRO', 'RN': 'RIO_GRANDE_DO_NORTE',
+    'RS': 'RIO_GRANDE_DO_SUL', 'RO': 'RONDÔNIA', 'RR': 'RORAIMA', 'SC': 'SANTA_CATARINA',
+    'SP': 'SÃO_PAULO', 'SE': 'SERGIPE', 'TO': 'TOCANTINS'
+  };
+  
+  // Normalize state: convert abbreviation to full name
+  const normalizeState = (state) => {
+    if (!state) return '';
+    const upper = state.toUpperCase().trim();
+    return STATE_ABBREV_MAP[upper] || upper;
+  };
+  
   const [filteredCities, setFilteredCities] = useState([]);
   const [citySearchText, setCitySearchText] = useState('');
   const [showCityDropdown, setShowCityDropdown] = useState(false);
@@ -187,7 +206,9 @@ const PlantDetail = () => {
   const loadCitiesByState = async (state) => {
     if (!state) { setFilteredCities([]); return; }
     try {
-      const res = await api.get(`/irradiance/cities?state=${encodeURIComponent(state)}`);
+      // Normalize state before sending to API
+      const normalizedState = normalizeState(state);
+      const res = await api.get(`/irradiance/cities?state=${encodeURIComponent(normalizedState)}`);
       const cities = (res.data || []).map(c => c.city).sort();
       setFilteredCities(cities);
     } catch (err) {
