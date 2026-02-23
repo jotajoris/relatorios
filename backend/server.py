@@ -1609,20 +1609,28 @@ async def get_power_curve(
             login_result = await service.login(plant['growatt_username'], plant['growatt_password'])
             
             if login_result.get('success') and service.page:
-                # If we don't have growatt_plant_id, try to find it by navigating to the plant page
+                # If we don't have growatt_plant_id, try multiple methods
                 if not growatt_plant_id and growatt_name:
-                    # Get all plants and find this one by name
+                    # Method 1: Search in the plants list
                     plants_list = await service.get_plants()
                     for p in plants_list:
                         if growatt_name.lower() in p.get('name', '').lower():
                             growatt_plant_id = p.get('plant_id') or p.get('id', '')
-                            # Save for future use
                             if growatt_plant_id:
                                 await db.plants.update_one(
                                     {'id': plant_id}, 
                                     {'$set': {'growatt_plant_id': growatt_plant_id}}
                                 )
                             break
+                    
+                    # Method 2: Navigate to the plant page to get the ID
+                    if not growatt_plant_id:
+                        growatt_plant_id = await service.get_plant_id_by_navigation(growatt_name)
+                        if growatt_plant_id:
+                            await db.plants.update_one(
+                                {'id': plant_id}, 
+                                {'$set': {'growatt_plant_id': growatt_plant_id}}
+                            )
                 
                 if not growatt_plant_id:
                     logger.warning(f"Could not find Growatt plantId for {growatt_name}")
