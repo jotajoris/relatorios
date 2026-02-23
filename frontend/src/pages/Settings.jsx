@@ -221,10 +221,124 @@ const Settings = () => {
     }
   };
 
+  // Client Login functions
+  const handleOpenClientLoginDialog = (login = null) => {
+    if (login) {
+      setEditingLogin(login);
+      setClientLoginForm({
+        inverter_app: login.inverter_app || '',
+        on_unit: login.on_unit || '',
+        client_name: login.client_name || '',
+        login: login.login || '',
+        password: login.password || '',
+        site_url: login.site_url || '',
+        is_installer: login.is_installer || false
+      });
+    } else {
+      setEditingLogin(null);
+      setClientLoginForm({
+        inverter_app: '',
+        on_unit: '',
+        client_name: '',
+        login: '',
+        password: '',
+        site_url: '',
+        is_installer: false
+      });
+    }
+    setClientLoginDialogOpen(true);
+  };
+
+  const handleSaveClientLogin = async () => {
+    if (!clientLoginForm.inverter_app || !clientLoginForm.login || !clientLoginForm.password) {
+      toast.error('Preencha os campos obrigatórios: App, Login e Senha');
+      return;
+    }
+
+    setSavingClientLogin(true);
+    try {
+      if (editingLogin) {
+        await api.put(`/client-logins/${editingLogin.id}`, clientLoginForm);
+        toast.success('Login atualizado com sucesso');
+      } else {
+        await api.post('/client-logins', clientLoginForm);
+        toast.success('Login adicionado com sucesso');
+      }
+      setClientLoginDialogOpen(false);
+      setClientLoginForm({ inverter_app: '', on_unit: '', client_name: '', login: '', password: '', site_url: '', is_installer: false });
+      setEditingLogin(null);
+      loadData();
+    } catch (error) {
+      toast.error('Erro ao salvar login');
+    } finally {
+      setSavingClientLogin(false);
+    }
+  };
+
+  const handleDeleteClientLogin = async (login) => {
+    if (!window.confirm(`Deseja excluir o login "${login.client_name || login.login}"?`)) return;
+    
+    try {
+      await api.delete(`/client-logins/${login.id}`);
+      toast.success('Login removido');
+      loadData();
+    } catch (error) {
+      toast.error('Erro ao remover login');
+    }
+  };
+
+  const handleExcelUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setUploadingExcel(true);
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const response = await api.post('/client-logins/upload-excel', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      toast.success(`${response.data.imported} logins importados com sucesso!`);
+      loadData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Erro ao importar Excel');
+    } finally {
+      setUploadingExcel(false);
+      if (excelInputRef.current) excelInputRef.current.value = '';
+    }
+  };
+
+  const downloadExcelTemplate = () => {
+    // Create CSV template
+    const headers = ['inverter_app', 'on_unit', 'client_name', 'login', 'password', 'site_url', 'is_installer'];
+    const example = ['Growatt', 'ON CWB', 'João Silva', 'joao@email.com', 'senha123', 'https://server.growatt.com', 'false'];
+    const example2 = ['Growatt', 'ON CG', 'INSTALADOR', 'BTAVB001', 'Comercial2023', 'https://server.growatt.com', 'true'];
+    
+    const csvContent = [
+      headers.join(','),
+      example.join(','),
+      example2.join(',')
+    ].join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'modelo_logins_clientes.csv';
+    link.click();
+  };
+
   const getPlantName = (plantId) => {
     const plant = plants.find(p => p.id === plantId);
     return plant?.name || 'Usina não encontrada';
   };
+
+  // Sort logins: installer first, then by client name
+  const sortedClientLogins = [...clientLogins].sort((a, b) => {
+    if (a.is_installer && !b.is_installer) return -1;
+    if (!a.is_installer && b.is_installer) return 1;
+    return (a.client_name || '').localeCompare(b.client_name || '');
+  });
 
   if (loading) {
     return (
