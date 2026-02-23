@@ -126,6 +126,26 @@ const Clients = () => {
     }
   };
 
+  const handleLogoUpload = async (clientId, file) => {
+    if (!file) return;
+    
+    setUploadingLogo(clientId);
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    try {
+      const response = await api.post(`/upload/logo/client/${clientId}`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      toast.success('Logo atualizada com sucesso!');
+      loadClients();
+    } catch (error) {
+      toast.error('Erro ao fazer upload da logo');
+    } finally {
+      setUploadingLogo(null);
+    }
+  };
+
   const filteredClients = clients.filter(client =>
     client.name.toLowerCase().includes(search.toLowerCase()) ||
     client.email?.toLowerCase().includes(search.toLowerCase()) ||
