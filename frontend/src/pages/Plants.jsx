@@ -490,7 +490,7 @@ const Plants = () => {
               <div className="space-y-2">
                 <Label>Estado</Label>
                 <select className="w-full h-9 rounded-md border border-neutral-200 bg-white px-3 py-1 text-sm"
-                  value={formData.state} onChange={(e) => { setFormData({...formData, state: e.target.value, city: ''}); setCitySearch(''); }}>
+                  value={normalizeState(formData.state)} onChange={(e) => { setFormData({...formData, state: e.target.value, city: ''}); setCitySearch(''); }}>
                   <option value="">Selecione o estado</option>
                   {ESTADOS_BR.map(s => <option key={s} value={s}>{s.replace(/_/g,' ')}</option>)}
                 </select>
