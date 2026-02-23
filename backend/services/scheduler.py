@@ -312,12 +312,19 @@ async def sync_all_growatt_plants():
                                 'source': 'growatt_auto', 'created_at': datetime.now(BRT).isoformat()
                             })
                         
-                        await db.plants.update_one({'id': plant_id}, {'$set': {
+                        # Update plant info including growatt_plant_id
+                        update_fields = {
                             'last_growatt_sync': datetime.now(BRT).isoformat(),
                             'growatt_status': gplant.get('status', 'unknown'),
-                        }})
+                        }
+                        # Save the Growatt plantId if available
+                        growatt_id = gplant.get('plant_id') or gplant.get('id', '')
+                        if growatt_id:
+                            update_fields['growatt_plant_id'] = str(growatt_id)
+                        
+                        await db.plants.update_one({'id': plant_id}, {'$set': update_fields})
                         total_synced += 1
-                        logger.info(f"  {plant.get('name')}: {gen_kwh} kWh ({gplant.get('status')})")
+                        logger.info(f"  {plant.get('name')}: {gen_kwh} kWh ({gplant.get('status')}) [ID:{growatt_id}]")
                     else:
                         status = gplant.get('status', 'offline') if gplant else 'not_found'
                         await db.plants.update_one({'id': plant_id}, {'$set': {
