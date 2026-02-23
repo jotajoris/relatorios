@@ -590,10 +590,22 @@ const Settings = () => {
               </div>
             </CardHeader>
             <CardContent className="bg-white pt-6">
-              <p className="text-sm text-neutral-600 mb-4">
-                Gerencie os logins de acesso aos portais de monitoramento dos seus clientes. 
-                O primeiro login marcado como "Instalador" será usado como login padrão.
-              </p>
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-sm text-neutral-600">
+                  Gerencie os logins de acesso aos portais de monitoramento dos seus clientes. 
+                  O primeiro login marcado como "Instalador" será usado como login padrão.
+                </p>
+                <div className="relative ml-4">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400" />
+                  <Input
+                    placeholder="Buscar nome ou login..."
+                    value={clientLoginSearch}
+                    onChange={(e) => setClientLoginSearch(e.target.value)}
+                    className="pl-9 w-64 h-9 text-sm"
+                    data-testid="client-login-search"
+                  />
+                </div>
+              </div>
               
               {sortedClientLogins.length > 0 ? (
                 <div className="overflow-x-auto">
