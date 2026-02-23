@@ -98,18 +98,37 @@ const Plants = () => {
   };
   
   const [filteredCities, setFilteredCities] = useState([]);
+  const [loadingCities, setLoadingCities] = useState(false);
   const [citySearch, setCitySearch] = useState('');
   const [showCityDrop, setShowCityDrop] = useState(false);
   const [calcingProg, setCalcingProg] = useState(false);
   const [progDetail, setProgDetail] = useState(null);
 
+  // Load cities when state changes
+  const loadCitiesForState = async (state) => {
+    if (!state) {
+      setFilteredCities([]);
+      return;
+    }
+    setLoadingCities(true);
+    try {
+      const normalizedState = normalizeState(state);
+      const res = await api.get(`/irradiance/cities?state=${encodeURIComponent(normalizedState)}`);
+      setFilteredCities((res.data || []).map(c => c.city).sort());
+    } catch (err) {
+      console.error('Error loading cities:', err);
+      setFilteredCities([]);
+    } finally {
+      setLoadingCities(false);
+    }
+  };
+
+  // Load cities when state changes
   useEffect(() => {
     if (formData.state) {
-      // Normalize state before API call
-      const normalizedState = normalizeState(formData.state);
-      api.get(`/irradiance/cities?state=${encodeURIComponent(normalizedState)}`).then(r => {
-        setFilteredCities(r.data.map(c => c.city).sort());
-      }).catch(() => {});
+      loadCitiesForState(formData.state);
+    } else {
+      setFilteredCities([]);
     }
   }, [formData.state]);
 
