@@ -1602,28 +1602,47 @@ async def get_power_curve(
         try:
             # Attempt to fetch real data from Growatt
             growatt_plant_id = plant.get('growatt_plant_id') or ''
+            growatt_name = plant.get('growatt_plant_name') or plant.get('name', '')
             
-            if growatt_plant_id:
-                await reset_growatt_oss_service()
-                service = get_growatt_oss_service()
-                login_result = await service.login(plant['growatt_username'], plant['growatt_password'])
+            await reset_growatt_oss_service()
+            service = get_growatt_oss_service()
+            login_result = await service.login(plant['growatt_username'], plant['growatt_password'])
+            
+            if login_result.get('success') and service.page:
+                # If we don't have growatt_plant_id, try to find it by navigating to the plant page
+                if not growatt_plant_id and growatt_name:
+                    # Get all plants and find this one by name
+                    plants_list = await service.get_plants()
+                    for p in plants_list:
+                        if growatt_name.lower() in p.get('name', '').lower():
+                            growatt_plant_id = p.get('plant_id') or p.get('id', '')
+                            # Save for future use
+                            if growatt_plant_id:
+                                await db.plants.update_one(
+                                    {'id': plant_id}, 
+                                    {'$set': {'growatt_plant_id': growatt_plant_id}}
+                                )
+                            break
                 
-                if login_result.get('success') and service.page:
-                    # Fetch real power data
-                    power_data = await service.page.evaluate(f'''
-                        async () => {{
-                            try {{
-                                const res = await fetch('/panel/plant/getPlantData', {{
-                                    method: 'POST',
-                                    headers: {{'Content-Type': 'application/x-www-form-urlencoded'}},
-                                    body: 'plantId={growatt_plant_id}&type=0&date={date}'
-                                }});
-                                return await res.json();
-                            }} catch(e) {{
-                                return {{error: e.toString()}};
-                            }}
+                if not growatt_plant_id:
+                    logger.warning(f"Could not find Growatt plantId for {growatt_name}")
+                    raise Exception("PlantId not found")
+                
+                # Fetch real power data
+                power_data = await service.page.evaluate(f'''
+                    async () => {{
+                        try {{
+                            const res = await fetch('/panel/plant/getPlantData', {{
+                                method: 'POST',
+                                headers: {{'Content-Type': 'application/x-www-form-urlencoded'}},
+                                body: 'plantId={growatt_plant_id}&type=0&date={date}'
+                            }});
+                            return await res.json();
+                        }} catch(e) {{
+                            return {{error: e.toString()}};
                         }}
-                    ''')
+                    }}
+                ''')
                     
                     await reset_growatt_oss_service()
                     
