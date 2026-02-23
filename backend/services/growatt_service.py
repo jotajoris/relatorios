@@ -388,56 +388,127 @@ class GrowattOSSService:
             return None
         
         try:
+            import re
+            
             # Ensure we're on the plant list page
             current_url = self.page.url
             if '/index' not in current_url:
                 await self.page.goto('https://server.growatt.com/index')
                 await self.page.wait_for_selector('table', timeout=15000)
             
-            # Find the plant by name in the table and click on it
-            plant_link = self.page.locator(f'a:has-text("{plant_name}")').first
+            # Use JavaScript to find and click the plant, then extract the plantId
+            plant_id = await self.page.evaluate(f'''
+                async () => {{
+                    // Find the row containing the plant name
+                    const rows = document.querySelectorAll('table tbody tr');
+                    for (const row of rows) {{
+                        const cells = row.querySelectorAll('td');
+                        for (const cell of cells) {{
+                            const text = cell.textContent || '';
+                            if (text.toLowerCase().includes('{plant_name.lower()}')) {{
+                                // Found the plant! Try to find a clickable element
+                                // First, look for any links in the row
+                                const links = row.querySelectorAll('a');
+                                for (const link of links) {{
+                                    const href = link.href || link.getAttribute('onclick') || '';
+                                    // Check if href contains plantId
+                                    const match = href.match(/plantId[=:]?(\\d+)/i);
+                                    if (match) {{
+                                        return match[1];
+                                    }}
+                                    // Check onclick attribute
+                                    const onclick = link.getAttribute('onclick') || '';
+                                    const onclickMatch = onclick.match(/plantId[=:'"\\s]*(\\d+)/i);
+                                    if (onclickMatch) {{
+                                        return onclickMatch[1];
+                                    }}
+                                }}
+                                
+                                // Try looking in any element with onclick in the row
+                                const onclickElements = row.querySelectorAll('[onclick]');
+                                for (const el of onclickElements) {{
+                                    const onclick = el.getAttribute('onclick') || '';
+                                    const match = onclick.match(/(\\d{{5,}})/);  // plantId is usually a big number
+                                    if (match) {{
+                                        return match[1];
+                                    }}
+                                }}
+                                
+                                // Try clicking the plant name cell to navigate
+                                const nameCell = cells[4]; // Column 4 is usually plant name
+                                if (nameCell) {{
+                                    const link = nameCell.querySelector('a');
+                                    if (link) {{
+                                        // Store the original href before click
+                                        window._tempHref = link.href;
+                                    }}
+                                }}
+                                break;
+                            }}
+                        }}
+                    }}
+                    return null;
+                }}
+            ''')
             
-            if await plant_link.count() == 0:
-                # Try partial match
-                plant_rows = await self.page.locator('table tbody tr').all()
-                for row in plant_rows:
+            if plant_id:
+                logger.info(f"Found plantId {plant_id} for '{plant_name}' from table")
+                return plant_id
+            
+            # If not found, try clicking on the plant name and checking the URL
+            try:
+                # Find and click the plant row
+                rows = await self.page.locator('table tbody tr').all()
+                for row in rows:
                     row_text = await row.text_content()
                     if plant_name.lower() in row_text.lower():
+                        # Click on the first link in this row
                         links = row.locator('a')
                         if await links.count() > 0:
-                            plant_link = links.first
-                            break
+                            await links.first.click()
+                            await self.page.wait_for_timeout(3000)
+                            
+                            # Check the new URL
+                            new_url = self.page.url
+                            match = re.search(r'plantId[=:]?(\d+)', new_url)
+                            if match:
+                                plant_id = match.group(1)
+                                logger.info(f"Found plantId {plant_id} for '{plant_name}' from URL after click")
+                                
+                                # Navigate back
+                                await self.page.goto('https://server.growatt.com/index')
+                                await self.page.wait_for_selector('table', timeout=10000)
+                                
+                                return plant_id
+                            
+                            # Check page content for plantId
+                            plant_id = await self.page.evaluate('''
+                                () => {
+                                    const bodyText = document.body.innerHTML;
+                                    const match = bodyText.match(/plantId['"=:]+\\s*['"](\\d+)['"]|var\\s+plantId\\s*=\\s*(\\d+)/i);
+                                    return match ? (match[1] || match[2]) : null;
+                                }
+                            ''')
+                            
+                            if plant_id:
+                                logger.info(f"Found plantId {plant_id} for '{plant_name}' from page content")
+                                await self.page.goto('https://server.growatt.com/index')
+                                await self.page.wait_for_selector('table', timeout=10000)
+                                return plant_id
+                            
+                            # Navigate back even if not found
+                            await self.page.goto('https://server.growatt.com/index')
+                            await self.page.wait_for_selector('table', timeout=10000)
+                        break
+            except Exception as e:
+                logger.warning(f"Navigation method failed: {e}")
             
-            if await plant_link.count() > 0:
-                # Click on the plant link
-                await plant_link.click()
-                await self.page.wait_for_timeout(3000)
-                
-                # Extract plantId from URL
-                new_url = self.page.url
-                
-                # Try to extract plantId from URL parameters
-                import re
-                match = re.search(r'plantId[=:](\d+)', new_url)
-                if match:
-                    plant_id = match.group(1)
-                    logger.info(f"Found plantId {plant_id} for '{plant_name}' from URL")
-                    
-                    # Navigate back to the list
-                    await self.page.goto('https://server.growatt.com/index')
-                    await self.page.wait_for_selector('table', timeout=10000)
-                    
-                    return plant_id
-                
-                # If not in URL, try to extract from page content
-                plant_id = await self.page.evaluate('''
-                    () => {
-                        // Look for plantId in various places
-                        const scripts = document.querySelectorAll('script');
-                        for (const script of scripts) {
-                            const text = script.textContent || '';
-                            const match = text.match(/plantId['":\\s]*['"](\\d+)['"]/i);
-                            if (match) return match[1];
+            logger.warning(f"Could not find plantId for '{plant_name}'")
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error getting plantId by navigation: {e}")
+            return None
                         }
                         
                         // Check in hidden inputs
