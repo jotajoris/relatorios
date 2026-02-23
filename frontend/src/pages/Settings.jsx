@@ -132,6 +132,34 @@ const Settings = () => {
     }
   };
 
+  const loadSyncSettings = async () => {
+    try {
+      const [intervalRes, statusRes] = await Promise.all([
+        api.get('/settings/sync-interval').catch(() => ({ data: { interval_minutes: 30 } })),
+        api.get('/settings/sync-status').catch(() => ({ data: null }))
+      ]);
+      setSyncInterval(intervalRes.data?.interval_minutes || 30);
+      setSyncStatus(statusRes.data);
+    } catch (error) {
+      console.error('Error loading sync settings:', error);
+    } finally {
+      setLoadingSyncStatus(false);
+    }
+  };
+
+  const handleSaveSyncInterval = async () => {
+    setSavingSyncInterval(true);
+    try {
+      await api.put('/settings/sync-interval', { interval_minutes: syncInterval });
+      toast.success(`Intervalo de sincronização atualizado para ${syncInterval} minutos`);
+      loadSyncSettings();
+    } catch (error) {
+      toast.error('Erro ao atualizar intervalo');
+    } finally {
+      setSavingSyncInterval(false);
+    }
+  };
+
   const handleSaveInverterCredential = async () => {
     if (!inverterForm.plant_id || !inverterForm.brand || !inverterForm.username || !inverterForm.password) {
       toast.error('Preencha todos os campos');
