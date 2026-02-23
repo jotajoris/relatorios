@@ -2494,6 +2494,98 @@ const PlantDetail = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Import from Growatt Dialog */}
+      <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
+        <DialogContent className="sm:max-w-lg bg-white">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sun className="h-5 w-5 text-orange-500" />
+              Importar dados de geração
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div>
+              <Label className="text-sm text-neutral-600">Selecione o período que deseja importar:</Label>
+              <div className="flex items-center gap-2 mt-2">
+                <Input
+                  type="date"
+                  value={importRange.start}
+                  onChange={e => setImportRange(prev => ({ ...prev, start: e.target.value }))}
+                  className="flex-1"
+                />
+                <span className="text-neutral-400">→</span>
+                <Input
+                  type="date"
+                  value={importRange.end}
+                  onChange={e => setImportRange(prev => ({ ...prev, end: e.target.value }))}
+                  className="flex-1"
+                  max={new Date().toISOString().split('T')[0]}
+                />
+              </div>
+            </div>
+            
+            <div className="border rounded-lg">
+              <div className="px-4 py-2 bg-neutral-50 border-b">
+                <h4 className="text-sm font-medium text-neutral-700 flex items-center gap-2">
+                  <History className="h-4 w-4" />
+                  Histórico de importação em nuvem:
+                </h4>
+              </div>
+              <div className="max-h-48 overflow-y-auto">
+                {loadingHistory ? (
+                  <div className="p-4 text-center text-neutral-400">
+                    <Loader2 className="h-5 w-5 animate-spin mx-auto" />
+                  </div>
+                ) : importHistory.length === 0 ? (
+                  <div className="p-4 text-center text-neutral-400 text-sm">
+                    Nenhuma importação realizada
+                  </div>
+                ) : (
+                  <table className="w-full text-sm">
+                    <thead className="text-xs text-neutral-500 bg-neutral-50">
+                      <tr>
+                        <th className="px-4 py-2 text-left">Solicitado em</th>
+                        <th className="px-4 py-2 text-left">Intervalo</th>
+                        <th className="px-4 py-2 text-center">Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {importHistory.map((item, idx) => (
+                        <tr key={idx} className="border-t">
+                          <td className="px-4 py-2">
+                            {item.timestamp ? new Date(item.timestamp).toLocaleDateString('pt-BR') : '-'}
+                          </td>
+                          <td className="px-4 py-2">{item.interval || '-'}</td>
+                          <td className="px-4 py-2 text-center">
+                            <CheckCircle className="h-4 w-4 text-emerald-500 mx-auto" />
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            </div>
+          </div>
+          <DialogFooter className="flex gap-2">
+            <Button variant="outline" onClick={() => setImportDialogOpen(false)}>
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleImportFromGrowatt} 
+              disabled={importing}
+              className="bg-orange-500 hover:bg-orange-600 text-white"
+            >
+              {importing ? (
+                <><Loader2 className="h-4 w-4 animate-spin mr-2" />Importando...</>
+              ) : (
+                'Importar dados'
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
