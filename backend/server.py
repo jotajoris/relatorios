@@ -134,6 +134,24 @@ class Plant(PlantBase):
     is_active: bool = True
     status: str = "online"
 
+# Client Login Model for portal credentials
+class ClientLoginBase(BaseModel):
+    inverter_app: str  # Growatt, FusionSolar, Deye, etc
+    on_unit: Optional[str] = None  # ON CWB, ON CG
+    client_name: Optional[str] = None
+    login: str
+    password: str
+    site_url: Optional[str] = None
+    is_installer: bool = False
+
+class ClientLoginCreate(ClientLoginBase):
+    pass
+
+class ClientLogin(ClientLoginBase):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
 class ConsumerUnitBase(BaseModel):
     plant_id: str
     uc_number: str  # Número da UC na COPEL (ex: 113577680)
