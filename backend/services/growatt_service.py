@@ -164,8 +164,20 @@ class GrowattOSSService:
                                 const name = cells[4]?.innerText?.trim();
                                 // Only add if it has a valid number and name
                                 if (num && name && !isNaN(parseInt(num))) {
+                                    // Try to get plantId from link in the row
+                                    let plantId = '';
+                                    const link = row.querySelector('a[href*="plantId"]');
+                                    if (link) {
+                                        const href = link.href;
+                                        const match = href.match(/plantId=(\d+)/);
+                                        if (match) {
+                                            plantId = match[1];
+                                        }
+                                    }
+                                    
                                     plants.push({
                                         number: num,
+                                        plantId: plantId,  // Real Growatt plantId
                                         group: cells[2]?.innerText?.trim() || '',
                                         status: cells[3]?.innerText?.trim() || '',
                                         plantName: name,
