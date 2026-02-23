@@ -3047,7 +3047,10 @@ async def get_import_history(plant_id: str, current_user: dict = Depends(get_cur
     """Get import history for a plant from activity log."""
     # Get activities related to growatt downloads from activity_logs collection
     activities = await db.activity_logs.find(
-        {'plant_id': plant_id, 'action': {'$in': ['growatt_download', 'growatt_sync', 'sync_growatt']}},
+        {'plant_id': plant_id, 'action': {'$in': [
+            'growatt_download', 'growatt_sync', 'sync_growatt', 
+            'growatt_excel_upload', 'imported_from_growatt'
+        ]}},
         {'_id': 0}
     ).sort('created_at', -1).limit(20).to_list(20)
     
@@ -3056,7 +3059,8 @@ async def get_import_history(plant_id: str, current_user: dict = Depends(get_cur
         # Parse the description to extract date range
         description = act.get('description', '')
         interval = ''
-        if 'a' in description:
+        # Try to extract date range
+        if ' a ' in description:
             # Format: "Download Growatt: 2025-08-18 a 2026-02-23 (10 registros)"
             parts = description.split(':')
             if len(parts) > 1:
@@ -3069,7 +3073,7 @@ async def get_import_history(plant_id: str, current_user: dict = Depends(get_cur
         history.append({
             'id': act.get('id', ''),
             'timestamp': act.get('created_at', ''),
-            'interval': interval,
+            'interval': interval or description[:50],
             'details': description,
             'user': act.get('user_name', ''),
             'status': 'success',  # If it's in the log, it was successful
