@@ -1976,6 +1976,93 @@ async def get_copel_credentials(consumer_unit_id: str, current_user: dict = Depe
         cred['last_sync'] = datetime.fromisoformat(cred['last_sync'])
     return cred
 
+# ==================== CLIENT LOGINS ====================
+
+@api_router.get("/client-logins")
+async def get_client_logins(current_user: dict = Depends(get_current_user)):
+    """Get all client logins"""
+    logins = await db.client_logins.find({}, {'_id': 0}).to_list(1000)
+    return logins
+
+@api_router.post("/client-logins", response_model=ClientLogin)
+async def create_client_login(login_data: ClientLoginCreate, current_user: dict = Depends(get_current_user)):
+    """Create a new client login"""
+    login = ClientLogin(**login_data.model_dump())
+    doc = login.model_dump()
+    doc['created_at'] = doc['created_at'].isoformat()
+    await db.client_logins.insert_one(doc)
+    return login
+
+@api_router.put("/client-logins/{login_id}")
+async def update_client_login(login_id: str, login_data: ClientLoginCreate, current_user: dict = Depends(get_current_user)):
+    """Update a client login"""
+    result = await db.client_logins.update_one(
+        {'id': login_id},
+        {'$set': login_data.model_dump()}
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Login não encontrado")
+    return {"status": "updated"}
+
+@api_router.delete("/client-logins/{login_id}")
+async def delete_client_login(login_id: str, current_user: dict = Depends(get_current_user)):
+    """Delete a client login"""
+    result = await db.client_logins.delete_one({'id': login_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Login não encontrado")
+    return {"status": "deleted"}
+
+@api_router.post("/client-logins/upload-excel")
+async def upload_client_logins_excel(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
+    """Import client logins from CSV/Excel file"""
+    import csv
+    import io
+    
+    content = await file.read()
+    
+    # Try to decode as UTF-8
+    try:
+        text = content.decode('utf-8')
+    except:
+        text = content.decode('latin-1')
+    
+    # Parse CSV
+    reader = csv.DictReader(io.StringIO(text))
+    
+    imported = 0
+    errors = []
+    
+    for row in reader:
+        try:
+            # Map columns (support both English and Portuguese names)
+            login_data = {
+                'inverter_app': row.get('inverter_app') or row.get('app') or row.get('portal') or '',
+                'on_unit': row.get('on_unit') or row.get('unidade') or '',
+                'client_name': row.get('client_name') or row.get('cliente') or row.get('nome') or '',
+                'login': row.get('login') or row.get('usuario') or row.get('email') or '',
+                'password': row.get('password') or row.get('senha') or '',
+                'site_url': row.get('site_url') or row.get('url') or row.get('site') or '',
+                'is_installer': str(row.get('is_installer', 'false')).lower() in ('true', '1', 'sim', 'yes')
+            }
+            
+            if not login_data['inverter_app'] or not login_data['login'] or not login_data['password']:
+                errors.append(f"Linha incompleta: {row}")
+                continue
+            
+            login = ClientLogin(**login_data)
+            doc = login.model_dump()
+            doc['created_at'] = doc['created_at'].isoformat()
+            await db.client_logins.insert_one(doc)
+            imported += 1
+            
+        except Exception as e:
+            errors.append(f"Erro na linha {row}: {str(e)}")
+    
+    return {
+        "imported": imported,
+        "errors": errors[:10] if errors else []  # Return first 10 errors
+    }
+
 # ==================== REPORT DATA ====================
 
 @api_router.get("/reports/plant/{plant_id}")
