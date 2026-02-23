@@ -508,22 +508,37 @@ const Plants = () => {
 
               {/* Linha 1: Estado + Cidade */}
               <div className="space-y-2">
-                <Label>Estado</Label>
+                <Label>Estado *</Label>
                 <select className="w-full h-9 rounded-md border border-neutral-200 bg-white px-3 py-1 text-sm"
-                  value={normalizeState(formData.state)} onChange={(e) => { setFormData({...formData, state: e.target.value, city: ''}); setCitySearch(''); }}>
+                  value={normalizeState(formData.state)} 
+                  onChange={(e) => { 
+                    setFormData({...formData, state: e.target.value, city: ''}); 
+                    setCitySearch(''); 
+                    setFilteredCities([]);
+                  }}>
                   <option value="">Selecione o estado</option>
                   {ESTADOS_BR.map(s => <option key={s} value={s}>{s.replace(/_/g,' ')}</option>)}
                 </select>
               </div>
 
               <div className="space-y-2">
-                <Label>Cidade (Irradiancia)</Label>
-                <select className="w-full h-9 rounded-md border border-neutral-200 bg-white px-3 py-1 text-sm"
+                <Label>Cidade (Irradiância) *</Label>
+                <select 
+                  className={`w-full h-9 rounded-md border px-3 py-1 text-sm ${
+                    !formData.state ? 'bg-neutral-100 text-neutral-400 cursor-not-allowed border-neutral-200' : 'bg-white border-neutral-200'
+                  }`}
                   value={formData.city}
-                  onChange={(e) => setFormData({...formData, city: e.target.value})}>
-                  <option value="">Selecione a cidade</option>
+                  onChange={(e) => setFormData({...formData, city: e.target.value})}
+                  disabled={!formData.state || loadingCities}
+                >
+                  <option value="">
+                    {loadingCities ? 'Carregando cidades...' : !formData.state ? 'Selecione o estado primeiro' : 'Selecione a cidade'}
+                  </option>
                   {filteredCities.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
+                {formData.state && filteredCities.length > 0 && (
+                  <p className="text-xs text-neutral-500">{filteredCities.length} cidades disponíveis</p>
+                )}
               </div>
 
               {/* Linha 2: Calcular Prognóstico */}
