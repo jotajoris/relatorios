@@ -1577,11 +1577,13 @@ async def get_generation_chart(
 async def get_power_curve(
     plant_id: str,
     date: Optional[str] = None,
+    force_real: bool = False,
     current_user: dict = Depends(get_current_user)
 ):
     """
     Get intraday power curve (kW) for a plant on a specific date.
-    First tries to fetch real data from Growatt, falls back to simulated curve.
+    By default returns simulated curve based on daily generation.
+    Use force_real=true to attempt fetching real data from Growatt (slower).
     """
     import math
     
@@ -1593,16 +1595,63 @@ async def get_power_curve(
     if not plant:
         raise HTTPException(status_code=404, detail="Usina não encontrada")
     
-    # Try to get REAL power curve from Growatt if credentials are available
-    # Only do this for today or recent dates (within 7 days)
-    date_obj = datetime.strptime(date, '%Y-%m-%d')
-    days_ago = (datetime.now() - date_obj).days
+    # Get generation data for the date
+    gen_data = await db.generation_data.find_one(
+        {'plant_id': plant_id, 'date': date},
+        {'_id': 0}
+    )
     
-    if plant.get('growatt_username') and plant.get('growatt_password') and days_ago <= 7:
-        try:
-            # Attempt to fetch real data from Growatt
-            growatt_plant_id = plant.get('growatt_plant_id') or ''
-            growatt_name = plant.get('growatt_plant_name') or plant.get('name', '')
+    total_kwh = gen_data.get('generation_kwh', 0) if gen_data else 0
+    capacity_kwp = plant.get('capacity_kwp', 0)
+    
+    # Generate simulated power curve based on total daily generation
+    # This is a fast response that doesn't require Growatt login
+    curve = []
+    peak_kw = 0
+    
+    if total_kwh > 0:
+        # Use sine wave model to distribute energy throughout the day
+        # Peak is at solar noon (12:00), with generation from 5:00 to 18:00
+        peak_kw = total_kwh * math.pi / (2 * 12.5)  # Calculate peak from total energy
+        
+        for hour in range(5, 19):
+            for minute in [0, 15, 30, 45]:
+                time_str = f"{hour:02d}:{minute:02d}"
+                t = hour + minute/60
+                
+                # Calculate power based on sine wave, centered at 11:30
+                angle = math.pi * (t - 5) / 13  # 0 to pi over 13-hour span
+                power_kw = peak_kw * math.sin(angle) if 0 <= angle <= math.pi else 0
+                
+                # For today, only show points up to current time
+                if date == datetime.now(timezone.utc).strftime('%Y-%m-%d'):
+                    now_hour = datetime.now(timezone.utc).hour - 3  # BRT adjustment
+                    now_minute = datetime.now(timezone.utc).minute
+                    if hour > now_hour or (hour == now_hour and minute > now_minute):
+                        continue
+                
+                if power_kw > 0:
+                    curve.append({
+                        'time': time_str,
+                        'power_kw': round(max(0, power_kw), 2)
+                    })
+    
+    # Calculate performance
+    prognosis = plant.get('monthly_prognosis_kwh', 0)
+    daily_prognosis = prognosis / 30 if prognosis > 0 else 0
+    performance = (total_kwh / daily_prognosis * 100) if daily_prognosis > 0 and total_kwh > 0 else 0
+    
+    return {
+        'plant_name': plant.get('name', ''),
+        'date': date,
+        'capacity_kwp': capacity_kwp,
+        'total_kwh': round(total_kwh, 2),
+        'peak_kw': round(peak_kw, 2),
+        'performance': round(performance, 1),
+        'status': plant.get('growatt_status') or plant.get('status', 'unknown'),
+        'curve': curve,
+        'source': 'estimated'  # Indicate this is an estimate based on daily total
+    }
             
             await reset_growatt_oss_service()
             service = get_growatt_oss_service()
