@@ -2129,6 +2129,17 @@ async def list_irradiance_states(current_user: dict = Depends(get_current_user))
     return states
 
 
+# State abbreviation to full name mapping for irradiance search
+STATE_ABBREV_MAP = {
+    'AC': 'ACRE', 'AL': 'ALAGOAS', 'AP': 'AMAPÁ', 'AM': 'AMAZONAS',
+    'BA': 'BAHIA', 'CE': 'CEARÁ', 'DF': 'DISTRITO_FEDERAL', 'ES': 'ESPÍRITO_SANTO',
+    'GO': 'GOIÁS', 'MA': 'MARANHÃO', 'MT': 'MATO_GROSSO', 'MS': 'MATO_GROSSO_DO_SUL',
+    'MG': 'MINAS_GERAIS', 'PA': 'PARÁ', 'PB': 'PARAÍBA', 'PR': 'PARANÁ',
+    'PE': 'PERNAMBUCO', 'PI': 'PIAUÍ', 'RJ': 'RIO_DE_JANEIRO', 'RN': 'RIO_GRANDE_DO_NORTE',
+    'RS': 'RIO_GRANDE_DO_SUL', 'RO': 'RONDÔNIA', 'RR': 'RORAIMA', 'SC': 'SANTA_CATARINA',
+    'SP': 'SÃO_PAULO', 'SE': 'SERGIPE', 'TO': 'TOCANTINS'
+}
+
 @api_router.get("/irradiance/cities")
 async def search_irradiance_cities(
     q: str = "",
@@ -2140,7 +2151,11 @@ async def search_irradiance_cities(
     if q:
         query['city'] = {'$regex': q, '$options': 'i'}
     if state:
-        query['state'] = {'$regex': f'^{state}$', '$options': 'i'}
+        # Normalize state: convert abbreviation to full name if needed
+        state_upper = state.upper().strip()
+        normalized_state = STATE_ABBREV_MAP.get(state_upper, state_upper)
+        # Also handle cases like "PARANÁ" vs "PARANA" (with/without accents)
+        query['state'] = {'$regex': f'^{normalized_state}$', '$options': 'i'}
     limit = 500 if state and not q else 30
     cities = await db.irradiance_cities.find(query, {'_id': 0}).sort('city', 1).limit(limit).to_list(limit)
     return cities
