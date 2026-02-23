@@ -79,16 +79,28 @@ Aplicação web full-stack para gerenciamento e elaboração de relatórios de u
   - `/app/frontend/src/pages/PlantDetail.jsx`: Função normalizeState() + uso nos selects
   - `/app/frontend/src/pages/Plants.jsx`: Mesma correção para o modal de edição de usinas
 
+- [x] **Sincronização Automática Growatt** (23/02/2026): Implementado sistema completo de sincronização automática:
+  - Botão "Sync Growatt" no Dashboard para sincronização manual de todas as usinas
+  - Scheduler APScheduler rodando em background com intervalo configurável (padrão: 30 min)
+  - Nova aba "Sincronização" em Configurações com UI para configurar intervalo
+  - Status da última sincronização e próxima execução visíveis no Dashboard e Configurações
+  - Alterações em:
+    - `/app/backend/server.py`: Endpoints /settings/sync-interval, /settings/sync-status, /sync/growatt/all
+    - `/app/backend/services/scheduler.py`: Lógica de sync automático e configuração de intervalo
+    - `/app/frontend/src/pages/Settings.jsx`: Nova aba "Sincronização" com UI de configuração
+    - `/app/frontend/src/pages/Dashboard.jsx`: Botão de sync manual e status
+
 ## P1 - Upcoming
 - [ ] Frontend para gerenciamento do Sistema de Créditos (distribuição entre UCs)
-- [ ] Página de Gerenciamento de Clientes (CRUD + upload de logo)
 - [ ] Adicionar seção de detalhamento por UC beneficiária no relatório PDF (dados das faturas)
+- [ ] Implementar integrações com outros portais (Huawei FusionSolar, Deye/Sofar Solarman, Solis)
 
 ## P2 - Backlog
-- [ ] Job agendado para sincronização automática de dados da Growatt
 - [ ] Integração com outras marcas de inversores
 - [ ] Resolver automação COPEL (bloqueada por reCAPTCHA)
 - [ ] Parser para faturas Energisa MS
+- [ ] Remover obrigatoriedade do campo "Potência (kWp)" quando usina é sincronizada com Growatt
+- [ ] Download de dados históricos da Growatt (funcionalidade ainda não implementada)
 
 ## Credentials
 - Admin: projetos.onsolucoes@gmail.com / on123456
