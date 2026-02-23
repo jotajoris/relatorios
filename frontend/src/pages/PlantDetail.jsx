@@ -1753,35 +1753,14 @@ const PlantDetail = () => {
                   ))}
                 </select>
               </div>
-              <div className="space-y-2 relative">
+              <div className="space-y-2">
                 <Label>Cidade (Irradiancia)</Label>
-                <Input
-                  value={citySearchText !== '' ? citySearchText : (plantFormData.city || '')}
-                  onChange={(e) => {
-                    setCitySearchText(e.target.value);
-                    setShowCityDropdown(true);
-                    // If no state selected but typing, search across all states
-                    if (!plantFormData.state && e.target.value.length >= 2) {
-                      api.get(`/irradiance/cities?q=${encodeURIComponent(e.target.value)}`).then(res => {
-                        setFilteredCities(res.data.map(c => c.city).sort());
-                      }).catch(() => {});
-                    }
-                  }}
-                  onFocus={() => { if (filteredCities.length || citySearchText) setShowCityDropdown(true); }}
-                  onBlur={() => setTimeout(() => setShowCityDropdown(false), 200)}
-                  placeholder="Digite para buscar..."
-                />
-                {showCityDropdown && cityMatches.length > 0 && (
-                  <div className="absolute z-[100] top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-xl max-h-52 overflow-y-auto">
-                    {cityMatches.map((c) => (
-                      <button key={c} type="button"
-                        className={`w-full text-left px-3 py-2 text-sm hover:bg-[#FFD600]/20 border-b last:border-0 ${plantFormData.city === c ? 'bg-[#FFD600]/10 font-semibold' : ''}`}
-                        onClick={() => handleCityClick(c)}>
-                        {c}
-                      </button>
-                    ))}
-                  </div>
-                )}
+                <select className="w-full h-9 rounded-md border border-neutral-200 bg-white px-3 py-1 text-sm"
+                  value={plantFormData.city || ''}
+                  onChange={(e) => setPlantFormData(prev => ({...prev, city: e.target.value}))}>
+                  <option value="">Selecione a cidade</option>
+                  {filteredCities.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
               </div>
             </div>
             
