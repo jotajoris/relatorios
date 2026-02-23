@@ -2063,6 +2063,77 @@ async def upload_client_logins_excel(file: UploadFile = File(...), current_user:
         "errors": errors[:10] if errors else []  # Return first 10 errors
     }
 
+# ==================== SYNC SETTINGS ====================
+
+@api_router.get("/settings/sync-interval")
+async def get_sync_interval(current_user: dict = Depends(get_current_user)):
+    """Get the current Growatt sync interval in minutes."""
+    settings = await db.app_settings.find_one({'key': 'growatt_sync_interval'}, {'_id': 0})
+    if settings:
+        return {"interval_minutes": int(settings.get('value', 30)), "updated_at": settings.get('updated_at')}
+    return {"interval_minutes": 30, "updated_at": None}
+
+@api_router.put("/settings/sync-interval")
+async def update_sync_interval(data: dict, current_user: dict = Depends(get_current_user)):
+    """Update the Growatt sync interval in minutes."""
+    interval = int(data.get('interval_minutes', 30))
+    if interval < 5:
+        raise HTTPException(status_code=400, detail="Intervalo mínimo é 5 minutos")
+    if interval > 1440:
+        raise HTTPException(status_code=400, detail="Intervalo máximo é 1440 minutos (24 horas)")
+    
+    from services.scheduler import set_sync_interval
+    success = await set_sync_interval(interval)
+    
+    if success:
+        return {"status": "updated", "interval_minutes": interval}
+    else:
+        raise HTTPException(status_code=500, detail="Erro ao atualizar intervalo")
+
+@api_router.get("/settings/sync-status")
+async def get_sync_status(current_user: dict = Depends(get_current_user)):
+    """Get the current sync status and next scheduled run."""
+    from services.scheduler import get_scheduler, get_current_interval
+    
+    scheduler = get_scheduler()
+    next_run = None
+    
+    if scheduler:
+        job = scheduler.get_job('sync_growatt_interval')
+        if job and job.next_run_time:
+            next_run = job.next_run_time.isoformat()
+    
+    # Get last sync time from any plant
+    last_sync_plant = await db.plants.find_one(
+        {'last_growatt_sync': {'$exists': True}},
+        {'_id': 0, 'last_growatt_sync': 1},
+        sort=[('last_growatt_sync', -1)]
+    )
+    last_sync = last_sync_plant.get('last_growatt_sync') if last_sync_plant else None
+    
+    # Count plants with Growatt credentials
+    growatt_count = await db.plants.count_documents({
+        'growatt_username': {'$exists': True, '$ne': ''},
+        'is_active': True
+    })
+    
+    return {
+        "interval_minutes": get_current_interval(),
+        "next_run": next_run,
+        "last_sync": last_sync,
+        "plants_with_credentials": growatt_count
+    }
+
+@api_router.post("/sync/growatt/all")
+async def sync_all_growatt_now(background_tasks: BackgroundTasks, current_user: dict = Depends(get_current_user)):
+    """Manually trigger Growatt sync for all plants."""
+    from services.scheduler import sync_all_growatt_plants
+    
+    # Run in background to not block the request
+    background_tasks.add_task(asyncio.create_task, sync_all_growatt_plants())
+    
+    return {"status": "started", "message": "Sincronização iniciada em background"}
+
 # ==================== REPORT DATA ====================
 
 @api_router.get("/reports/plant/{plant_id}")
