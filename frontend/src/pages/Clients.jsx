@@ -50,6 +50,36 @@ const Clients = () => {
     address: ''
   });
 
+  // Format CPF: xxx.xxx.xxx-xx (11 digits)
+  // Format CNPJ: xx.xxx.xxx/xxxx-xx (14 digits)
+  const formatDocument = (value) => {
+    if (!value) return '';
+    // Remove all non-digits
+    const digits = value.replace(/\D/g, '');
+    
+    if (digits.length <= 11) {
+      // CPF format: xxx.xxx.xxx-xx
+      return digits
+        .replace(/(\d{3})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+    } else {
+      // CNPJ format: xx.xxx.xxx/xxxx-xx
+      return digits
+        .substring(0, 14)
+        .replace(/(\d{2})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d)/, '$1.$2')
+        .replace(/(\d{3})(\d)/, '$1/$2')
+        .replace(/(\d{4})(\d{1,2})$/, '$1-$2');
+    }
+  };
+
+  // Handle document input change with formatting
+  const handleDocumentChange = (e) => {
+    const formatted = formatDocument(e.target.value);
+    setFormData({ ...formData, document: formatted });
+  };
+
   useEffect(() => {
     loadClients();
   }, []);
