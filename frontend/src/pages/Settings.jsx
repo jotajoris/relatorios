@@ -394,13 +394,141 @@ const Settings = () => {
         <p className="text-neutral-500 mt-1">Gerencie credenciais e integrações</p>
       </div>
 
-      <Tabs defaultValue="client-logins" className="space-y-6">
+      <Tabs defaultValue="sync" className="space-y-6">
         <TabsList className="bg-neutral-100">
+          <TabsTrigger value="sync">Sincronização</TabsTrigger>
           <TabsTrigger value="client-logins">Logins de Clientes</TabsTrigger>
           <TabsTrigger value="inverters">Inversores</TabsTrigger>
           <TabsTrigger value="growatt">Growatt</TabsTrigger>
           <TabsTrigger value="copel">COPEL</TabsTrigger>
         </TabsList>
+
+        {/* Sync Settings Tab */}
+        <TabsContent value="sync" className="space-y-6">
+          <Card className="border-neutral-200 shadow-sm bg-white">
+            <CardHeader className="bg-white border-b border-neutral-100">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Timer className="h-5 w-5 text-[#EAB308]" />
+                Sincronização Automática Growatt
+              </CardTitle>
+              <CardDescription>
+                Configure a frequência de sincronização automática dos dados de geração do portal Growatt.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="bg-white pt-6 space-y-6">
+              {loadingSyncStatus ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="h-6 w-6 animate-spin text-neutral-400" />
+                </div>
+              ) : (
+                <>
+                  {/* Current Status */}
+                  {syncStatus && (
+                    <div className="grid md:grid-cols-3 gap-4 p-4 bg-neutral-50 rounded-lg border border-neutral-100">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-white rounded-lg border border-neutral-200">
+                          <Wifi className="h-5 w-5 text-emerald-500" />
+                        </div>
+                        <div>
+                          <p className="text-xs text-neutral-500">Usinas Configuradas</p>
+                          <p className="text-lg font-bold text-neutral-900">{syncStatus.plants_with_credentials || 0}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-white rounded-lg border border-neutral-200">
+                          <Clock className="h-5 w-5 text-blue-500" />
+                        </div>
+                        <div>
+                          <p className="text-xs text-neutral-500">Última Sincronização</p>
+                          <p className="text-sm font-medium text-neutral-900">
+                            {syncStatus.last_sync 
+                              ? new Date(syncStatus.last_sync).toLocaleString('pt-BR', { 
+                                  day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' 
+                                })
+                              : 'Nunca'
+                            }
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="p-2 bg-white rounded-lg border border-neutral-200">
+                          <RefreshCw className="h-5 w-5 text-amber-500" />
+                        </div>
+                        <div>
+                          <p className="text-xs text-neutral-500">Próxima Execução</p>
+                          <p className="text-sm font-medium text-neutral-900">
+                            {syncStatus.next_run 
+                              ? new Date(syncStatus.next_run).toLocaleString('pt-BR', { 
+                                  day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' 
+                                })
+                              : '-'
+                            }
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Interval Configuration */}
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label className="text-sm font-medium">Intervalo de Sincronização (minutos)</Label>
+                      <div className="flex gap-3 items-center max-w-md">
+                        <Select
+                          value={String(syncInterval)}
+                          onValueChange={(value) => setSyncInterval(Number(value))}
+                        >
+                          <SelectTrigger data-testid="sync-interval-select">
+                            <SelectValue placeholder="Selecione o intervalo" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="15">15 minutos</SelectItem>
+                            <SelectItem value="30">30 minutos</SelectItem>
+                            <SelectItem value="60">1 hora</SelectItem>
+                            <SelectItem value="120">2 horas</SelectItem>
+                            <SelectItem value="360">6 horas</SelectItem>
+                            <SelectItem value="720">12 horas</SelectItem>
+                            <SelectItem value="1440">24 horas</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Button 
+                          onClick={handleSaveSyncInterval}
+                          disabled={savingSyncInterval}
+                          className="bg-[#1A1A1A] hover:bg-neutral-800 text-white"
+                          data-testid="save-sync-interval-btn"
+                        >
+                          {savingSyncInterval ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            'Salvar'
+                          )}
+                        </Button>
+                      </div>
+                      <p className="text-xs text-neutral-500">
+                        O sistema sincroniza automaticamente os dados de geração de todas as usinas 
+                        com credenciais Growatt configuradas.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Info Box */}
+                  <div className="p-4 bg-blue-50 rounded-lg border border-blue-100">
+                    <h4 className="font-medium text-blue-900 mb-2 flex items-center gap-2">
+                      <Sun className="h-4 w-4" />
+                      Como Funciona
+                    </h4>
+                    <ul className="text-sm text-blue-800 space-y-1">
+                      <li>• O sistema busca automaticamente os dados de geração do dia atual</li>
+                      <li>• Usinas sem geração no dia são marcadas como "offline" ou "0 kWh"</li>
+                      <li>• Você pode forçar uma sincronização manual no Dashboard (botão "Sync Growatt")</li>
+                      <li>• Apenas usinas com credenciais Growatt configuradas são sincronizadas</li>
+                    </ul>
+                  </div>
+                </>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         {/* Client Logins Tab */}
         <TabsContent value="client-logins" className="space-y-6">
