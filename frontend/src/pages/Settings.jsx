@@ -53,6 +53,7 @@ const Settings = () => {
   const [clientLogins, setClientLogins] = useState([]);
   const [clientLoginDialogOpen, setClientLoginDialogOpen] = useState(false);
   const [editingLogin, setEditingLogin] = useState(null);
+  const [clientLoginSearch, setClientLoginSearch] = useState('');
   const [clientLoginForm, setClientLoginForm] = useState({
     inverter_app: '',
     on_unit: '',
