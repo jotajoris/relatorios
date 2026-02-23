@@ -99,12 +99,14 @@ const Settings = () => {
 
   const loadData = async () => {
     try {
-      const [plantsRes, unitsRes] = await Promise.all([
+      const [plantsRes, unitsRes, loginsRes] = await Promise.all([
         api.get('/plants'),
-        api.get('/consumer-units')
+        api.get('/consumer-units'),
+        api.get('/client-logins').catch(() => ({ data: [] }))
       ]);
       setPlants(plantsRes.data);
       setConsumerUnits(unitsRes.data);
+      setClientLogins(loginsRes.data || []);
       
       // Load inverter credentials for each plant
       const credPromises = plantsRes.data.map(plant => 
