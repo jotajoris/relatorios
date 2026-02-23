@@ -10,7 +10,7 @@ import json
 from datetime import datetime, timedelta
 
 class SolarPlantAPITester:
-    def __init__(self, base_url="https://energy-invoice-pro.preview.emergentagent.com"):
+    def __init__(self, base_url="https://growatt-sync.preview.emergentagent.com"):
         self.base_url = base_url
         self.token = None
         self.tests_run = 0
