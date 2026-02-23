@@ -61,8 +61,21 @@ import {
   Copy,
   Image,
   Download,
-  FileSpreadsheet
+  FileSpreadsheet,
+  MoreVertical,
+  CloudDownload,
+  History
 } from 'lucide-react';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  DropdownMenuSub,
+  DropdownMenuSubTrigger,
+  DropdownMenuSubContent,
+  DropdownMenuSeparator,
+} from '../components/ui/dropdown-menu';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
