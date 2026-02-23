@@ -3042,6 +3042,41 @@ async def download_growatt_range(
         "message": f"{records_saved} registros baixados e salvos",
     }
 
+@api_router.get("/integrations/growatt/import-history/{plant_id}")
+async def get_import_history(plant_id: str, current_user: dict = Depends(get_current_user)):
+    """Get import history for a plant from activity log."""
+    # Get activities related to growatt downloads
+    activities = await db.activities.find(
+        {'plant_id': plant_id, 'action': {'$in': ['growatt_download', 'growatt_sync', 'sync_growatt']}},
+        {'_id': 0}
+    ).sort('timestamp', -1).limit(20).to_list(20)
+    
+    history = []
+    for act in activities:
+        # Parse the details to extract date range
+        details = act.get('details', '')
+        interval = ''
+        if 'a' in details:
+            # Format: "Download Growatt: 2025-08-18 a 2026-02-23 (10 registros)"
+            parts = details.split(':')
+            if len(parts) > 1:
+                date_part = parts[1].strip()
+                if '(' in date_part:
+                    interval = date_part.split('(')[0].strip()
+                else:
+                    interval = date_part
+        
+        history.append({
+            'id': act.get('id', ''),
+            'timestamp': act.get('timestamp', ''),
+            'interval': interval,
+            'details': details,
+            'user': act.get('user', ''),
+            'status': 'success',  # If it's in the log, it was successful
+        })
+    
+    return history
+
 
 # Keep old endpoint for backward compatibility
 @api_router.post("/integrations/growatt/sync")
