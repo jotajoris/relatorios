@@ -230,7 +230,7 @@ class GrowattOSSService:
             # Parse and normalize all plant data
             if all_plants:
                 plants = []
-                for p in all_plants:
+                for idx, p in enumerate(all_plants):
                     if p.get('plantName'):
                         pv_power = p.get('pvPower', '0')
                         pv_power_kwp = float(pv_power.replace('kWp', '').replace(',', '.').strip() or 0)
@@ -244,8 +244,13 @@ class GrowattOSSService:
                         status = p.get('status', '').lower()
                         normalized_status = "online" if status == 'online' else ("abnormal" if status == 'abnormal' else "offline")
                         
+                        # The plantId field from Growatt is the real ID needed for API calls
+                        real_plant_id = p.get('plantId') or p.get('id') or p.get('number', '')
+                        logger.debug(f"Plant {p.get('plantName')}: plantId={real_plant_id}, number={p.get('number')}")
+                        
                         plants.append({
                             "id": p.get('number', ''),
+                            "plant_id": real_plant_id,  # Real Growatt plantId for API calls
                             "name": p.get('plantName', ''),
                             "alias": p.get('alias', ''),
                             "username": p.get('userName', ''),
