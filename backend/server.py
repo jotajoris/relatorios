@@ -3012,12 +3012,12 @@ async def download_growatt_range(
     if not target_plant:
         raise HTTPException(status_code=404, detail=f"Usina '{growatt_name}' não encontrada no Growatt")
     
-    logger.info(f"Found plant: {target_plant.get('name')} - daily_gen_kwh: {target_plant.get('daily_gen_kwh')}")
+    logger.info(f"Found plant: {target_plant.get('name')} - today_energy_kwh: {target_plant.get('today_energy_kwh')}")
     
     # For now, we can only get TODAY's data reliably
     # The historical data API requires the real plantId which is hard to obtain via scraping
     today_str = datetime.now(timezone.utc).strftime('%Y-%m-%d')
-    daily_gen = target_plant.get('daily_gen_kwh', 0)
+    daily_gen = target_plant.get('today_energy_kwh', 0)
     
     if daily_gen and daily_gen > 0:
         existing = await db.generation_data.find_one({'plant_id': plant_id, 'date': today_str})
