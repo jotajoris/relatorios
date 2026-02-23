@@ -2798,7 +2798,7 @@ async def sync_copel_data(request: CopelSyncRequest, current_user: dict = Depend
 
 # ==================== GROWATT INTEGRATION (OSS Portal via Web Scraping) ====================
 
-from services.growatt_service import get_growatt_oss_service, reset_growatt_oss_service
+# Import already done at top of file
 
 class GrowattLoginRequest(BaseModel):
     username: str
