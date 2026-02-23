@@ -1643,21 +1643,21 @@ async def get_power_curve(
                         }}
                     }}
                 ''')
+                
+                await reset_growatt_oss_service()
+                
+                # Parse the response
+                if power_data and not power_data.get('error'):
+                    obj = power_data.get('obj', {})
+                    powers = obj.get('powers', [])
+                    times = obj.get('times', [])
                     
-                    await reset_growatt_oss_service()
-                    
-                    # Parse the response
-                    if power_data and not power_data.get('error'):
-                        obj = power_data.get('obj', {})
-                        powers = obj.get('powers', [])
-                        times = obj.get('times', [])
+                    if powers and times and len(powers) > 5:
+                        curve_points = []
+                        peak_kw = 0
+                        total_kwh_from_data = 0
                         
-                        if powers and times and len(powers) > 5:
-                            curve_points = []
-                            peak_kw = 0
-                            total_kwh_from_data = 0
-                            
-                            for time_str, power_w in zip(times, powers):
+                        for time_str, power_w in zip(times, powers):
                                 try:
                                     power_kw = float(power_w) / 1000 if power_w else 0
                                     curve_points.append({
