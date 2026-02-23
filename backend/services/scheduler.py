@@ -1,6 +1,7 @@
 """
 Scheduled Jobs - Run at midnight Brasília time (UTC-3)
 - Download missing invoices from COPEL for all plants with credentials
+- Sync Growatt generation data every X minutes (configurable)
 """
 import logging
 import asyncio
@@ -10,6 +11,63 @@ import os
 
 logger = logging.getLogger(__name__)
 BRT = timezone(timedelta(hours=-3))
+
+# Global scheduler reference for dynamic updates
+_scheduler = None
+_current_sync_interval = 30  # Default 30 minutes
+
+
+async def get_sync_interval_from_db():
+    """Get the sync interval from database settings."""
+    try:
+        client = AsyncIOMotorClient(os.environ.get('MONGO_URL', 'mongodb://localhost:27017'))
+        db = client[os.environ.get('DB_NAME', 'test_database')]
+        settings = await db.app_settings.find_one({'key': 'growatt_sync_interval'})
+        client.close()
+        if settings:
+            return int(settings.get('value', 30))
+    except Exception as e:
+        logger.warning(f"Could not get sync interval from DB: {e}")
+    return 30  # Default
+
+
+async def set_sync_interval(minutes: int):
+    """Set the sync interval in database and update scheduler."""
+    global _scheduler, _current_sync_interval
+    
+    try:
+        client = AsyncIOMotorClient(os.environ.get('MONGO_URL', 'mongodb://localhost:27017'))
+        db = client[os.environ.get('DB_NAME', 'test_database')]
+        await db.app_settings.update_one(
+            {'key': 'growatt_sync_interval'},
+            {'$set': {'key': 'growatt_sync_interval', 'value': minutes, 'updated_at': datetime.now(BRT).isoformat()}},
+            upsert=True
+        )
+        client.close()
+        
+        _current_sync_interval = minutes
+        
+        # Update the scheduler job
+        if _scheduler:
+            try:
+                _scheduler.remove_job('sync_growatt_interval')
+            except:
+                pass
+            
+            from apscheduler.triggers.interval import IntervalTrigger
+            _scheduler.add_job(
+                sync_all_growatt_plants,
+                trigger=IntervalTrigger(minutes=minutes),
+                id='sync_growatt_interval',
+                name=f'Sync Growatt automatico (cada {minutes} min)',
+                replace_existing=True,
+            )
+            logger.info(f"Scheduler atualizado: Growatt sync a cada {minutes} minutos")
+        
+        return True
+    except Exception as e:
+        logger.error(f"Error setting sync interval: {e}")
+        return False
 
 
 async def download_missing_invoices():
