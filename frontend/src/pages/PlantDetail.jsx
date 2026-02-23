@@ -1776,7 +1776,7 @@ const PlantDetail = () => {
                 <Label>Estado</Label>
                 <select
                   className="w-full h-9 rounded-md border border-neutral-200 bg-white px-3 py-1 text-sm"
-                  value={plantFormData.state || ''}
+                  value={normalizeState(plantFormData.state) || ''}
                   onChange={handleStateSelect}
                 >
                   <option value="">Selecione o estado</option>
