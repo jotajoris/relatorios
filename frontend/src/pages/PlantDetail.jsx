@@ -120,6 +120,11 @@ const PlantDetail = () => {
   const [showDownloadDialog, setShowDownloadDialog] = useState(false);
   const [downloadRange, setDownloadRange] = useState({ start: '', end: '' });
   const [downloading, setDownloading] = useState(false);
+  
+  // Power curve state
+  const [powerCurveData, setPowerCurveData] = useState(null);
+  const [powerCurveDate, setPowerCurveDate] = useState(new Date().toISOString().split('T')[0]);
+  const [loadingPowerCurve, setLoadingPowerCurve] = useState(false);
 
   // Sync Growatt data for this plant
   const handleSyncGrowattDirect = async () => {
