@@ -303,8 +303,15 @@ const PlantDetail = () => {
   useEffect(() => {
     if (data?.plant) {
       loadChartData();
+      loadPowerCurve();
     }
   }, [data?.plant, chartMonth]);
+
+  useEffect(() => {
+    if (data?.plant && powerCurveDate) {
+      loadPowerCurve();
+    }
+  }, [powerCurveDate]);
 
   useEffect(() => {
     if (plantId && selectedYear) {
