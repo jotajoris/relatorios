@@ -1751,7 +1751,7 @@ const PlantDetail = () => {
             {/* Linha 1: Estado + Cidade */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Estado</Label>
+                <Label>Estado *</Label>
                 <select
                   className="w-full h-9 rounded-md border border-neutral-200 bg-white px-3 py-1 text-sm"
                   value={normalizeState(plantFormData.state) || ''}
@@ -1764,13 +1764,23 @@ const PlantDetail = () => {
                 </select>
               </div>
               <div className="space-y-2">
-                <Label>Cidade (Irradiancia)</Label>
-                <select className="w-full h-9 rounded-md border border-neutral-200 bg-white px-3 py-1 text-sm"
+                <Label>Cidade (Irradiância) *</Label>
+                <select 
+                  className={`w-full h-9 rounded-md border px-3 py-1 text-sm ${
+                    !plantFormData.state ? 'bg-neutral-100 text-neutral-400 cursor-not-allowed border-neutral-200' : 'bg-white border-neutral-200'
+                  }`}
                   value={plantFormData.city || ''}
-                  onChange={(e) => setPlantFormData(prev => ({...prev, city: e.target.value}))}>
-                  <option value="">Selecione a cidade</option>
+                  onChange={(e) => setPlantFormData(prev => ({...prev, city: e.target.value}))}
+                  disabled={!plantFormData.state || loadingCities}
+                >
+                  <option value="">
+                    {loadingCities ? 'Carregando cidades...' : !plantFormData.state ? 'Selecione o estado primeiro' : 'Selecione a cidade'}
+                  </option>
                   {filteredCities.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
+                {plantFormData.state && filteredCities.length > 0 && (
+                  <p className="text-xs text-neutral-500">{filteredCities.length} cidades disponíveis</p>
+                )}
               </div>
             </div>
             
