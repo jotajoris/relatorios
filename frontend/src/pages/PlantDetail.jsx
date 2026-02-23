@@ -838,6 +838,24 @@ const PlantDetail = () => {
 
   return (
     <div className="space-y-6 animate-fade-in" data-testid="plant-detail-page">
+      {/* Hidden file inputs - must be outside tabs to work from dropdown menu */}
+      <input
+        ref={excelInputRef}
+        type="file"
+        accept=".xls,.xlsx"
+        onChange={handleExcelUpload}
+        className="hidden"
+        data-testid="excel-upload-input"
+      />
+      <input
+        ref={invoiceInputRef}
+        type="file"
+        accept=".pdf"
+        onChange={handleInvoiceUpload}
+        className="hidden"
+        data-testid="invoice-upload-input"
+      />
+      
       {/* Header */}
       <div className="bg-[#1A1A1A] rounded-xl p-6 text-white">
         <div className="flex items-start gap-6">
