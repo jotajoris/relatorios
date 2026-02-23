@@ -1424,24 +1424,51 @@ async def get_plants_summary(current_user: dict = Depends(get_current_user)):
     total_gen_all = 0
     summaries = []
     for plant in plants:
-        # Get generation for this month
+        # Get installation date
+        install_date_str = plant.get('installation_date', '')
+        install_date = None
+        if install_date_str:
+            try:
+                install_date = datetime.strptime(install_date_str[:10], '%Y-%m-%d').replace(tzinfo=timezone.utc)
+            except:
+                pass
+        
+        # Get generation for this month (only after installation)
+        query_start = month_start
+        if install_date and install_date.strftime('%Y-%m-%d') > month_start:
+            query_start = install_date.strftime('%Y-%m-%d')
+        
         gen_data = await db.generation_data.find({
             'plant_id': plant['id'],
-            'date': {'$gte': month_start}
-        }, {'_id': 0, 'generation_kwh': 1}).to_list(100)
+            'date': {'$gte': query_start}
+        }, {'_id': 0, 'generation_kwh': 1, 'date': 1}).to_list(100)
         
         total_gen = sum(d.get('generation_kwh', 0) for d in gen_data)
         prognosis = plant.get('monthly_prognosis_kwh') or 0
-        performance = (total_gen / prognosis * 100) if prognosis and prognosis > 0 else 0
+        
+        # Calculate effective days in this month (from installation or start of month)
+        days_in_current_month = (now - now.replace(day=1)).days + 1
+        if install_date and install_date.month == now.month and install_date.year == now.year:
+            effective_days_this_month = (now - install_date).days + 1
+        else:
+            effective_days_this_month = days_in_current_month
+        
+        # Performance based on effective days
+        effective_prognosis = (prognosis / 30) * effective_days_this_month if prognosis > 0 else 0
+        performance = (total_gen / effective_prognosis * 100) if effective_prognosis > 0 else 0
         
         # Get client name and contact
         client = await db.clients.find_one({'id': plant['client_id']}, {'_id': 0, 'name': 1, 'contact_person': 1})
         
-        # Get total generation for 12 months
+        # Get total generation for 12 months (only after installation)
         year_ago = (now - timedelta(days=365)).strftime('%Y-%m-%d')
+        query_12m_start = year_ago
+        if install_date and install_date.strftime('%Y-%m-%d') > year_ago:
+            query_12m_start = install_date.strftime('%Y-%m-%d')
+        
         gen_12m = await db.generation_data.find({
             'plant_id': plant['id'],
-            'date': {'$gte': year_ago}
+            'date': {'$gte': query_12m_start}
         }, {'_id': 0, 'generation_kwh': 1}).to_list(10000)
         total_gen_12m = sum(d.get('generation_kwh', 0) for d in gen_12m)
         
@@ -1450,19 +1477,44 @@ async def get_plants_summary(current_user: dict = Depends(get_current_user)):
         total_gen_all += total_gen_12m
         
         # Calculate performance for different periods: 1D, 15D, 30D, 12M
-        # 1D = yesterday (complete day), not today (partial)
+        # Only count days after installation date
         yesterday_str = (now - timedelta(days=1)).strftime('%Y-%m-%d')
         d15_str = (now - timedelta(days=15)).strftime('%Y-%m-%d')
         d30_str = (now - timedelta(days=30)).strftime('%Y-%m-%d')
         
-        gen_1d = await db.generation_data.find(
-            {'plant_id': plant['id'], 'date': yesterday_str}, {'_id': 0, 'generation_kwh': 1}
-        ).to_list(1)
+        # Calculate effective days for each period (considering installation date)
+        def calc_effective_days(period_start_str: str, period_days: int):
+            """Calculate effective days in period after installation."""
+            if not install_date:
+                return period_days
+            period_start = datetime.strptime(period_start_str, '%Y-%m-%d').replace(tzinfo=timezone.utc)
+            if install_date > now:
+                return 0
+            if install_date <= period_start:
+                return period_days
+            # Installation is within the period
+            return max(0, (now - install_date).days + 1)
+        
+        effective_1d = 1 if not install_date or install_date <= datetime.strptime(yesterday_str, '%Y-%m-%d').replace(tzinfo=timezone.utc) else 0
+        effective_15d = calc_effective_days(d15_str, 15)
+        effective_30d = calc_effective_days(d30_str, 30)
+        effective_12m = calc_effective_days((now - timedelta(days=365)).strftime('%Y-%m-%d'), 365)
+        
+        # Get generation data for each period (only after installation)
+        gen_1d_query = {'plant_id': plant['id'], 'date': yesterday_str}
+        if install_date and install_date.strftime('%Y-%m-%d') > yesterday_str:
+            gen_1d_query['date'] = {'$gte': install_date.strftime('%Y-%m-%d'), '$lte': yesterday_str}
+        
+        gen_1d = await db.generation_data.find(gen_1d_query, {'_id': 0, 'generation_kwh': 1}).to_list(1)
+        
+        q15_start = max(d15_str, install_date.strftime('%Y-%m-%d') if install_date else d15_str)
         gen_15d = await db.generation_data.find(
-            {'plant_id': plant['id'], 'date': {'$gte': d15_str}}, {'_id': 0, 'generation_kwh': 1}
+            {'plant_id': plant['id'], 'date': {'$gte': q15_start}}, {'_id': 0, 'generation_kwh': 1}
         ).to_list(100)
+        
+        q30_start = max(d30_str, install_date.strftime('%Y-%m-%d') if install_date else d30_str)
         gen_30d = await db.generation_data.find(
-            {'plant_id': plant['id'], 'date': {'$gte': d30_str}}, {'_id': 0, 'generation_kwh': 1}
+            {'plant_id': plant['id'], 'date': {'$gte': q30_start}}, {'_id': 0, 'generation_kwh': 1}
         ).to_list(100)
         
         gen_1d_total = sum(d.get('generation_kwh',0) for d in gen_1d)
@@ -1470,10 +1522,15 @@ async def get_plants_summary(current_user: dict = Depends(get_current_user)):
         gen_30d_total = sum(d.get('generation_kwh',0) for d in gen_30d)
         
         daily_prog = prognosis / 30 if prognosis > 0 else 0
-        perf_1d = round(gen_1d_total / daily_prog * 100) if daily_prog > 0 else 0
-        perf_15d = round(gen_15d_total / (daily_prog * 15) * 100) if daily_prog > 0 else 0
-        perf_30d = round(gen_30d_total / prognosis * 100) if prognosis > 0 else 0
-        perf_12m = round(total_gen_12m / (prognosis * 12) * 100) if prognosis > 0 else 0
+        
+        # Performance = actual / expected, where expected is based on effective days
+        perf_1d = round(gen_1d_total / daily_prog * 100) if daily_prog > 0 and effective_1d > 0 else 0
+        perf_15d = round(gen_15d_total / (daily_prog * effective_15d) * 100) if daily_prog > 0 and effective_15d > 0 else 0
+        perf_30d = round(gen_30d_total / (daily_prog * effective_30d) * 100) if daily_prog > 0 and effective_30d > 0 else 0
+        
+        # 12M performance based on effective months
+        effective_months_12m = effective_12m / 30.4  # Average days per month
+        perf_12m = round(total_gen_12m / (prognosis * effective_months_12m) * 100) if prognosis > 0 and effective_months_12m > 0 else 0
 
         summaries.append({
             'id': plant['id'],
@@ -1502,6 +1559,9 @@ async def get_plants_summary(current_user: dict = Depends(get_current_user)):
             'growatt_plant_id': plant.get('growatt_plant_id'),
             'last_sync': plant.get('last_growatt_sync'),
             'has_growatt': bool(plant.get('growatt_username')),
+            # Debug info for effective days
+            'effective_days_15d': effective_15d,
+            'effective_days_30d': effective_30d,
         })
     
     return {
