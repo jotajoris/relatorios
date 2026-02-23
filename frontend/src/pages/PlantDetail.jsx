@@ -232,10 +232,6 @@ const PlantDetail = () => {
     setImportDialogOpen(true);
     loadImportHistory();
   };
-    } finally {
-      setDownloading(false);
-    }
-  };
   
   // Form data
   const [ucFormData, setUcFormData] = useState({
