@@ -412,79 +412,79 @@ class GrowattOSSService:
         try:
             logger.info(f"Starting get_plant_daily_data_range for '{plant_name}'")
             
-            # First ensure we're on the plants list page (plant.html is the correct page for OSS)
-            logger.info("Navigating to plant.html...")
+            # Use the already loaded plants data to find the plant ID
+            # This is more reliable than scraping the HTML again
+            plants = await self.get_plants()
+            target_plant = None
+            
+            for p in plants:
+                if plant_name.lower() in p.get('name', '').lower():
+                    target_plant = p
+                    logger.info(f"Found plant in cache: {p.get('name')} - ID: {p.get('id')}")
+                    break
+            
+            if not target_plant:
+                logger.error(f"Plant '{plant_name}' not found in plant cache")
+                return {"success": False, "error": f"Usina '{plant_name}' nao encontrada"}
+            
+            # The plant ID from get_plants() is the row number (1, 2, 3...)
+            # We need to navigate to the plant page to get the real plantId
+            plant_row_number = target_plant.get('id', '')
+            
+            # Navigate to plant list page
             await self.page.goto('https://server.growatt.com/plant.html', wait_until='networkidle')
-            await self.page.wait_for_timeout(5000)
+            await self.page.wait_for_timeout(3000)
             
-            # Find and click on the plant row to navigate to its detail page
-            # This way we get the real plantId from the URL
-            plant_found = False
-            real_plant_id = None
+            # Click on the plant row using the plant name text
+            logger.info(f"Looking for plant link with name containing '{plant_name}'...")
             
-            # Use JavaScript to find the plant link since the table might be dynamically loaded
-            logger.info(f"Looking for '{plant_name}' in table via JS...")
-            result = await self.page.evaluate(f'''
+            # Use a more robust method - click on the anchor that contains the plant name
+            clicked = await self.page.evaluate(f'''
                 () => {{
-                    // Try multiple selectors
-                    const tables = document.querySelectorAll('table');
-                    console.log('Found ' + tables.length + ' tables');
-                    
-                    for (let table of tables) {{
-                        const rows = table.querySelectorAll('tbody tr');
-                        console.log('Table has ' + rows.length + ' rows');
-                        
-                        for (let row of rows) {{
-                            const text = row.innerText.toLowerCase();
-                            if (text.includes('{plant_name.lower()}')) {{
-                                const link = row.querySelector('a[href*="plantId"]') || row.querySelector('a');
-                                if (link) {{
+                    // Get all links in the page
+                    const links = document.querySelectorAll('a');
+                    for (let link of links) {{
+                        // Check if link text contains the plant name (case insensitive)
+                        if (link.innerText && link.innerText.toLowerCase().includes('{plant_name.lower()}')) {{
+                            const href = link.href;
+                            if (href && href.includes('plantId=')) {{
+                                // Extract plantId
+                                const match = href.match(/plantId=(\d+)/);
+                                if (match) {{
                                     return {{
-                                        href: link.href,
-                                        text: row.innerText.substring(0, 100)
+                                        plantId: match[1],
+                                        href: href,
+                                        text: link.innerText
                                     }};
                                 }}
                             }}
                         }}
                     }}
-                    
-                    // Also try in divs with plant cards
-                    const cards = document.querySelectorAll('[onclick*="plantId"], a[href*="plantId"]');
-                    console.log('Found ' + cards.length + ' plant cards/links');
-                    
-                    for (let card of cards) {{
-                        const text = card.innerText.toLowerCase();
-                        if (text.includes('{plant_name.lower()}')) {{
-                            const href = card.href || card.getAttribute('onclick');
-                            return {{
-                                href: href,
-                                text: card.innerText.substring(0, 100)
-                            }};
-                        }}
-                    }}
-                    
                     return null;
                 }}
             ''')
             
-            if result:
-                logger.info(f"Found plant via JS: {result}")
-                href = result.get('href', '')
-                if 'plantId=' in str(href):
-                    real_plant_id = str(href).split('plantId=')[1].split('&')[0].split("'")[0]
-                    logger.info(f"Extracted real plantId: {real_plant_id}")
-                    
-                    # Navigate to plant detail page
-                    if href.startswith('http'):
-                        await self.page.goto(href, wait_until='networkidle')
-                    else:
-                        await self.page.goto(f'https://server.growatt.com/{href}', wait_until='networkidle')
-                    await self.page.wait_for_timeout(5000)
-                    plant_found = True
+            if not clicked:
+                logger.error(f"Could not find link for plant '{plant_name}'")
+                # Debug: List all links
+                all_links = await self.page.evaluate('''
+                    () => {
+                        const links = document.querySelectorAll('a[href*="plantId"]');
+                        return Array.from(links).slice(0, 10).map(l => ({
+                            href: l.href,
+                            text: l.innerText.substring(0, 50)
+                        }));
+                    }
+                ''')
+                logger.info(f"Available plant links: {all_links}")
+                return {"success": False, "error": f"Usina '{plant_name}' nao encontrada no portal"}
             
-            if not plant_found or not real_plant_id:
-                logger.error(f"Plant '{plant_name}' not found in Growatt portal")
-                return {"success": False, "error": f"Usina '{plant_name}' nao encontrada no portal Growatt"}
+            real_plant_id = clicked.get('plantId')
+            logger.info(f"Found plant: {clicked}")
+            
+            # Navigate to the plant detail page
+            await self.page.goto(clicked.get('href'), wait_until='networkidle')
+            await self.page.wait_for_timeout(3000)
             
             # Parse the year-month from start_date
             month_str = start_date[:7]  # YYYY-MM
@@ -514,7 +514,7 @@ class GrowattOSSService:
                 }}
             ''')
             
-            logger.info(f"Growatt getPlantData response for plantId={real_plant_id}: {str(data)[:500]}")
+            logger.info(f"Growatt API response: {str(data)[:500]}")
             
             # Go back to plant list
             await self.page.goto('https://server.growatt.com/plant.html', wait_until='networkidle')
