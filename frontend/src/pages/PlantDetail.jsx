@@ -198,13 +198,18 @@ const PlantDetail = () => {
   };
   
   const [filteredCities, setFilteredCities] = useState([]);
+  const [loadingCities, setLoadingCities] = useState(false);
   const [citySearchText, setCitySearchText] = useState('');
   const [showCityDropdown, setShowCityDropdown] = useState(false);
   const [calculatingPrognosis, setCalculatingPrognosis] = useState(false);
   const [prognosisDetail, setPrognosisDetail] = useState(null);
 
   const loadCitiesByState = async (state) => {
-    if (!state) { setFilteredCities([]); return; }
+    if (!state) { 
+      setFilteredCities([]); 
+      return; 
+    }
+    setLoadingCities(true);
     try {
       // Normalize state before sending to API
       const normalizedState = normalizeState(state);
@@ -214,6 +219,8 @@ const PlantDetail = () => {
     } catch (err) {
       console.error('Error loading cities:', err);
       setFilteredCities([]);
+    } finally {
+      setLoadingCities(false);
     }
   };
 
@@ -221,14 +228,19 @@ const PlantDetail = () => {
   useEffect(() => {
     if (plantFormData.state && configDialogOpen) {
       loadCitiesByState(plantFormData.state);
+    } else if (!plantFormData.state) {
+      setFilteredCities([]);
     }
   }, [plantFormData.state, configDialogOpen]);
 
   const handleStateSelect = (e) => {
     const state = e.target.value;
-    setPlantFormData(prev => ({...prev, state}));
+    setPlantFormData(prev => ({...prev, state, city: ''}));
     setCitySearchText('');
-    loadCitiesByState(state);
+    setFilteredCities([]);
+    if (state) {
+      loadCitiesByState(state);
+    }
   };
 
   const handleCityClick = async (city) => {
