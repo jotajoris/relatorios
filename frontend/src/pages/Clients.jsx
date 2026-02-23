@@ -198,8 +198,30 @@ const Clients = () => {
               <CardContent className="p-5">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-lg bg-[#FFD600]/10 flex items-center justify-center">
-                      <Building2 className="h-6 w-6 text-[#EAB308]" />
+                    {/* Logo with upload capability */}
+                    <div className="relative group">
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        className="hidden" 
+                        id={`logo-${client.id}`}
+                        onChange={(e) => handleLogoUpload(client.id, e.target.files[0])}
+                      />
+                      <label 
+                        htmlFor={`logo-${client.id}`}
+                        className="w-12 h-12 rounded-lg bg-[#FFD600]/10 flex items-center justify-center cursor-pointer overflow-hidden relative"
+                      >
+                        {uploadingLogo === client.id ? (
+                          <Loader2 className="h-5 w-5 animate-spin text-[#EAB308]" />
+                        ) : client.logo_url ? (
+                          <img src={client.logo_url} alt={client.name} className="w-full h-full object-cover" />
+                        ) : (
+                          <Building2 className="h-6 w-6 text-[#EAB308]" />
+                        )}
+                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <Upload className="h-4 w-4 text-white" />
+                        </div>
+                      </label>
                     </div>
                     <div>
                       <h3 className="font-semibold text-neutral-900">{client.name}</h3>
