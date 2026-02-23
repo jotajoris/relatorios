@@ -1578,7 +1578,7 @@ async def get_power_curve(
 ):
     """
     Get intraday power curve (kW) for a plant on a specific date.
-    This generates a realistic solar power curve based on the day's total generation.
+    First tries to fetch real data from Growatt, falls back to simulated curve.
     """
     import math
     
@@ -1590,6 +1590,92 @@ async def get_power_curve(
     if not plant:
         raise HTTPException(status_code=404, detail="Usina não encontrada")
     
+    # Try to get REAL power curve from Growatt if credentials are available
+    # Only do this for today or recent dates (within 7 days)
+    date_obj = datetime.strptime(date, '%Y-%m-%d')
+    days_ago = (datetime.now() - date_obj).days
+    
+    if plant.get('growatt_username') and plant.get('growatt_password') and days_ago <= 7:
+        try:
+            # Attempt to fetch real data from Growatt
+            growatt_plant_id = plant.get('growatt_plant_id') or ''
+            
+            if growatt_plant_id:
+                await reset_growatt_oss_service()
+                service = get_growatt_oss_service()
+                login_result = await service.login(plant['growatt_username'], plant['growatt_password'])
+                
+                if login_result.get('success') and service.page:
+                    # Fetch real power data
+                    power_data = await service.page.evaluate(f'''
+                        async () => {{
+                            try {{
+                                const res = await fetch('/panel/plant/getPlantData', {{
+                                    method: 'POST',
+                                    headers: {{'Content-Type': 'application/x-www-form-urlencoded'}},
+                                    body: 'plantId={growatt_plant_id}&type=0&date={date}'
+                                }});
+                                return await res.json();
+                            }} catch(e) {{
+                                return {{error: e.toString()}};
+                            }}
+                        }}
+                    ''')
+                    
+                    await reset_growatt_oss_service()
+                    
+                    # Parse the response
+                    if power_data and not power_data.get('error'):
+                        obj = power_data.get('obj', {})
+                        powers = obj.get('powers', [])
+                        times = obj.get('times', [])
+                        
+                        if powers and times and len(powers) > 5:
+                            curve_points = []
+                            peak_kw = 0
+                            total_kwh_from_data = 0
+                            
+                            for time_str, power_w in zip(times, powers):
+                                try:
+                                    power_kw = float(power_w) / 1000 if power_w else 0
+                                    curve_points.append({
+                                        'time': time_str,
+                                        'power_kw': round(power_kw, 2)
+                                    })
+                                    if power_kw > peak_kw:
+                                        peak_kw = power_kw
+                                except (ValueError, TypeError):
+                                    pass
+                            
+                            # Get total energy for the day
+                            gen_data = await db.generation_data.find_one(
+                                {'plant_id': plant_id, 'date': date}, {'_id': 0}
+                            )
+                            total_kwh = gen_data.get('generation_kwh', 0) if gen_data else 0
+                            
+                            # Calculate performance
+                            prognosis = plant.get('monthly_prognosis_kwh', 0)
+                            daily_prognosis = prognosis / 30 if prognosis > 0 else 0
+                            performance = (total_kwh / daily_prognosis * 100) if daily_prognosis > 0 and total_kwh > 0 else 0
+                            
+                            logger.info(f"Returning REAL Growatt power curve with {len(curve_points)} points, peak={peak_kw}kW")
+                            
+                            return {
+                                'plant_name': plant.get('name', ''),
+                                'date': date,
+                                'capacity_kwp': plant.get('capacity_kwp', 0),
+                                'total_kwh': round(total_kwh, 2),
+                                'peak_kw': round(peak_kw, 2),
+                                'performance': round(performance, 1),
+                                'status': plant.get('growatt_status') or plant.get('status', 'unknown'),
+                                'curve': curve_points,
+                                'source': 'growatt_real'
+                            }
+        except Exception as e:
+            logger.warning(f"Could not fetch real Growatt power curve: {e}")
+            # Fall through to simulated curve
+    
+    # FALLBACK: Generate simulated curve based on total kWh
     # Get generation for this date
     gen_data = await db.generation_data.find_one(
         {'plant_id': plant_id, 'date': date},
