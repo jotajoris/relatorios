@@ -218,22 +218,45 @@ async def sync_all_growatt_plants():
     db = client[os.environ.get('DB_NAME', 'test_database')]
     
     try:
-        plants = await db.plants.find(
-            {'growatt_username': {'$exists': True, '$ne': ''}, 'is_active': True},
+        # Get all active plants
+        all_plants = await db.plants.find(
+            {'is_active': True},
             {'_id': 0, 'id': 1, 'name': 1, 'growatt_username': 1, 'growatt_password': 1, 'growatt_plant_name': 1}
         ).to_list(200)
         
-        if not plants:
-            logger.info("Nenhuma usina com credenciais Growatt")
+        if not all_plants:
+            logger.info("Nenhuma usina ativa encontrada")
             return
         
-        logger.info(f"Encontradas {len(plants)} usinas com credenciais Growatt")
+        # Separate plants with credentials and without
+        plants_with_creds = [p for p in all_plants if p.get('growatt_username') and p.get('growatt_password')]
+        plants_without_creds = [p for p in all_plants if not p.get('growatt_username') or not p.get('growatt_password')]
+        
+        logger.info(f"Usinas com credenciais: {len(plants_with_creds)}, sem credenciais: {len(plants_without_creds)}")
+        
+        # Get installer login from client_logins to use for plants without credentials
+        installer_login = await db.client_logins.find_one(
+            {'inverter_app': 'Growatt', 'is_installer': True},
+            {'_id': 0, 'login': 1, 'password': 1}
+        )
         
         # Group by username to login once per account
         from collections import defaultdict
         by_user = defaultdict(list)
-        for p in plants:
+        
+        # Add plants with their own credentials
+        for p in plants_with_creds:
             by_user[p.get('growatt_username','')].append(p)
+        
+        # Add plants without credentials to installer account
+        if installer_login and plants_without_creds:
+            installer_user = installer_login.get('login', '')
+            if installer_user:
+                for p in plants_without_creds:
+                    # Add temporary credentials for sync
+                    p['_temp_username'] = installer_user
+                    p['_temp_password'] = installer_login.get('password', '')
+                    by_user[installer_user].append(p)
         
         os.environ['PLAYWRIGHT_BROWSERS_PATH'] = '/pw-browsers'
         from services.growatt_service import GrowattOSSService
@@ -243,7 +266,8 @@ async def sync_all_growatt_plants():
         total_errors = 0
         
         for username, user_plants in by_user.items():
-            password = user_plants[0].get('growatt_password', '')
+            # Get password from first plant (or temp credentials)
+            password = user_plants[0].get('growatt_password') or user_plants[0].get('_temp_password', '')
             if not password:
                 continue
             
