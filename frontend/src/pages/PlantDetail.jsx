@@ -863,13 +863,159 @@ const PlantDetail = () => {
 
         {/* Tab 1: Visão Geral */}
         <TabsContent value="overview" className="mt-6">
+          {/* Power Curve Card - SolarZ style */}
+          <Card className="mb-6 overflow-hidden">
+            <div className="grid md:grid-cols-4 grid-cols-1" style={{ minHeight: '22rem' }}>
+              {/* Chart Area - 3 cols */}
+              <div className="md:col-span-3 p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-sm font-semibold text-neutral-700 uppercase">Curva de Potência (kW)</h3>
+                  <div className="flex items-center gap-2">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {
+                      const d = new Date(powerCurveDate);
+                      d.setDate(d.getDate() - 1);
+                      setPowerCurveDate(d.toISOString().split('T')[0]);
+                    }}>
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <Input 
+                      type="date" 
+                      value={powerCurveDate} 
+                      onChange={e => setPowerCurveDate(e.target.value)} 
+                      className="w-36 h-8 text-sm"
+                      max={new Date().toISOString().split('T')[0]}
+                    />
+                    <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {
+                      const d = new Date(powerCurveDate);
+                      const today = new Date();
+                      if (d < today) {
+                        d.setDate(d.getDate() + 1);
+                        setPowerCurveDate(d.toISOString().split('T')[0]);
+                      }
+                    }}>
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+                {loadingPowerCurve ? (
+                  <div className="h-[280px] flex items-center justify-center">
+                    <Loader2 className="h-8 w-8 animate-spin text-neutral-400" />
+                  </div>
+                ) : powerCurveData?.curve ? (
+                  <div className="h-[280px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={powerCurveData.curve}>
+                        <defs>
+                          <linearGradient id="powerGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#FBAF00" stopOpacity={0.8}/>
+                            <stop offset="95%" stopColor="#FBAF00" stopOpacity={0.1}/>
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+                        <XAxis 
+                          dataKey="time" 
+                          fontSize={11}
+                          tickFormatter={(v) => v}
+                          interval={3}
+                          stroke="#9ca3af"
+                        />
+                        <YAxis 
+                          fontSize={11}
+                          tickFormatter={(v) => `${v}`}
+                          stroke="#9ca3af"
+                          domain={[0, 'auto']}
+                          unit=" kW"
+                        />
+                        <Tooltip 
+                          formatter={(value) => [`${value.toFixed(2)} kW`, 'Potência']}
+                          labelFormatter={(label) => `Horário: ${label}`}
+                          contentStyle={{ 
+                            backgroundColor: '#fff', 
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '8px',
+                            fontSize: '12px'
+                          }}
+                        />
+                        <Area 
+                          type="monotone" 
+                          dataKey="power_kw" 
+                          stroke="#FBAF00" 
+                          strokeWidth={2}
+                          fill="url(#powerGradient)"
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <div className="h-[280px] flex items-center justify-center text-neutral-400">
+                    Sem dados para esta data
+                  </div>
+                )}
+              </div>
+              
+              {/* Stats Sidebar - 1 col */}
+              <div className="md:col-span-1 h-full flex flex-col bg-neutral-50 border-l border-neutral-100">
+                <div className="flex flex-wrap justify-around border-b border-neutral-200 py-3">
+                  <div className="text-center w-full uppercase font-semibold text-neutral-800 text-sm mb-2">
+                    {plant.name}
+                  </div>
+                  <div className="text-center px-2">
+                    <span className="block text-xs text-neutral-500">Gerado</span>
+                    <span className="font-bold text-lg">{powerCurveData?.total_kwh?.toFixed(2) || '0.00'} kWh</span>
+                  </div>
+                  <div className="text-center px-2">
+                    <span className="block text-xs text-neutral-500">Desempenho</span>
+                    <span className={`font-bold text-lg ${
+                      powerCurveData?.performance >= 90 ? 'text-emerald-600' : 
+                      powerCurveData?.performance >= 70 ? 'text-amber-500' : 'text-red-500'
+                    }`}>
+                      {powerCurveData?.performance?.toFixed(1) || '0.0'}%
+                    </span>
+                  </div>
+                  <div className="text-center flex flex-col items-center px-2 mt-2">
+                    <span className="block text-xs text-neutral-500">Status</span>
+                    <div className="flex items-center gap-2">
+                      <span className="relative flex h-3 w-3">
+                        <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${
+                          powerCurveData?.status === 'online' ? 'bg-emerald-400' : 'bg-red-400'
+                        }`}></span>
+                        <span className={`relative inline-flex rounded-full h-3 w-3 ${
+                          powerCurveData?.status === 'online' ? 'bg-emerald-500' : 'bg-red-500'
+                        }`}></span>
+                      </span>
+                      <span className="text-sm font-semibold">
+                        {powerCurveData?.status === 'online' ? 'Ok' : 'Offline'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="p-3 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-neutral-500">Pico:</span>
+                    <span className="font-medium">{powerCurveData?.peak_kw?.toFixed(2) || '0.00'} kW</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-neutral-500">Capacidade:</span>
+                    <span className="font-medium">{powerCurveData?.capacity_kwp?.toFixed(2) || '0.00'} kWp</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-neutral-500">Data:</span>
+                    <span className="font-medium">
+                      {powerCurveDate ? new Date(powerCurveDate + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </Card>
+          
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Chart */}
             <div className="lg:col-span-2">
               <Card>
                 <CardHeader className="pb-2">
                   <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg">Geração Diária</CardTitle>
+                    <CardTitle className="text-lg">Geração Diária (Mês)</CardTitle>
                     <div className="flex items-center gap-2 text-sm">
                       <div className="flex items-center gap-1">
                         <div className="w-3 h-3 bg-[#FFD600] rounded"></div>
