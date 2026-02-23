@@ -3053,7 +3053,7 @@ async def download_growatt_range(
         "records_saved": records_saved,
         "start_date": start_date,
         "end_date": end_date,
-        "message": f"{records_saved} registros baixados e salvos",
+        "message": f"{records_saved} registro(s) do dia atual importado(s). Nota: O download de histórico está limitado devido a restrições da API Growatt. O sistema sincroniza automaticamente os dados diários.",
     }
 
 @api_router.get("/integrations/growatt/import-history/{plant_id}")
