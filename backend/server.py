@@ -2992,61 +2992,103 @@ async def download_growatt_range(
     if not start_date or not end_date:
         raise HTTPException(status_code=400, detail="Datas obrigatorias")
 
-    await reset_growatt_oss_service()
-    service = get_growatt_oss_service()
-    login_result = await service.login(username, password)
-    if not login_result.get('success'):
-        raise HTTPException(status_code=400, detail="Login Growatt falhou")
-
-    # Get data for each month in the range
-    from dateutil.relativedelta import relativedelta
-    start = datetime.strptime(start_date, '%Y-%m-%d')
-    end = datetime.strptime(end_date, '%Y-%m-%d')
+    # Use the growattServer library for API access
+    import growattServer
+    from concurrent.futures import ThreadPoolExecutor
+    import asyncio
     
     records_saved = 0
-    current = start.replace(day=1)
     
-    while current <= end:
-        month_str = current.strftime('%Y-%m')
-        logger.info(f"Downloading Growatt data for {growatt_name}, month: {month_str}")
-        result = await service.get_plant_daily_data_range(growatt_name, f"{month_str}-01", f"{month_str}-28")
+    def download_growatt_data_sync():
+        """Run growattServer API calls in a thread (it's synchronous)"""
+        nonlocal records_saved
         
-        logger.info(f"Growatt API result: success={result.get('success')}, has_data={bool(result.get('data'))}")
-        if result.get('data'):
-            logger.info(f"Growatt API response keys: {result.get('data', {}).keys() if isinstance(result.get('data'), dict) else type(result.get('data'))}")
-        
-        if result.get('success') and result.get('data'):
-            raw = result['data']
-            # Parse the Growatt response - it contains daily generation values
-            obj = raw.get('obj', {})
-            logger.info(f"Growatt obj keys: {obj.keys() if isinstance(obj, dict) else 'not a dict'}")
+        try:
+            # Initialize API
+            api = growattServer.GrowattApi()
             
-            # Try different response formats
-            energys = obj.get('energys', []) or obj.get('energy', []) or obj.get('chartData', [])
-            dates = obj.get('dates', []) or obj.get('date', [])
+            # Login
+            login_result = api.login(username, password)
+            logger.info(f"Growatt API login result: {login_result}")
             
-            logger.info(f"Growatt energys count: {len(energys) if energys else 0}, dates count: {len(dates) if dates else 0}")
+            if not login_result or login_result.get('result') != 1:
+                return {"error": "Login Growatt falhou"}
             
-            if energys and dates:
-                for i, val in enumerate(energys):
-                    if i < len(dates) and val and float(val) > 0:
-                        day_date = dates[i]
-                        gen_kwh = float(val)
-                        existing = await db.generation_data.find_one({'plant_id': plant_id, 'date': day_date})
-                        if existing:
-                            await db.generation_data.update_one(
-                                {'plant_id': plant_id, 'date': day_date},
-                                {'$set': {'generation_kwh': gen_kwh, 'source': 'growatt'}}
-                            )
-                        else:
-                            await db.generation_data.insert_one({
-                                'id': str(uuid.uuid4()), 'plant_id': plant_id,
-                                'date': day_date, 'generation_kwh': gen_kwh,
-                                'source': 'growatt', 'created_at': datetime.now(timezone.utc).isoformat()
+            # Get plant list to find the plant_id
+            plants = api.plant_list(login_result['user']['id'])
+            logger.info(f"Growatt API plants: {len(plants.get('data', []))} plants found")
+            
+            # Find our plant
+            target_plant_id = None
+            for plant in plants.get('data', []):
+                plant_name_api = plant.get('plantName', '')
+                logger.info(f"Checking plant: {plant_name_api} vs {growatt_name}")
+                if growatt_name.lower() in plant_name_api.lower() or plant_name_api.lower() in growatt_name.lower():
+                    target_plant_id = plant.get('plantId')
+                    logger.info(f"Found target plant: {plant_name_api} with plantId: {target_plant_id}")
+                    break
+            
+            if not target_plant_id:
+                logger.error(f"Plant '{growatt_name}' not found in Growatt API")
+                return {"error": f"Usina '{growatt_name}' não encontrada"}
+            
+            # Get energy data for date range
+            from datetime import datetime, timedelta
+            start_dt = datetime.strptime(start_date, '%Y-%m-%d')
+            end_dt = datetime.strptime(end_date, '%Y-%m-%d')
+            
+            # Get day-by-day data using plant_energy_data
+            # This API returns energy for each day
+            results = []
+            current = start_dt
+            while current <= end_dt:
+                date_str = current.strftime('%Y-%m-%d')
+                try:
+                    # Get plant data for specific date
+                    data = api.plant_detail(target_plant_id, growattServer.Timespan.day, date_str)
+                    if data and 'data' in data:
+                        energy_today = float(data.get('data', {}).get('eToday', 0) or 0)
+                        if energy_today > 0:
+                            results.append({
+                                'date': date_str,
+                                'generation_kwh': energy_today
                             })
-                        records_saved += 1
+                            logger.info(f"Got data for {date_str}: {energy_today} kWh")
+                except Exception as day_err:
+                    logger.warning(f"Error getting data for {date_str}: {day_err}")
+                current += timedelta(days=1)
+            
+            return {"success": True, "data": results}
+        except Exception as e:
+            logger.error(f"Growatt API error: {e}", exc_info=True)
+            return {"error": str(e)}
+    
+    # Run synchronous code in thread pool
+    loop = asyncio.get_event_loop()
+    with ThreadPoolExecutor() as pool:
+        result = await loop.run_in_executor(pool, download_growatt_data_sync)
+    
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
+    
+    # Save the data
+    for item in result.get("data", []):
+        day_date = item['date']
+        gen_kwh = item['generation_kwh']
         
-        current += relativedelta(months=1)
+        existing = await db.generation_data.find_one({'plant_id': plant_id, 'date': day_date})
+        if existing:
+            await db.generation_data.update_one(
+                {'plant_id': plant_id, 'date': day_date},
+                {'$set': {'generation_kwh': gen_kwh, 'source': 'growatt_api', 'updated_at': datetime.now(timezone.utc).isoformat()}}
+            )
+        else:
+            await db.generation_data.insert_one({
+                'id': str(uuid.uuid4()), 'plant_id': plant_id,
+                'date': day_date, 'generation_kwh': gen_kwh,
+                'source': 'growatt_api', 'created_at': datetime.now(timezone.utc).isoformat()
+            })
+        records_saved += 1
 
     await db.plants.update_one({'id': plant_id}, {'$set': {
         'last_growatt_sync': datetime.now(timezone.utc).isoformat(),
