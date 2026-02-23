@@ -356,12 +356,141 @@ const Settings = () => {
         <p className="text-neutral-500 mt-1">Gerencie credenciais e integrações</p>
       </div>
 
-      <Tabs defaultValue="inverters" className="space-y-6">
+      <Tabs defaultValue="client-logins" className="space-y-6">
         <TabsList className="bg-neutral-100">
+          <TabsTrigger value="client-logins">Logins de Clientes</TabsTrigger>
           <TabsTrigger value="inverters">Inversores</TabsTrigger>
           <TabsTrigger value="growatt">Growatt</TabsTrigger>
           <TabsTrigger value="copel">COPEL</TabsTrigger>
         </TabsList>
+
+        {/* Client Logins Tab */}
+        <TabsContent value="client-logins" className="space-y-6">
+          <Card className="border-neutral-200 shadow-sm bg-white">
+            <CardHeader className="bg-white border-b border-neutral-100">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Users className="h-5 w-5 text-[#EAB308]" />
+                  Logins e Senhas de Clientes
+                </CardTitle>
+                <div className="flex gap-2">
+                  <input
+                    type="file"
+                    accept=".csv,.xlsx,.xls"
+                    ref={excelInputRef}
+                    onChange={handleExcelUpload}
+                    className="hidden"
+                  />
+                  <Button
+                    variant="outline"
+                    onClick={downloadExcelTemplate}
+                    className="text-neutral-600"
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Modelo CSV
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => excelInputRef.current?.click()}
+                    disabled={uploadingExcel}
+                    className="text-neutral-600"
+                  >
+                    {uploadingExcel ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <FileSpreadsheet className="h-4 w-4 mr-2" />
+                    )}
+                    Importar CSV
+                  </Button>
+                  <Button 
+                    onClick={() => handleOpenClientLoginDialog()}
+                    className="bg-[#1A1A1A] hover:bg-neutral-800 text-white"
+                  >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Adicionar
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="bg-white pt-6">
+              <p className="text-sm text-neutral-600 mb-4">
+                Gerencie os logins de acesso aos portais de monitoramento dos seus clientes. 
+                O primeiro login marcado como "Instalador" será usado como login padrão.
+              </p>
+              
+              {sortedClientLogins.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-neutral-50 border-b border-neutral-200">
+                      <tr>
+                        <th className="px-4 py-3 text-left font-medium text-neutral-600">App/Portal</th>
+                        <th className="px-4 py-3 text-left font-medium text-neutral-600">Unidade ON</th>
+                        <th className="px-4 py-3 text-left font-medium text-neutral-600">Cliente</th>
+                        <th className="px-4 py-3 text-left font-medium text-neutral-600">Login</th>
+                        <th className="px-4 py-3 text-left font-medium text-neutral-600">Senha</th>
+                        <th className="px-4 py-3 text-left font-medium text-neutral-600">Site</th>
+                        <th className="px-4 py-3 text-right font-medium text-neutral-600">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-neutral-100">
+                      {sortedClientLogins.map((login) => (
+                        <tr key={login.id} className={login.is_installer ? 'bg-[#FFD600]/10' : 'hover:bg-neutral-50'}>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              {login.is_installer && (
+                                <span className="px-2 py-0.5 bg-[#FFD600] text-[#1A1A1A] text-xs font-semibold rounded">
+                                  INSTALADOR
+                                </span>
+                              )}
+                              <span className="font-medium">{login.inverter_app}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-neutral-600">{login.on_unit || '-'}</td>
+                          <td className="px-4 py-3 text-neutral-900 font-medium">{login.client_name || '-'}</td>
+                          <td className="px-4 py-3 font-mono text-neutral-700">{login.login}</td>
+                          <td className="px-4 py-3 font-mono text-neutral-700">{login.password}</td>
+                          <td className="px-4 py-3">
+                            {login.site_url ? (
+                              <a href={login.site_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-xs">
+                                {login.site_url.replace(/^https?:\/\//, '').substring(0, 25)}...
+                              </a>
+                            ) : '-'}
+                          </td>
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex justify-end gap-2">
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-8 w-8"
+                                onClick={() => handleOpenClientLoginDialog(login)}
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                onClick={() => handleDeleteClientLogin(login)}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="text-center py-12 text-neutral-500">
+                  <Users className="h-12 w-12 mx-auto mb-4 text-neutral-300" />
+                  <p>Nenhum login cadastrado</p>
+                  <p className="text-sm mt-1">Adicione logins manualmente ou importe via CSV</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         {/* Inverters Tab */}
         <TabsContent value="inverters" className="space-y-6">
