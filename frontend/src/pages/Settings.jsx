@@ -39,7 +39,8 @@ import {
   FileSpreadsheet,
   Clock,
   Timer,
-  Wifi
+  Wifi,
+  Search
 } from 'lucide-react';
 
 const Settings = () => {
