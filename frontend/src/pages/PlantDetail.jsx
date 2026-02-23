@@ -188,15 +188,20 @@ const PlantDetail = () => {
     if (!state) { setFilteredCities([]); return; }
     try {
       const res = await api.get(`/irradiance/cities?state=${encodeURIComponent(state)}`);
-      setFilteredCities(res.data.map(c => c.city).sort());
-    } catch { setFilteredCities([]); }
+      const cities = (res.data || []).map(c => c.city).sort();
+      setFilteredCities(cities);
+    } catch (err) {
+      console.error('Error loading cities:', err);
+      setFilteredCities([]);
+    }
   };
 
+  // Load cities when state changes OR when dialog opens with existing state
   useEffect(() => {
-    if (plantFormData.state) {
+    if (plantFormData.state && configDialogOpen) {
       loadCitiesByState(plantFormData.state);
     }
-  }, [plantFormData.state]);
+  }, [plantFormData.state, configDialogOpen]);
 
   const handleStateSelect = (e) => {
     const state = e.target.value;
