@@ -164,14 +164,50 @@ class GrowattOSSService:
                                 const name = cells[4]?.innerText?.trim();
                                 // Only add if it has a valid number and name
                                 if (num && name && !isNaN(parseInt(num))) {
-                                    // Try to get plantId from link in the row
+                                    // Try to get plantId from various sources
                                     let plantId = '';
-                                    const link = row.querySelector('a[href*="plantId"]');
-                                    if (link) {
-                                        const href = link.href;
-                                        const match = href.match(/plantId=(\d+)/);
+                                    
+                                    // Method 1: Look for link with plantId in href
+                                    const links = row.querySelectorAll('a');
+                                    for (const link of links) {
+                                        const href = link.getAttribute('href') || link.href || '';
+                                        const match = href.match(/plantId[=:](\d+)/i);
                                         if (match) {
                                             plantId = match[1];
+                                            break;
+                                        }
+                                    }
+                                    
+                                    // Method 2: Check onclick attributes
+                                    if (!plantId) {
+                                        const elementsWithOnclick = row.querySelectorAll('[onclick]');
+                                        for (const el of elementsWithOnclick) {
+                                            const onclick = el.getAttribute('onclick') || '';
+                                            const match = onclick.match(/plantId[=:'"\\s]*(\d+)/i);
+                                            if (match) {
+                                                plantId = match[1];
+                                                break;
+                                            }
+                                        }
+                                    }
+                                    
+                                    // Method 3: Check data attributes
+                                    if (!plantId) {
+                                        plantId = row.getAttribute('data-plantid') || 
+                                                  row.getAttribute('data-id') || 
+                                                  cells[0]?.getAttribute('data-plantid') || '';
+                                    }
+                                    
+                                    // Method 4: Try to extract from the plant name link
+                                    if (!plantId && cells[4]) {
+                                        const nameLink = cells[4].querySelector('a');
+                                        if (nameLink) {
+                                            const href = nameLink.getAttribute('href') || nameLink.href || '';
+                                            // Try various patterns
+                                            let match = href.match(/plantId[=:](\d+)/i);
+                                            if (!match) match = href.match(/id[=:](\d+)/i);
+                                            if (!match) match = href.match(/\/plant\/(\d+)/i);
+                                            if (match) plantId = match[1];
                                         }
                                     }
                                     
