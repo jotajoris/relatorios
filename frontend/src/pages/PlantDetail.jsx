@@ -1346,19 +1346,13 @@ const PlantDetail = () => {
                     Geração
                   </div>
                   
-                  {/* Upload Excel Growatt */}
-                  <input
-                    ref={excelInputRef}
-                    type="file"
-                    accept=".xls,.xlsx"
-                    onChange={handleExcelUpload}
-                    className="hidden"
-                  />
+                  {/* Upload Excel Growatt - input is now global at top of component */}
                   <Button 
                     variant="outline" 
                     size="sm"
                     onClick={() => excelInputRef.current?.click()}
                     disabled={uploadingExcel}
+                    data-testid="excel-upload-btn"
                   >
                     {uploadingExcel ? (
                       <Loader2 className="h-4 w-4 mr-2 animate-spin" />
