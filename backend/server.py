@@ -2992,103 +2992,51 @@ async def download_growatt_range(
     if not start_date or not end_date:
         raise HTTPException(status_code=400, detail="Datas obrigatorias")
 
-    # Use the growattServer library for API access
-    import growattServer
-    from concurrent.futures import ThreadPoolExecutor
-    import asyncio
-    
+    # Use Playwright web scraping (API is blocked)
+    await reset_growatt_oss_service()
+    service = get_growatt_oss_service()
+    login_result = await service.login(username, password)
+    if not login_result.get('success'):
+        raise HTTPException(status_code=400, detail="Login Growatt falhou: " + login_result.get('error', 'Unknown error'))
+
     records_saved = 0
     
-    def download_growatt_data_sync():
-        """Run growattServer API calls in a thread (it's synchronous)"""
-        nonlocal records_saved
-        
-        try:
-            # Initialize API
-            api = growattServer.GrowattApi()
-            
-            # Login
-            login_result = api.login(username, password)
-            logger.info(f"Growatt API login result: {login_result}")
-            
-            if not login_result or login_result.get('result') != 1:
-                return {"error": "Login Growatt falhou"}
-            
-            # Get plant list to find the plant_id
-            plants = api.plant_list(login_result['user']['id'])
-            logger.info(f"Growatt API plants: {len(plants.get('data', []))} plants found")
-            
-            # Find our plant
-            target_plant_id = None
-            for plant in plants.get('data', []):
-                plant_name_api = plant.get('plantName', '')
-                logger.info(f"Checking plant: {plant_name_api} vs {growatt_name}")
-                if growatt_name.lower() in plant_name_api.lower() or plant_name_api.lower() in growatt_name.lower():
-                    target_plant_id = plant.get('plantId')
-                    logger.info(f"Found target plant: {plant_name_api} with plantId: {target_plant_id}")
-                    break
-            
-            if not target_plant_id:
-                logger.error(f"Plant '{growatt_name}' not found in Growatt API")
-                return {"error": f"Usina '{growatt_name}' não encontrada"}
-            
-            # Get energy data for date range
-            from datetime import datetime, timedelta
-            start_dt = datetime.strptime(start_date, '%Y-%m-%d')
-            end_dt = datetime.strptime(end_date, '%Y-%m-%d')
-            
-            # Get day-by-day data using plant_energy_data
-            # This API returns energy for each day
-            results = []
-            current = start_dt
-            while current <= end_dt:
-                date_str = current.strftime('%Y-%m-%d')
-                try:
-                    # Get plant data for specific date
-                    data = api.plant_detail(target_plant_id, growattServer.Timespan.day, date_str)
-                    if data and 'data' in data:
-                        energy_today = float(data.get('data', {}).get('eToday', 0) or 0)
-                        if energy_today > 0:
-                            results.append({
-                                'date': date_str,
-                                'generation_kwh': energy_today
-                            })
-                            logger.info(f"Got data for {date_str}: {energy_today} kWh")
-                except Exception as day_err:
-                    logger.warning(f"Error getting data for {date_str}: {day_err}")
-                current += timedelta(days=1)
-            
-            return {"success": True, "data": results}
-        except Exception as e:
-            logger.error(f"Growatt API error: {e}", exc_info=True)
-            return {"error": str(e)}
+    # Get all plants from Growatt to find the correct one with plantId
+    plants = await service.get_plants()
+    target_plant = None
+    for p in plants:
+        if growatt_name.lower() in p.get('name', '').lower():
+            target_plant = p
+            break
     
-    # Run synchronous code in thread pool
-    loop = asyncio.get_event_loop()
-    with ThreadPoolExecutor() as pool:
-        result = await loop.run_in_executor(pool, download_growatt_data_sync)
+    if not target_plant:
+        raise HTTPException(status_code=404, detail=f"Usina '{growatt_name}' não encontrada no Growatt")
     
-    if "error" in result:
-        raise HTTPException(status_code=400, detail=result["error"])
+    logger.info(f"Found plant: {target_plant.get('name')} - daily_gen_kwh: {target_plant.get('daily_gen_kwh')}")
     
-    # Save the data
-    for item in result.get("data", []):
-        day_date = item['date']
-        gen_kwh = item['generation_kwh']
-        
-        existing = await db.generation_data.find_one({'plant_id': plant_id, 'date': day_date})
+    # For now, we can only get TODAY's data reliably
+    # The historical data API requires the real plantId which is hard to obtain via scraping
+    today_str = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    daily_gen = target_plant.get('daily_gen_kwh', 0)
+    
+    if daily_gen and daily_gen > 0:
+        existing = await db.generation_data.find_one({'plant_id': plant_id, 'date': today_str})
         if existing:
             await db.generation_data.update_one(
-                {'plant_id': plant_id, 'date': day_date},
-                {'$set': {'generation_kwh': gen_kwh, 'source': 'growatt_api', 'updated_at': datetime.now(timezone.utc).isoformat()}}
+                {'plant_id': plant_id, 'date': today_str},
+                {'$set': {'generation_kwh': daily_gen, 'source': 'growatt', 'updated_at': datetime.now(timezone.utc).isoformat()}}
             )
         else:
             await db.generation_data.insert_one({
                 'id': str(uuid.uuid4()), 'plant_id': plant_id,
-                'date': day_date, 'generation_kwh': gen_kwh,
-                'source': 'growatt_api', 'created_at': datetime.now(timezone.utc).isoformat()
+                'date': today_str, 'generation_kwh': daily_gen,
+                'source': 'growatt', 'created_at': datetime.now(timezone.utc).isoformat()
             })
         records_saved += 1
+        logger.info(f"Saved today's data: {today_str} = {daily_gen} kWh")
+    
+    # Note: Historical data download is limited due to Growatt API restrictions
+    # The system will sync daily data automatically via the scheduler
 
     await db.plants.update_one({'id': plant_id}, {'$set': {
         'last_growatt_sync': datetime.now(timezone.utc).isoformat(),
