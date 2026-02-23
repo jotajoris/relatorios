@@ -90,6 +90,16 @@ Aplicação web full-stack para gerenciamento e elaboração de relatórios de u
     - `/app/frontend/src/pages/Settings.jsx`: Nova aba "Sincronização" com UI de configuração
     - `/app/frontend/src/pages/Dashboard.jsx`: Botão de sync manual e status
 
+- [x] **Correção do Upload de Excel** (23/02/2026): Corrigido problema onde o seletor de arquivo não abria ao clicar em "Enviar arquivo de geração". Inputs de arquivo foram movidos para fora das abas (no topo do componente) para ficarem acessíveis globalmente.
+  - Alterações em: `/app/frontend/src/pages/PlantDetail.jsx`
+
+- [x] **Cálculo de Desempenho com Data de Instalação** (23/02/2026): O cálculo de desempenho (1D, 15D, 30D, 12M) agora considera a data de instalação da usina. Se uma usina foi instalada no dia 20 de um mês de 30 dias, o prognóstico é calculado proporcionalmente para 10 dias efetivos, não 30.
+  - Exemplo: Usina instalada dia 20, gerou 1000 kWh, prognóstico mensal 3000 kWh → Desempenho = 1000 / (3000/30 * 10) = 100%
+  - Alterações em: `/app/backend/server.py` - função que calcula `plants-summary`
+
+- [x] **Salvamento do Growatt PlantId** (23/02/2026): A sincronização automática agora salva o `growatt_plant_id` real da usina no banco de dados para uso futuro.
+  - Alterações em: `/app/backend/services/scheduler.py`
+
 ## P1 - Upcoming
 - [ ] Frontend para gerenciamento do Sistema de Créditos (distribuição entre UCs)
 - [ ] Adicionar seção de detalhamento por UC beneficiária no relatório PDF (dados das faturas)
