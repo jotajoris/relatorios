@@ -1728,42 +1728,6 @@ const PlantDetail = () => {
                 />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Total Investido (R$)</Label>
-                <Input
-                  type="number"
-                  value={plantFormData.total_investment || ''}
-                  onChange={(e) => setPlantFormData({...plantFormData, total_investment: parseFloat(e.target.value)})}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Data de Instalação</Label>
-                <Input
-                  type="date"
-                  value={plantFormData.installation_date || ''}
-                  onChange={(e) => setPlantFormData({...plantFormData, installation_date: e.target.value})}
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Geração Mensal Acordada (kWh)</Label>
-                <Input
-                  type="number"
-                  value={plantFormData.monthly_prognosis_kwh || ''}
-                  onChange={(e) => setPlantFormData({...plantFormData, monthly_prognosis_kwh: parseFloat(e.target.value)})}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Geração Anual Acordada (kWh)</Label>
-                <Input
-                  type="number"
-                  value={plantFormData.annual_prognosis_kwh || ''}
-                  onChange={(e) => setPlantFormData({...plantFormData, annual_prognosis_kwh: parseFloat(e.target.value)})}
-                />
-              </div>
-            </div>
             <div className="space-y-2">
               <Label>Endereco</Label>
               <Input
@@ -1771,6 +1735,8 @@ const PlantDetail = () => {
                 onChange={(e) => setPlantFormData({...plantFormData, address: e.target.value})}
               />
             </div>
+            
+            {/* Linha 1: Estado + Cidade */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Estado</Label>
@@ -1796,8 +1762,8 @@ const PlantDetail = () => {
               </div>
             </div>
             
-            {/* Prognosis Calculator */}
-            <div className="p-3 bg-[#FFD600]/10 border border-[#FFD600]/30 rounded-lg space-y-3">
+            {/* Linha 2: Calcular Prognóstico */}
+            <div className="p-3 bg-[#FFD600]/10 border border-[#FFD600]/30 rounded-lg">
               <div className="flex items-center justify-between">
                 <Label className="text-sm font-semibold">Prognostico por Irradiancia</Label>
                 <Button size="sm" variant="outline" onClick={calculatePrognosis} disabled={calculatingPrognosis}
@@ -1807,7 +1773,7 @@ const PlantDetail = () => {
                 </Button>
               </div>
               {prognosisDetail && (
-                <div className="text-xs space-y-1">
+                <div className="text-xs space-y-1 mt-3">
                   <p className="text-neutral-500">{prognosisDetail.city} - {prognosisDetail.state} | {prognosisDetail.capacity_kwp} kWp</p>
                   <div className="grid grid-cols-4 gap-1">
                     {prognosisDetail.months?.map((m, i) => (
@@ -1833,6 +1799,46 @@ const PlantDetail = () => {
                   </p>
                 </div>
               )}
+            </div>
+
+            {/* Linha 3: Prognóstico Mensal */}
+            <div className="space-y-2">
+              <Label>Prognóstico Mensal (kWh)</Label>
+              <Input
+                type="number"
+                value={plantFormData.monthly_prognosis_kwh || ''}
+                onChange={(e) => setPlantFormData({...plantFormData, monthly_prognosis_kwh: parseFloat(e.target.value)})}
+              />
+            </div>
+
+            {/* Linha 4: Prognóstico Anual */}
+            <div className="space-y-2">
+              <Label>Prognóstico Anual (kWh)</Label>
+              <Input
+                type="number"
+                value={plantFormData.annual_prognosis_kwh || ''}
+                onChange={(e) => setPlantFormData({...plantFormData, annual_prognosis_kwh: parseFloat(e.target.value)})}
+              />
+            </div>
+
+            {/* Linha 5: Investimento Total + Data de Instalação */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Investimento Total (R$)</Label>
+                <Input
+                  type="number"
+                  value={plantFormData.total_investment || ''}
+                  onChange={(e) => setPlantFormData({...plantFormData, total_investment: parseFloat(e.target.value)})}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Data de Instalação</Label>
+                <Input
+                  type="date"
+                  value={plantFormData.installation_date || ''}
+                  onChange={(e) => setPlantFormData({...plantFormData, installation_date: e.target.value})}
+                />
+              </div>
             </div>
 
             <div className="space-y-2">
