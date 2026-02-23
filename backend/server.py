@@ -483,9 +483,38 @@ async def seed_users():
             await db.users.insert_one(doc)
             logger.info(f"Created user: {user_data['email']}")
 
+async def seed_irradiance_cities():
+    """Seed irradiance cities data if collection is empty"""
+    import json
+    count = await db.irradiance_cities.count_documents({})
+    if count > 0:
+        logger.info(f"Irradiance cities already populated: {count} cities")
+        return
+    
+    # Load from JSON file
+    json_path = ROOT_DIR / 'data' / 'irradiance_cities.json'
+    if not json_path.exists():
+        logger.warning(f"Irradiance cities JSON not found at {json_path}")
+        return
+    
+    try:
+        with open(json_path, 'r', encoding='utf-8') as f:
+            cities = json.load(f)
+        
+        if cities:
+            # Insert in batches
+            batch_size = 500
+            for i in range(0, len(cities), batch_size):
+                batch = cities[i:i+batch_size]
+                await db.irradiance_cities.insert_many(batch)
+            logger.info(f"Seeded {len(cities)} irradiance cities")
+    except Exception as e:
+        logger.error(f"Failed to seed irradiance cities: {e}")
+
 @app.on_event("startup")
 async def startup_event():
     await seed_users()
+    await seed_irradiance_cities()
     
     # Start Playwright installation in background (non-blocking)
     import asyncio
