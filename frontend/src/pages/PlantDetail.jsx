@@ -960,6 +960,41 @@ const PlantDetail = () => {
                     }}>
                       <ChevronRight className="h-4 w-4" />
                     </Button>
+                    
+                    {/* Import/Export Dropdown Menu */}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="outline" size="icon" className="h-8 w-8 border-orange-300 hover:bg-orange-50">
+                          <MoreVertical className="h-4 w-4 text-orange-500" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-56">
+                        <DropdownMenuSub>
+                          <DropdownMenuSubTrigger>
+                            <CloudDownload className="mr-2 h-4 w-4" />
+                            Importar dados de geração
+                          </DropdownMenuSubTrigger>
+                          <DropdownMenuSubContent>
+                            <DropdownMenuItem onClick={() => excelInputRef.current?.click()}>
+                              <FileSpreadsheet className="mr-2 h-4 w-4" />
+                              Enviar arquivo de geração
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={openImportDialog}>
+                              <Sun className="mr-2 h-4 w-4 text-orange-500" />
+                              Importar do portal Growatt
+                            </DropdownMenuItem>
+                          </DropdownMenuSubContent>
+                        </DropdownMenuSub>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={handleSyncGrowattDirect} disabled={syncingGrowatt}>
+                          {syncingGrowatt ? (
+                            <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Sincronizando...</>
+                          ) : (
+                            <><Sun className="mr-2 h-4 w-4 text-[#FFD600]" />Atualizar dados de hoje</>
+                          )}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 </div>
                 {loadingPowerCurve ? (
