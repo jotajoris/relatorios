@@ -409,22 +409,47 @@ class GrowattOSSService:
         if not self.logged_in or not self.page:
             return {"success": False, "error": "Nao logado"}
         try:
-            plants = await self.get_plants()
-            plant = None
-            for p in plants:
-                if p.get('name','').lower() == plant_name.lower() or plant_name.lower() in p.get('name','').lower():
-                    plant = p
-                    break
-            if not plant:
-                return {"success": False, "error": f"Usina '{plant_name}' nao encontrada"}
-
-            # Use the real plant_id for API calls
-            plant_id = plant.get('plant_id') or plant.get('id', '')
-            logger.info(f"Getting daily data for plant '{plant.get('name')}' with plantId={plant_id}")
-            
-            # Navigate to plant detail page first to ensure we're on the right context
-            await self.page.goto(f'https://server.growatt.com/panel/plantDetail.html?plantId={plant_id}', wait_until='networkidle')
+            # First ensure we're on the plants list page
+            await self.page.goto('https://server.growatt.com/index.html', wait_until='networkidle')
             await self.page.wait_for_timeout(3000)
+            
+            # Find and click on the plant row to navigate to its detail page
+            # This way we get the real plantId from the URL
+            plant_found = False
+            real_plant_id = None
+            
+            # Look for the plant in the table
+            rows = await self.page.query_selector_all('table tbody tr')
+            for row in rows:
+                text = await row.inner_text()
+                if plant_name.lower() in text.lower():
+                    # Click on the plant name link
+                    link = await row.query_selector('a')
+                    if link:
+                        href = await link.get_attribute('href')
+                        logger.info(f"Found plant link: {href}")
+                        
+                        # Extract plantId from href (e.g., "plantDetail.html?plantId=12345")
+                        if 'plantId=' in href:
+                            real_plant_id = href.split('plantId=')[1].split('&')[0]
+                            logger.info(f"Extracted real plantId: {real_plant_id}")
+                        
+                        await link.click()
+                        await self.page.wait_for_timeout(5000)
+                        plant_found = True
+                        
+                        # Also try to get from current URL
+                        current_url = self.page.url
+                        if 'plantId=' in current_url:
+                            real_plant_id = current_url.split('plantId=')[1].split('&')[0]
+                            logger.info(f"PlantId from URL: {real_plant_id}")
+                        break
+            
+            if not plant_found:
+                return {"success": False, "error": f"Usina '{plant_name}' nao encontrada na tabela"}
+            
+            if not real_plant_id:
+                return {"success": False, "error": f"Nao foi possivel obter o plantId real para '{plant_name}'"}
             
             # Parse the year-month from start_date
             month_str = start_date[:7]  # YYYY-MM
@@ -439,7 +464,7 @@ class GrowattOSSService:
                                 'Content-Type': 'application/x-www-form-urlencoded',
                                 'X-Requested-With': 'XMLHttpRequest'
                             }},
-                            body: 'plantId={plant_id}&type=2&date={month_str}'
+                            body: 'plantId={real_plant_id}&type=2&date={month_str}'
                         }});
                         const text = await res.text();
                         try {{
@@ -453,15 +478,16 @@ class GrowattOSSService:
                 }}
             ''')
             
-            logger.info(f"Growatt getPlantData response: {str(data)[:500]}")
+            logger.info(f"Growatt getPlantData response for plantId={real_plant_id}: {str(data)[:500]}")
             
             # Go back to plant list
-            await self.page.goto('https://server.growatt.com/plant.html', wait_until='networkidle')
+            await self.page.goto('https://server.growatt.com/index.html', wait_until='networkidle')
             await self.page.wait_for_timeout(2000)
 
             return {
                 "success": True,
-                "plant_name": plant.get('name'),
+                "plant_name": plant_name,
+                "plant_id": real_plant_id,
                 "start_date": start_date,
                 "end_date": end_date,
                 "data": data,
