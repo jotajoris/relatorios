@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import api from '../services/api';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
@@ -28,7 +28,9 @@ import {
   Building2,
   Mail,
   Phone,
-  Loader2
+  Loader2,
+  Upload,
+  Image
 } from 'lucide-react';
 
 const Clients = () => {
@@ -38,6 +40,8 @@ const Clients = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingClient, setEditingClient] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(null);
+  const logoInputRef = useRef(null);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
