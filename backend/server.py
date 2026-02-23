@@ -475,28 +475,44 @@ async def seed_users():
 @app.on_event("startup")
 async def startup_event():
     await seed_users()
-    # Ensure Playwright browsers are installed
+    
+    # Start Playwright installation in background (non-blocking)
+    import asyncio
     import subprocess
-    try:
-        env = os.environ.copy()
-        env['PLAYWRIGHT_BROWSERS_PATH'] = '/pw-browsers'
-        # Install browser
-        result = subprocess.run(
-            ['playwright', 'install', 'chromium'],
-            capture_output=True, text=True, timeout=180, env=env
-        )
-        logger.info(f"Playwright install chromium: exit={result.returncode}")
-        if result.stderr:
-            logger.info(f"Playwright stderr: {result.stderr[:300]}")
-        # Install system dependencies
-        result2 = subprocess.run(
-            ['playwright', 'install-deps', 'chromium'],
-            capture_output=True, text=True, timeout=180, env=env
-        )
-        logger.info(f"Playwright install-deps: exit={result2.returncode}")
-        logger.info("Playwright browsers verified/installed")
-    except Exception as e:
-        logger.warning(f"Playwright browser install issue: {e}")
+    
+    async def install_playwright_background():
+        """Install Playwright browsers in background without blocking startup"""
+        await asyncio.sleep(2)  # Let the server start first
+        try:
+            env = os.environ.copy()
+            env['PLAYWRIGHT_BROWSERS_PATH'] = '/pw-browsers'
+            # Install browser in background
+            loop = asyncio.get_event_loop()
+            result = await loop.run_in_executor(
+                None,
+                lambda: subprocess.run(
+                    ['playwright', 'install', 'chromium'],
+                    capture_output=True, text=True, timeout=180, env=env
+                )
+            )
+            logger.info(f"Playwright install chromium: exit={result.returncode}")
+            if result.stderr:
+                logger.info(f"Playwright stderr: {result.stderr[:300]}")
+            # Install system dependencies
+            result2 = await loop.run_in_executor(
+                None,
+                lambda: subprocess.run(
+                    ['playwright', 'install-deps', 'chromium'],
+                    capture_output=True, text=True, timeout=180, env=env
+                )
+            )
+            logger.info(f"Playwright install-deps: exit={result2.returncode}")
+            logger.info("Playwright browsers verified/installed")
+        except Exception as e:
+            logger.warning(f"Playwright browser install issue: {e}")
+    
+    # Fire and forget - don't await this
+    asyncio.create_task(install_playwright_background())
     
     # Start scheduled jobs
     try:
