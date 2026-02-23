@@ -74,6 +74,11 @@ Aplicação web full-stack para gerenciamento e elaboração de relatórios de u
 
 - [x] Relatório PDF unificado reescrito: Dashboard + Tabela de UCs (19/02/2026)
 
+- [x] **Correção do Dropdown de Cidade/Estado** (23/02/2026): Adicionada normalização de estados (abreviação → nome completo) no backend e frontend. Usinas com estados como "PR", "SP" agora carregam corretamente as cidades para cálculo de prognóstico por irradiância. Alterações em:
+  - `/app/backend/server.py`: Mapeamento STATE_ABBREV_MAP na API /irradiance/cities
+  - `/app/frontend/src/pages/PlantDetail.jsx`: Função normalizeState() + uso nos selects
+  - `/app/frontend/src/pages/Plants.jsx`: Mesma correção para o modal de edição de usinas
+
 ## P1 - Upcoming
 - [ ] Frontend para gerenciamento do Sistema de Créditos (distribuição entre UCs)
 - [ ] Página de Gerenciamento de Clientes (CRUD + upload de logo)
