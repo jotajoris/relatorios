@@ -407,9 +407,13 @@ class GrowattOSSService:
     async def get_plant_daily_data_range(self, plant_name: str, start_date: str, end_date: str) -> Dict[str, Any]:
         """Get daily generation data for a date range from Growatt OSS by navigating to the plant page."""
         if not self.logged_in or not self.page:
+            logger.info("Not logged in, returning error")
             return {"success": False, "error": "Nao logado"}
         try:
+            logger.info(f"Starting get_plant_daily_data_range for '{plant_name}'")
+            
             # First ensure we're on the plants list page
+            logger.info("Navigating to index.html...")
             await self.page.goto('https://server.growatt.com/index.html', wait_until='networkidle')
             await self.page.wait_for_timeout(3000)
             
@@ -418,41 +422,77 @@ class GrowattOSSService:
             plant_found = False
             real_plant_id = None
             
-            # Look for the plant in the table
+            # Look for the plant in the table - try multiple selectors
+            logger.info("Looking for plant in table...")
             rows = await self.page.query_selector_all('table tbody tr')
-            for row in rows:
-                text = await row.inner_text()
-                if plant_name.lower() in text.lower():
-                    # Click on the plant name link
-                    link = await row.query_selector('a')
-                    if link:
-                        href = await link.get_attribute('href')
-                        logger.info(f"Found plant link: {href}")
-                        
-                        # Extract plantId from href (e.g., "plantDetail.html?plantId=12345")
-                        if 'plantId=' in href:
-                            real_plant_id = href.split('plantId=')[1].split('&')[0]
-                            logger.info(f"Extracted real plantId: {real_plant_id}")
-                        
-                        await link.click()
-                        await self.page.wait_for_timeout(5000)
-                        plant_found = True
-                        
-                        # Also try to get from current URL
-                        current_url = self.page.url
-                        if 'plantId=' in current_url:
-                            real_plant_id = current_url.split('plantId=')[1].split('&')[0]
-                            logger.info(f"PlantId from URL: {real_plant_id}")
-                        break
+            logger.info(f"Found {len(rows)} rows in table")
+            
+            for idx, row in enumerate(rows):
+                try:
+                    text = await row.inner_text()
+                    logger.debug(f"Row {idx}: {text[:100]}")
+                    if plant_name.lower() in text.lower():
+                        logger.info(f"Found plant '{plant_name}' in row {idx}")
+                        # Click on the plant name link
+                        link = await row.query_selector('a')
+                        if link:
+                            href = await link.get_attribute('href')
+                            logger.info(f"Found plant link: {href}")
+                            
+                            # Extract plantId from href (e.g., "plantDetail.html?plantId=12345")
+                            if 'plantId=' in str(href):
+                                real_plant_id = str(href).split('plantId=')[1].split('&')[0]
+                                logger.info(f"Extracted real plantId: {real_plant_id}")
+                            
+                            await link.click()
+                            await self.page.wait_for_timeout(5000)
+                            plant_found = True
+                            
+                            # Also try to get from current URL
+                            current_url = self.page.url
+                            logger.info(f"Current URL after click: {current_url}")
+                            if 'plantId=' in current_url:
+                                real_plant_id = current_url.split('plantId=')[1].split('&')[0]
+                                logger.info(f"PlantId from URL: {real_plant_id}")
+                            break
+                        else:
+                            logger.warning(f"No link found in row {idx}")
+                except Exception as row_err:
+                    logger.error(f"Error processing row {idx}: {row_err}")
             
             if not plant_found:
-                return {"success": False, "error": f"Usina '{plant_name}' nao encontrada na tabela"}
+                logger.warning(f"Plant '{plant_name}' not found in table. Trying alternative method...")
+                # Alternative: use JavaScript to find and click
+                result = await self.page.evaluate(f'''
+                    () => {{
+                        const rows = document.querySelectorAll('table tbody tr');
+                        for (let row of rows) {{
+                            if (row.innerText.toLowerCase().includes('{plant_name.lower()}')) {{
+                                const link = row.querySelector('a');
+                                if (link) {{
+                                    return link.href;
+                                }}
+                            }}
+                        }}
+                        return null;
+                    }}
+                ''')
+                if result:
+                    logger.info(f"Found via JS: {result}")
+                    if 'plantId=' in str(result):
+                        real_plant_id = str(result).split('plantId=')[1].split('&')[0]
+                        await self.page.goto(result, wait_until='networkidle')
+                        await self.page.wait_for_timeout(3000)
+                        plant_found = True
+                else:
+                    return {"success": False, "error": f"Usina '{plant_name}' nao encontrada na tabela"}
             
             if not real_plant_id:
                 return {"success": False, "error": f"Nao foi possivel obter o plantId real para '{plant_name}'"}
             
             # Parse the year-month from start_date
             month_str = start_date[:7]  # YYYY-MM
+            logger.info(f"Fetching data for plantId={real_plant_id}, month={month_str}")
 
             # Now make the API call from the plant detail page context
             data = await self.page.evaluate(f'''
@@ -493,7 +533,7 @@ class GrowattOSSService:
                 "data": data,
             }
         except Exception as e:
-            logger.error(f"Growatt daily range error: {e}")
+            logger.error(f"Growatt daily range error: {e}", exc_info=True)
             return {"success": False, "error": str(e)}
         """Navigate to plant details and extract monthly generation history."""
         if not self.logged_in or not self.page:
