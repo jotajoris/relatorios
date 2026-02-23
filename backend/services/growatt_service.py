@@ -405,7 +405,7 @@ class GrowattOSSService:
             return {"success": False, "error": str(e)}
 
     async def get_plant_daily_data_range(self, plant_name: str, start_date: str, end_date: str) -> Dict[str, Any]:
-        """Get daily generation data for a date range from Growatt OSS."""
+        """Get daily generation data for a date range from Growatt OSS by navigating to the plant page."""
         if not self.logged_in or not self.page:
             return {"success": False, "error": "Nao logado"}
         try:
@@ -418,32 +418,46 @@ class GrowattOSSService:
             if not plant:
                 return {"success": False, "error": f"Usina '{plant_name}' nao encontrada"}
 
-            # Use the real plant_id for API calls, not the row number
+            # Use the real plant_id for API calls
             plant_id = plant.get('plant_id') or plant.get('id', '')
             logger.info(f"Getting daily data for plant '{plant.get('name')}' with plantId={plant_id}")
             
-            # Get monthly data which gives daily values
+            # Navigate to plant detail page first to ensure we're on the right context
+            await self.page.goto(f'https://server.growatt.com/panel/plantDetail.html?plantId={plant_id}', wait_until='networkidle')
+            await self.page.wait_for_timeout(3000)
+            
             # Parse the year-month from start_date
             month_str = start_date[:7]  # YYYY-MM
 
+            # Now make the API call from the plant detail page context
             data = await self.page.evaluate(f'''
                 async () => {{
                     try {{
                         const res = await fetch('/panel/plant/getPlantData', {{
                             method: 'POST',
-                            headers: {{'Content-Type': 'application/x-www-form-urlencoded'}},
+                            headers: {{
+                                'Content-Type': 'application/x-www-form-urlencoded',
+                                'X-Requested-With': 'XMLHttpRequest'
+                            }},
                             body: 'plantId={plant_id}&type=2&date={month_str}'
                         }});
-                        const json = await res.json();
-                        console.log('Growatt API response:', JSON.stringify(json));
-                        return json;
+                        const text = await res.text();
+                        try {{
+                            return JSON.parse(text);
+                        }} catch(e) {{
+                            return {{error: 'Parse error', raw: text.substring(0, 500)}};
+                        }}
                     }} catch(e) {{
                         return {{error: e.toString()}};
                     }}
                 }}
             ''')
             
-            logger.info(f"Growatt getPlantData response: {data}")
+            logger.info(f"Growatt getPlantData response: {str(data)[:500]}")
+            
+            # Go back to plant list
+            await self.page.goto('https://server.growatt.com/plant.html', wait_until='networkidle')
+            await self.page.wait_for_timeout(2000)
 
             return {
                 "success": True,
