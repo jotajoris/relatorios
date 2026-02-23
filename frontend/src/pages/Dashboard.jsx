@@ -7,7 +7,7 @@ import { Input } from '../components/ui/input';
 import {
   Zap, Factory, TrendingUp, Search, ChevronRight, CheckCircle,
   AlertTriangle, AlertCircle, HelpCircle, FileText, Users, BarChart3,
-  RefreshCw, Loader2, Wifi
+  RefreshCw, Loader2, Wifi, Clock
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -20,6 +20,7 @@ const Dashboard = () => {
   const [search, setSearch] = useState('');
   const [syncing, setSyncing] = useState(false);
   const [lastRefresh, setLastRefresh] = useState(null);
+  const [syncStatus, setSyncStatus] = useState(null);
   const navigate = useNavigate();
 
   const loadData = useCallback(async () => {
@@ -34,15 +35,47 @@ const Dashboard = () => {
     }
   }, []);
 
-  useEffect(() => { loadData(); }, [loadData]);
+  const loadSyncStatus = useCallback(async () => {
+    try {
+      const res = await api.get('/settings/sync-status');
+      setSyncStatus(res.data);
+    } catch (err) {
+      console.error('Error loading sync status:', err);
+    }
+  }, []);
+
+  useEffect(() => { 
+    loadData(); 
+    loadSyncStatus();
+  }, [loadData, loadSyncStatus]);
 
   // Auto-refresh every 5 minutes
   useEffect(() => {
-    const interval = setInterval(loadData, 5 * 60 * 1000);
+    const interval = setInterval(() => {
+      loadData();
+      loadSyncStatus();
+    }, 5 * 60 * 1000);
     return () => clearInterval(interval);
-  }, [loadData]);
+  }, [loadData, loadSyncStatus]);
 
   const handleSyncAll = async () => {
+    setSyncing(true);
+    try {
+      const res = await api.post('/sync/growatt/all');
+      toast.success('Sincronização iniciada! Os dados serão atualizados em breve.');
+      // Reload data after a few seconds
+      setTimeout(() => {
+        loadData();
+        loadSyncStatus();
+      }, 10000);
+    } catch (err) {
+      toast.error('Erro ao iniciar sincronização');
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  const handleSyncAllOld = async () => {
     setSyncing(true);
     try {
       const res = await api.post('/integrations/growatt/sync-all', {}, { timeout: 120000 });
