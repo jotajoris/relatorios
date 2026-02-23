@@ -373,6 +373,110 @@ class GrowattOSSService:
         
         return None
     
+    async def get_plant_id_by_navigation(self, plant_name: str) -> Optional[str]:
+        """
+        Get the Growatt plantId by navigating to the plant page.
+        This is a more reliable method when the plantId is not available in the table.
+        
+        Args:
+            plant_name: Name of the plant to navigate to
+            
+        Returns:
+            The plantId as a string, or None if not found
+        """
+        if not self.logged_in or not self.page:
+            return None
+        
+        try:
+            # Ensure we're on the plant list page
+            current_url = self.page.url
+            if '/index' not in current_url:
+                await self.page.goto('https://server.growatt.com/index')
+                await self.page.wait_for_selector('table', timeout=15000)
+            
+            # Find the plant by name in the table and click on it
+            plant_link = self.page.locator(f'a:has-text("{plant_name}")').first
+            
+            if await plant_link.count() == 0:
+                # Try partial match
+                plant_rows = await self.page.locator('table tbody tr').all()
+                for row in plant_rows:
+                    row_text = await row.text_content()
+                    if plant_name.lower() in row_text.lower():
+                        links = row.locator('a')
+                        if await links.count() > 0:
+                            plant_link = links.first
+                            break
+            
+            if await plant_link.count() > 0:
+                # Click on the plant link
+                await plant_link.click()
+                await self.page.wait_for_timeout(3000)
+                
+                # Extract plantId from URL
+                new_url = self.page.url
+                
+                # Try to extract plantId from URL parameters
+                import re
+                match = re.search(r'plantId[=:](\d+)', new_url)
+                if match:
+                    plant_id = match.group(1)
+                    logger.info(f"Found plantId {plant_id} for '{plant_name}' from URL")
+                    
+                    # Navigate back to the list
+                    await self.page.goto('https://server.growatt.com/index')
+                    await self.page.wait_for_selector('table', timeout=10000)
+                    
+                    return plant_id
+                
+                # If not in URL, try to extract from page content
+                plant_id = await self.page.evaluate('''
+                    () => {
+                        // Look for plantId in various places
+                        const scripts = document.querySelectorAll('script');
+                        for (const script of scripts) {
+                            const text = script.textContent || '';
+                            const match = text.match(/plantId['":\\s]*['"](\\d+)['"]/i);
+                            if (match) return match[1];
+                        }
+                        
+                        // Check in hidden inputs
+                        const hiddenInputs = document.querySelectorAll('input[type="hidden"]');
+                        for (const input of hiddenInputs) {
+                            if (input.name?.toLowerCase().includes('plantid')) {
+                                return input.value;
+                            }
+                        }
+                        
+                        // Check data attributes
+                        const elementsWithData = document.querySelectorAll('[data-plantid], [data-id]');
+                        for (const el of elementsWithData) {
+                            const id = el.getAttribute('data-plantid') || el.getAttribute('data-id');
+                            if (id && /^\\d+$/.test(id)) return id;
+                        }
+                        
+                        return null;
+                    }
+                ''')
+                
+                if plant_id:
+                    logger.info(f"Found plantId {plant_id} for '{plant_name}' from page content")
+                    # Navigate back
+                    await self.page.goto('https://server.growatt.com/index')
+                    await self.page.wait_for_selector('table', timeout=10000)
+                    return plant_id
+                
+                # Navigate back even if we didn't find the ID
+                await self.page.goto('https://server.growatt.com/index')
+                await self.page.wait_for_selector('table', timeout=10000)
+            
+            logger.warning(f"Could not find plantId for '{plant_name}'")
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error getting plantId by navigation: {e}")
+            return None
+
     async def sync_plant_energy_data(self, plant_name: str) -> Dict[str, Any]:
         """Get the latest energy data for a plant."""
         plant = await self.get_plant_details(plant_name)
