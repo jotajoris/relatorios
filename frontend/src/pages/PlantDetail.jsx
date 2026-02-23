@@ -31,7 +31,11 @@ import {
   Tooltip,
   ResponsiveContainer,
   ReferenceLine,
-  Legend
+  Legend,
+  AreaChart,
+  Area,
+  LineChart,
+  Line
 } from 'recharts';
 import { 
   Sun,
