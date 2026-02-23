@@ -45,6 +45,23 @@ const Settings = () => {
   const [inverterCredentials, setInverterCredentials] = useState([]);
   const [loading, setLoading] = useState(true);
   
+  // Client logins state
+  const [clientLogins, setClientLogins] = useState([]);
+  const [clientLoginDialogOpen, setClientLoginDialogOpen] = useState(false);
+  const [editingLogin, setEditingLogin] = useState(null);
+  const [clientLoginForm, setClientLoginForm] = useState({
+    inverter_app: '',
+    on_unit: '',
+    client_name: '',
+    login: '',
+    password: '',
+    site_url: '',
+    is_installer: false
+  });
+  const [savingClientLogin, setSavingClientLogin] = useState(false);
+  const [uploadingExcel, setUploadingExcel] = useState(false);
+  const excelInputRef = useRef(null);
+  
   // Inverter credential dialog
   const [inverterDialogOpen, setInverterDialogOpen] = useState(false);
   const [inverterForm, setInverterForm] = useState({
