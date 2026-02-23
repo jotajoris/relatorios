@@ -190,6 +190,52 @@ const PlantDetail = () => {
       setDownloading(false);
     }
   };
+
+  const loadImportHistory = async () => {
+    setLoadingHistory(true);
+    try {
+      const res = await api.get(`/integrations/growatt/import-history/${plantId}`);
+      setImportHistory(res.data || []);
+    } catch (err) {
+      console.error('Error loading import history:', err);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const handleImportFromGrowatt = async () => {
+    if (!importRange.start || !importRange.end) {
+      toast.error('Selecione o período');
+      return;
+    }
+    setImporting(true);
+    try {
+      const res = await api.post(`/integrations/growatt/download-range/${plantId}`, {
+        start_date: importRange.start,
+        end_date: importRange.end,
+      });
+      if (res.data.success) {
+        toast.success(`${res.data.records_saved} registros importados com sucesso!`);
+        loadImportHistory();
+        loadData();
+        loadChartData();
+        loadPowerCurve();
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Erro ao importar dados');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const openImportDialog = () => {
+    setImportDialogOpen(true);
+    loadImportHistory();
+  };
+    } finally {
+      setDownloading(false);
+    }
+  };
   
   // Form data
   const [ucFormData, setUcFormData] = useState({
