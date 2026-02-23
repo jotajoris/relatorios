@@ -255,7 +255,7 @@ const Clients = () => {
                     </div>
                     <div>
                       <h3 className="font-semibold text-neutral-900">{client.name}</h3>
-                      <p className="text-sm text-neutral-500">{client.document || 'Sem documento'}</p>
+                      <p className="text-sm text-neutral-500">{formatDocument(client.document) || 'Sem documento'}</p>
                     </div>
                   </div>
                   <DropdownMenu>
