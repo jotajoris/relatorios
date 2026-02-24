@@ -1609,7 +1609,7 @@ async def get_generation_chart(
     current_user: dict = Depends(get_current_user)
 ):
     if not month:
-        month = datetime.now(timezone.utc).strftime('%Y-%m')
+        month = today_brazil().strftime('%Y-%m')
     
     # Get all days in the month
     year, mon = map(int, month.split('-'))
