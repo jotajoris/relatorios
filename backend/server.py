@@ -14,6 +14,18 @@ from pydantic import BaseModel, Field, ConfigDict, EmailStr
 from typing import List, Optional, Dict, Any
 import uuid
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
+
+# Timezone de Brasília (UTC-3)
+BRAZIL_TZ = ZoneInfo("America/Sao_Paulo")
+
+def now_brazil():
+    """Retorna a data/hora atual no fuso horário de Brasília"""
+    return datetime.now(BRAZIL_TZ)
+
+def today_brazil():
+    """Retorna a data atual no fuso horário de Brasília"""
+    return datetime.now(BRAZIL_TZ).date()
 import bcrypt
 import jwt
 import pandas as pd
