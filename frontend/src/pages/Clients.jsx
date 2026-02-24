@@ -167,12 +167,27 @@ const Clients = () => {
   const handleLogoUpload = async (clientId, file) => {
     if (!file) return;
     
-    setUploadingLogo(clientId);
+    // Open cropper instead of uploading directly
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setImageToCrop(reader.result);
+      setCropClientId(clientId);
+      setCropperOpen(true);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleCropComplete = async (croppedBlob) => {
+    if (!croppedBlob || !cropClientId) return;
+    
+    setCropperOpen(false);
+    setUploadingLogo(cropClientId);
+    
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append('file', croppedBlob, 'logo.png');
     
     try {
-      const response = await api.post(`/upload/logo/client/${clientId}`, formData, {
+      await api.post(`/upload/logo/client/${cropClientId}`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       toast.success('Logo atualizada com sucesso!');
@@ -181,7 +196,15 @@ const Clients = () => {
       toast.error('Erro ao fazer upload da logo');
     } finally {
       setUploadingLogo(null);
+      setImageToCrop(null);
+      setCropClientId(null);
     }
+  };
+
+  const handleCropCancel = () => {
+    setCropperOpen(false);
+    setImageToCrop(null);
+    setCropClientId(null);
   };
 
   const filteredClients = clients.filter(client =>
