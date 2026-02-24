@@ -1779,7 +1779,7 @@ const PlantDetail = () => {
                     <p><strong>{plant.name}</strong></p>
                     <p>Potência: {plant.capacity_kwp} kWp</p>
                     <p>Total Investido: R$ {(plant.total_investment || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                    <p>Data de Importação: {plant.installation_date || '-'}</p>
+                    <p>Data de Instalação: {formatDate(plant.installation_date)}</p>
                     <p>Geração Anual Acordada: {plant.annual_prognosis_kwh?.toLocaleString('pt-BR')} kWh</p>
                     <p>Endereço: {plant.city} - {plant.state}, {plant.address}</p>
                   </div>
