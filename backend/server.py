@@ -3710,6 +3710,9 @@ async def download_pdf_report(
     
     # Get client
     client = await db.clients.find_one({'id': plant.get('client_id')}, {'_id': 0})
+    logger.info(f"PDF Report - Plant: {plant.get('name')}, client_id: {plant.get('client_id')}, client_found: {client is not None}")
+    if client:
+        logger.info(f"PDF Report - Client logo_url: {client.get('logo_url')}")
     
     # Parse month
     try:
