@@ -3082,7 +3082,7 @@ async def download_growatt_range(
     
     # For now, we can only get TODAY's data reliably
     # The historical data API requires the real plantId which is hard to obtain via scraping
-    today_str = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    today_str = today_brazil().strftime('%Y-%m-%d')
     daily_gen = target_plant.get('today_energy_kwh', 0)
     
     if daily_gen and daily_gen > 0:
@@ -3090,13 +3090,13 @@ async def download_growatt_range(
         if existing:
             await db.generation_data.update_one(
                 {'plant_id': plant_id, 'date': today_str},
-                {'$set': {'generation_kwh': daily_gen, 'source': 'growatt', 'updated_at': datetime.now(timezone.utc).isoformat()}}
+                {'$set': {'generation_kwh': daily_gen, 'source': 'growatt', 'updated_at': now_brazil().isoformat()}}
             )
         else:
             await db.generation_data.insert_one({
                 'id': str(uuid.uuid4()), 'plant_id': plant_id,
                 'date': today_str, 'generation_kwh': daily_gen,
-                'source': 'growatt', 'created_at': datetime.now(timezone.utc).isoformat()
+                'source': 'growatt', 'created_at': now_brazil().isoformat()
             })
         records_saved += 1
         logger.info(f"Saved today's data: {today_str} = {daily_gen} kWh")
@@ -3105,7 +3105,7 @@ async def download_growatt_range(
     # The system will sync daily data automatically via the scheduler
 
     await db.plants.update_one({'id': plant_id}, {'$set': {
-        'last_growatt_sync': datetime.now(timezone.utc).isoformat(),
+        'last_growatt_sync': now_brazil().isoformat(),
     }})
 
     await log_activity(plant_id, "growatt_download",
