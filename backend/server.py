@@ -2933,8 +2933,11 @@ async def sync_growatt_plant_data(
     if plant_data:
         if plant_data.get('capacity_kwp') and plant_data['capacity_kwp'] > 0:
             update_fields['capacity_kwp'] = plant_data['capacity_kwp']
-        if plant_data.get('installation_date'):
-            update_fields['installation_date'] = plant_data['installation_date']
+        # Always try to get installation_date from Growatt
+        growatt_install_date = plant_data.get('installation_date', '')
+        if growatt_install_date:
+            update_fields['installation_date'] = growatt_install_date
+            logger.info(f"Updating installation_date from Growatt: {growatt_install_date}")
         if plant_data.get('city'):
             update_fields['city'] = plant_data['city']
         if growatt_plant_id:
