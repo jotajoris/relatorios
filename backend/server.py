@@ -109,6 +109,18 @@ async def api_health_check():
     """API Health check endpoint"""
     return {"status": "healthy", "service": "solar-management-api"}
 
+@app.get("/api/server-time")
+async def get_server_time():
+    """Returns the current server time in Brazil timezone"""
+    brazil_now = now_brazil()
+    return {
+        "timezone": "America/Sao_Paulo",
+        "datetime": brazil_now.isoformat(),
+        "date": brazil_now.strftime('%Y-%m-%d'),
+        "time": brazil_now.strftime('%H:%M:%S'),
+        "formatted": brazil_now.strftime('%d/%m/%Y %H:%M:%S')
+    }
+
 # ==================== MODELS ====================
 
 class UserBase(BaseModel):
