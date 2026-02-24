@@ -64,8 +64,10 @@ import {
   FileSpreadsheet,
   MoreVertical,
   CloudDownload,
-  History
+  History,
+  Crop
 } from 'lucide-react';
+import ImageCropper from '../components/ImageCropper';
 import {
   DropdownMenu,
   DropdownMenuContent,
