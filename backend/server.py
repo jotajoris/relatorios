@@ -1677,7 +1677,7 @@ async def get_power_curve(
     import math
     
     if not date:
-        date = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+        date = today_brazil().strftime('%Y-%m-%d')
     
     # Get plant info
     plant = await db.plants.find_one({'id': plant_id, 'is_active': True}, {'_id': 0})
@@ -1712,10 +1712,11 @@ async def get_power_curve(
                 angle = math.pi * (t - 5) / 13  # 0 to pi over 13-hour span
                 power_kw = peak_kw * math.sin(angle) if 0 <= angle <= math.pi else 0
                 
-                # For today, only show points up to current time
-                if date == datetime.now(timezone.utc).strftime('%Y-%m-%d'):
-                    now_hour = datetime.now(timezone.utc).hour - 3  # BRT adjustment
-                    now_minute = datetime.now(timezone.utc).minute
+                # For today, only show points up to current time (Brazil timezone)
+                if date == today_brazil().strftime('%Y-%m-%d'):
+                    now_brazil_time = now_brazil()
+                    now_hour = now_brazil_time.hour
+                    now_minute = now_brazil_time.minute
                     if hour > now_hour or (hour == now_hour and minute > now_minute):
                         continue
                 
