@@ -44,6 +44,12 @@ const Clients = () => {
   const [saving, setSaving] = useState(false);
   const [uploadingLogo, setUploadingLogo] = useState(null);
   const logoInputRef = useRef(null);
+  
+  // Image cropper state
+  const [cropperOpen, setCropperOpen] = useState(false);
+  const [imageToCrop, setImageToCrop] = useState(null);
+  const [cropClientId, setCropClientId] = useState(null);
+  
   const [formData, setFormData] = useState({
     name: '',
     email: '',
