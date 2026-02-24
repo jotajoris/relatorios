@@ -1055,7 +1055,7 @@ async def upload_generation_data(
 
 # ==================== INVOICE DATA ROUTES ====================
 
-@api_router.get("/invoices", response_model=List[InvoiceData])
+@api_router.get("/invoices")
 async def list_invoices(
     plant_id: Optional[str] = None,
     consumer_unit_id: Optional[str] = None,
@@ -1068,9 +1068,19 @@ async def list_invoices(
         query['consumer_unit_id'] = consumer_unit_id
     
     invoices = await db.invoices.find(query, {'_id': 0}).sort('billing_cycle_end', -1).to_list(1000)
+    
+    # Get all consumer_unit_ids to fetch uc_numbers
+    cu_ids = list(set(i.get('consumer_unit_id') for i in invoices if i.get('consumer_unit_id')))
+    cu_docs = await db.consumer_units.find({'id': {'$in': cu_ids}}, {'_id': 0, 'id': 1, 'uc_number': 1}).to_list(1000)
+    cu_map = {cu['id']: cu.get('uc_number', '') for cu in cu_docs}
+    
     for i in invoices:
         if isinstance(i.get('created_at'), str):
             i['created_at'] = datetime.fromisoformat(i['created_at'])
+        # Add uc_number from consumer_unit if not already set
+        if not i.get('uc_number') and i.get('consumer_unit_id'):
+            i['uc_number'] = cu_map.get(i['consumer_unit_id'], '')
+    
     return invoices
 
 @api_router.post("/invoices", response_model=InvoiceData)
