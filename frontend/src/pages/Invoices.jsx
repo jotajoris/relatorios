@@ -7,6 +7,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { toast } from 'sonner';
 import api from '../services/api';
 
+// Format date from YYYY-MM-DD to DD/MM/AAAA
+const formatDate = (dateStr) => {
+  if (!dateStr) return '-';
+  const date = dateStr.split('T')[0];
+  const parts = date.split('-');
+  if (parts.length === 3) {
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+  return dateStr;
+};
+
 const CONCESSIONARIAS = [
   { value: 'copel', label: 'COPEL' },
   { value: 'energisa_ms', label: 'Energisa MS' },
