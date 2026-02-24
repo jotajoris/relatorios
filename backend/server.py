@@ -2900,12 +2900,12 @@ async def sync_growatt_plant_data(
         plant_data = next((p for p in plants_list if growatt_name.lower() in p.get('name','').lower()), None)
 
     records_saved = 0
-    today_str = datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    today_str = today_brazil().strftime('%Y-%m-%d')
     growatt_plant_id = plant_data.get('id', '') if plant_data else ''
 
     # Update plant info from Growatt (capacity, installation date, status)
     update_fields = {
-        'last_growatt_sync': datetime.now(timezone.utc).isoformat(),
+        'last_growatt_sync': now_brazil().isoformat(),
         'growatt_status': plant_data.get('status', 'unknown') if plant_data else 'unknown',
     }
     if plant_data:
