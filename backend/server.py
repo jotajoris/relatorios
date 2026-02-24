@@ -40,24 +40,13 @@ security = HTTPBearer()
 app = FastAPI(title="ON Soluções Energéticas - Solar Management API")
 
 # CORS Configuration - MUST be added BEFORE routes
-# Explicitly allow onusinas.com and common origins
-cors_origins = [
-    "https://onusinas.com",
-    "https://www.onusinas.com",
-    "http://onusinas.com",
-    "http://www.onusinas.com",
-    "https://energy-hub-24.emergent.host",
-    "http://localhost:3000",
-    "http://localhost:5173",
-    "*",  # Allow all origins as fallback
-]
-
+# Allow ALL origins to support custom domains like onusinas.com
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=cors_origins,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH", "HEAD"],
-    allow_headers=["*"],
+    allow_origins=["*"],  # Allow all origins for custom domain support
+    allow_credentials=False,  # Must be False when using allow_origins=["*"]
+    allow_methods=["*"],  # Allow all methods
+    allow_headers=["*"],  # Allow all headers
     expose_headers=["*"],
     max_age=3600,
 )
