@@ -111,6 +111,10 @@ const PlantDetail = () => {
   const [monthPrognosis, setMonthPrognosis] = useState(0);
   const [daysInMonth, setDaysInMonth] = useState(30);
   
+  // Image cropper state
+  const [cropperOpen, setCropperOpen] = useState(false);
+  const [imageToCrop, setImageToCrop] = useState(null);
+  
   // Dialogs
   const [ucDialogOpen, setUcDialogOpen] = useState(false);
   const [editingUc, setEditingUc] = useState(null);
