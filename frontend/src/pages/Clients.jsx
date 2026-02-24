@@ -436,6 +436,18 @@ const Clients = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Image Cropper Dialog */}
+      {cropperOpen && imageToCrop && (
+        <ImageCropper
+          imageSrc={imageToCrop}
+          onCropComplete={handleCropComplete}
+          onCancel={handleCropCancel}
+          aspectRatio={1}
+          circularCrop={false}
+          title="Recortar Logo do Cliente"
+        />
+      )}
     </div>
   );
 };
