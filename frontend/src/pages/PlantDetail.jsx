@@ -2630,6 +2630,18 @@ const PlantDetail = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Image Cropper Dialog */}
+      {cropperOpen && imageToCrop && (
+        <ImageCropper
+          imageSrc={imageToCrop}
+          onCropComplete={handleLogoCropComplete}
+          onCancel={handleLogoCropCancel}
+          aspectRatio={1}
+          circularCrop={false}
+          title="Recortar Logo da Usina"
+        />
+      )}
     </div>
   );
 };
