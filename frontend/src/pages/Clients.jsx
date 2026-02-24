@@ -30,8 +30,10 @@ import {
   Phone,
   Loader2,
   Upload,
-  Image
+  Image,
+  Crop
 } from 'lucide-react';
+import ImageCropper from '../components/ImageCropper';
 
 const Clients = () => {
   const [clients, setClients] = useState([]);
