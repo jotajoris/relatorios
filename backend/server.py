@@ -1405,8 +1405,8 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
     plants = await db.plants.find({'is_active': True}, {'_id': 0, 'capacity_kwp': 1}).to_list(1000)
     total_capacity_kwp = sum(p.get('capacity_kwp', 0) for p in plants)
     
-    # Get current month generation
-    now = datetime.now(timezone.utc)
+    # Get current month generation (Brazil timezone)
+    now = now_brazil()
     month_start = now.replace(day=1).strftime('%Y-%m-%d')
     month_end = now.strftime('%Y-%m-%d')
     
@@ -1446,7 +1446,7 @@ async def get_dashboard_stats(current_user: dict = Depends(get_current_user)):
 async def get_plants_summary(current_user: dict = Depends(get_current_user)):
     plants = await db.plants.find({'is_active': True}, {'_id': 0}).to_list(1000)
     
-    now = datetime.now(timezone.utc)
+    now = now_brazil()
     month_start = now.replace(day=1).strftime('%Y-%m-%d')
     
     total_capacity_mwp = 0
