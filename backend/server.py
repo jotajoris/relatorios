@@ -1,7 +1,10 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, status, BackgroundTasks
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, status, BackgroundTasks, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
@@ -39,14 +42,39 @@ security = HTTPBearer()
 # Create the main app
 app = FastAPI(title="ON Soluções Energéticas - Solar Management API")
 
-# CORS Configuration - MUST be added BEFORE routes
-# Allow ALL origins to support custom domains like onusinas.com
+# Custom CORS Middleware - Forces CORS headers on ALL responses
+class ForceCORSMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        # Handle preflight OPTIONS requests
+        if request.method == "OPTIONS":
+            response = Response(status_code=204)
+            response.headers["Access-Control-Allow-Origin"] = "*"
+            response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD"
+            response.headers["Access-Control-Allow-Headers"] = "*"
+            response.headers["Access-Control-Max-Age"] = "3600"
+            return response
+        
+        # Process the request
+        response = await call_next(request)
+        
+        # Force CORS headers on ALL responses
+        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD"
+        response.headers["Access-Control-Allow-Headers"] = "*"
+        response.headers["Access-Control-Expose-Headers"] = "*"
+        
+        return response
+
+# Add custom CORS middleware FIRST (executes last, so headers are always added)
+app.add_middleware(ForceCORSMiddleware)
+
+# Standard CORS middleware as backup
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins for custom domain support
-    allow_credentials=False,  # Must be False when using allow_origins=["*"]
-    allow_methods=["*"],  # Allow all methods
-    allow_headers=["*"],  # Allow all headers
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
     expose_headers=["*"],
     max_age=3600,
 )
