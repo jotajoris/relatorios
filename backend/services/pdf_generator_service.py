@@ -105,12 +105,13 @@ class SolarReportGenerator:
         parts = d.get('month_year','').split('-')
         period = f"{MESES.get(parts[1],parts[1])} {parts[0]}" if len(parts)==2 else d.get('month_year','')
         logo = _img(LOGO, 48, 48)
-        # Client logo
+        # Client logo - can be a Cloudinary URL or a local path
         cl_logo = None
         lu = d.get('logo_url')
         if lu:
-            lp = f"/tmp/logos/{lu.split('/')[-1]}" if lu.startswith('/api/') else lu
-            cl_logo = _img(lp, 40, 40)
+            # _img now handles both URLs and local paths
+            cl_logo = _img(lu, 40, 40)
+            logger.info(f"Loading client logo from: {lu}, result: {'success' if cl_logo else 'failed'}")
 
         title = []
         title.append(Paragraph("ON SOLUCOES ENERGETICAS", _ps('HB',11,'Helvetica-Bold',Y,TA_LEFT)))
