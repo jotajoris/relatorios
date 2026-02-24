@@ -13,6 +13,18 @@ import { toast } from 'sonner';
 
 const API_URL = process.env.REACT_APP_BACKEND_URL;
 
+// Format date from YYYY-MM-DD to DD/MM/AAAA
+const formatDate = (dateStr) => {
+  if (!dateStr) return '-';
+  // Handle ISO format or YYYY-MM-DD
+  const date = dateStr.split('T')[0];
+  const parts = date.split('-');
+  if (parts.length === 3) {
+    return `${parts[2]}/${parts[1]}/${parts[0]}`;
+  }
+  return dateStr;
+};
+
 const Dashboard = () => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
