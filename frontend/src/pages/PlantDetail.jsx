@@ -499,8 +499,25 @@ const PlantDetail = () => {
     const file = e.target.files[0];
     if (!file) return;
     
+    // Open cropper instead of uploading directly
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      setImageToCrop(reader.result);
+      setCropperOpen(true);
+    };
+    reader.readAsDataURL(file);
+    
+    // Reset input value to allow selecting the same file again
+    e.target.value = '';
+  };
+
+  const handleLogoCropComplete = async (croppedBlob) => {
+    if (!croppedBlob) return;
+    
+    setCropperOpen(false);
+    
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append('file', croppedBlob, 'logo.png');
     
     try {
       const response = await api.post(`/upload/logo/plant/${plantId}`, formData, {
@@ -513,7 +530,14 @@ const PlantDetail = () => {
       }
     } catch (error) {
       toast.error('Erro ao fazer upload da logo');
+    } finally {
+      setImageToCrop(null);
     }
+  };
+
+  const handleLogoCropCancel = () => {
+    setCropperOpen(false);
+    setImageToCrop(null);
   };
 
   const handleSaveConfig = async () => {
