@@ -4,7 +4,7 @@ Fixes: UC centered, Endereco column, % with 2 decimals on one line,
 no text cut, centered summary, better energy flow diagram,
 better Meses Anteriores table (dark text, more columns), more color
 """
-import os, io, logging
+import os, io, logging, tempfile, requests
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any
 from reportlab.lib import colors
@@ -49,10 +49,48 @@ def _n(v, d=2):
 
 def _brl(v): return f"R$ {_n(v,2)}"
 
+def _download_image(url: str) -> str:
+    """Download image from URL and return local temp file path"""
+    try:
+        response = requests.get(url, timeout=10)
+        if response.status_code == 200:
+            # Get extension from URL or default to .png
+            ext = '.png'
+            if '.jpg' in url.lower() or '.jpeg' in url.lower():
+                ext = '.jpg'
+            elif '.webp' in url.lower():
+                ext = '.webp'
+            
+            # Create temp file
+            fd, temp_path = tempfile.mkstemp(suffix=ext)
+            with os.fdopen(fd, 'wb') as f:
+                f.write(response.content)
+            return temp_path
+    except Exception as e:
+        logger.error(f"Failed to download image from {url}: {e}")
+    return None
+
 def _img(p, w, h):
-    if p and os.path.exists(p):
-        try: return Image(p, width=w, height=h)
-        except: pass
+    """Load image from local path or URL"""
+    if not p:
+        return None
+    
+    # If it's a URL, download it first
+    if p.startswith('http://') or p.startswith('https://'):
+        local_path = _download_image(p)
+        if local_path and os.path.exists(local_path):
+            try:
+                return Image(local_path, width=w, height=h)
+            except Exception as e:
+                logger.error(f"Failed to create image from downloaded file: {e}")
+        return None
+    
+    # Local file
+    if os.path.exists(p):
+        try:
+            return Image(p, width=w, height=h)
+        except Exception as e:
+            logger.error(f"Failed to create image from local file {p}: {e}")
     return None
 
 def _ps(name, sz, fn='Helvetica', cl=BK, al=TA_CENTER, ld=None):
