@@ -908,7 +908,7 @@ const PlantDetail = () => {
               {plant.installation_date && (
                 <span className="flex items-center gap-1">
                   <Calendar className="h-4 w-4" />
-                  {plant.installation_date}
+                  {formatDate(plant.installation_date)}
                 </span>
               )}
               <span className="flex items-center gap-1">
