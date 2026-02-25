@@ -355,6 +355,22 @@ class CopelCredential(BaseModel):
     last_sync: Optional[datetime] = None
     is_active: bool = True
 
+# Portal Connection - Para salvar credenciais de portais conectados
+class PortalConnectionBase(BaseModel):
+    portal_id: str  # growatt, huawei, deye, solis
+    username: str
+    password: str
+    connected: bool = True
+    last_connected: Optional[str] = None
+
+class PortalConnectionCreate(PortalConnectionBase):
+    pass
+
+class PortalConnection(PortalConnectionBase):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
 # Lista de Distribuição de Créditos
 class CreditDistributionUC(BaseModel):
     consumer_unit_id: str
