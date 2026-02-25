@@ -1069,6 +1069,52 @@ async def upload_generation_data(
         "total_processed": records_inserted + records_updated
     }
 
+# ==================== PORTAL CONNECTIONS ROUTES ====================
+
+@api_router.get("/portal-connections")
+async def list_portal_connections(current_user: dict = Depends(get_current_user)):
+    """List all saved portal connections"""
+    connections = await db.portal_connections.find({}, {'_id': 0}).to_list(100)
+    return connections
+
+@api_router.post("/portal-connections")
+async def save_portal_connection(
+    connection: PortalConnectionCreate,
+    current_user: dict = Depends(get_current_user)
+):
+    """Save or update a portal connection"""
+    # Check if connection already exists for this portal
+    existing = await db.portal_connections.find_one({'portal_id': connection.portal_id})
+    
+    if existing:
+        # Update existing
+        await db.portal_connections.update_one(
+            {'portal_id': connection.portal_id},
+            {'$set': {
+                'username': connection.username,
+                'password': connection.password,
+                'connected': connection.connected,
+                'last_connected': connection.last_connected or now_brazil().isoformat()
+            }}
+        )
+        return {"success": True, "message": "Conexão atualizada"}
+    else:
+        # Create new
+        doc = connection.model_dump()
+        doc['id'] = str(uuid.uuid4())
+        doc['created_at'] = now_brazil().isoformat()
+        doc['last_connected'] = connection.last_connected or now_brazil().isoformat()
+        await db.portal_connections.insert_one(doc)
+        return {"success": True, "message": "Conexão salva"}
+
+@api_router.delete("/portal-connections/{portal_id}")
+async def delete_portal_connection(portal_id: str, current_user: dict = Depends(get_current_user)):
+    """Delete a portal connection"""
+    result = await db.portal_connections.delete_one({'portal_id': portal_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Conexão não encontrada")
+    return {"success": True, "message": "Conexão removida"}
+
 # ==================== INVOICE DATA ROUTES ====================
 
 @api_router.get("/invoices")
