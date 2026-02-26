@@ -957,10 +957,14 @@ async def delete_consumer_unit(unit_id: str, current_user: dict = Depends(get_cu
     return {"message": "Unidade consumidora removida com sucesso"}
 
 @api_router.post("/consumer-units/fix-orphans")
-async def fix_orphan_consumer_units(current_user: dict = Depends(get_current_user)):
+async def fix_orphan_consumer_units(
+    target_plant_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
     """
-    Fix consumer units with invalid plant_id by trying to match them to existing plants.
-    This helps when plants are deleted and recreated with new IDs.
+    Fix consumer units with invalid plant_id.
+    If target_plant_id is provided, all orphans will be assigned to that plant.
+    Otherwise, tries to match by address.
     """
     # Get all valid plant IDs
     plants = await db.plants.find({'is_active': True}, {'_id': 0, 'id': 1, 'name': 1}).to_list(1000)
@@ -981,17 +985,14 @@ async def fix_orphan_consumer_units(current_user: dict = Depends(get_current_use
             orphan_count += 1
             new_plant_id = None
             
-            # Try to find matching plant by address
-            address = unit.get('address', '').lower()
-            for name, pid in plant_names.items():
-                if name in address or any(word in name for word in address.split() if len(word) > 3):
-                    new_plant_id = pid
-                    break
-            
-            # If still not found, check if it's the "BANANAS" plant
-            if not new_plant_id and 'banana' in address:
+            # If target_plant_id is provided, use it for all orphans
+            if target_plant_id and target_plant_id in valid_plant_ids:
+                new_plant_id = target_plant_id
+            else:
+                # Try to find matching plant by address
+                address = unit.get('address', '').lower()
                 for name, pid in plant_names.items():
-                    if 'banana' in name:
+                    if name in address or any(word in name for word in address.split() if len(word) > 3):
                         new_plant_id = pid
                         break
             
