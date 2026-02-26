@@ -935,6 +935,59 @@ async def delete_consumer_unit(unit_id: str, current_user: dict = Depends(get_cu
         raise HTTPException(status_code=404, detail="Unidade consumidora não encontrada")
     return {"message": "Unidade consumidora removida com sucesso"}
 
+@api_router.post("/consumer-units/fix-orphans")
+async def fix_orphan_consumer_units(current_user: dict = Depends(get_current_user)):
+    """
+    Fix consumer units with invalid plant_id by trying to match them to existing plants.
+    This helps when plants are deleted and recreated with new IDs.
+    """
+    # Get all valid plant IDs
+    plants = await db.plants.find({'is_active': True}, {'_id': 0, 'id': 1, 'name': 1}).to_list(1000)
+    valid_plant_ids = {p['id'] for p in plants}
+    plant_names = {p['name'].lower(): p['id'] for p in plants}
+    
+    # Get all consumer units
+    units = await db.consumer_units.find({'is_active': True}, {'_id': 0}).to_list(10000)
+    
+    fixed_count = 0
+    orphan_count = 0
+    
+    for unit in units:
+        plant_id = unit.get('plant_id')
+        
+        # Check if plant_id is valid
+        if plant_id and plant_id not in valid_plant_ids:
+            orphan_count += 1
+            new_plant_id = None
+            
+            # Try to find matching plant by address
+            address = unit.get('address', '').lower()
+            for name, pid in plant_names.items():
+                if name in address or any(word in name for word in address.split() if len(word) > 3):
+                    new_plant_id = pid
+                    break
+            
+            # If still not found, check if it's the "BANANAS" plant
+            if not new_plant_id and 'banana' in address:
+                for name, pid in plant_names.items():
+                    if 'banana' in name:
+                        new_plant_id = pid
+                        break
+            
+            if new_plant_id:
+                await db.consumer_units.update_one(
+                    {'id': unit['id']},
+                    {'$set': {'plant_id': new_plant_id}}
+                )
+                fixed_count += 1
+                logger.info(f"Fixed UC {unit.get('uc_number')}: {plant_id} -> {new_plant_id}")
+    
+    return {
+        "message": f"Corrigidas {fixed_count} UCs órfãs de {orphan_count} encontradas",
+        "orphan_count": orphan_count,
+        "fixed_count": fixed_count
+    }
+
 # ==================== GENERATION DATA ROUTES ====================
 
 @api_router.get("/generation-data", response_model=List[GenerationData])
