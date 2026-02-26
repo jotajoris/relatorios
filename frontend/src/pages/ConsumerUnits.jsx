@@ -260,18 +260,39 @@ const ConsumerUnits = () => {
 
   const getPlantName = (plantId) => {
     const plant = plants.find(p => p.id === plantId);
-    return plant?.name || 'Usina não encontrada';
+    return plant?.name || '';
+  };
+
+  // Find plant by UC number - useful when plant_id is missing
+  const findPlantByUC = (ucNumber) => {
+    // First check if any plant has consumer units with this UC number
+    const unit = units.find(u => u.uc_number === ucNumber);
+    if (unit?.plant_id) {
+      const plant = plants.find(p => p.id === unit.plant_id);
+      if (plant) return plant.name;
+    }
+    return '';
   };
 
   const getGeneratorUnits = () => {
     return units.filter(u => u.is_generator && u.plant_id === formData.plant_id);
   };
 
-  const filteredUnits = units.filter(unit =>
-    (unit.uc_number || '').toLowerCase().includes(search.toLowerCase()) ||
-    unit.address.toLowerCase().includes(search.toLowerCase()) ||
-    (unit.holder_name || '').toLowerCase().includes(search.toLowerCase())
-  );
+  // Enhanced search - searches across UC number, address, holder name, plant name, and city
+  const filteredUnits = units.filter(unit => {
+    const searchLower = search.toLowerCase();
+    const plantName = getPlantName(unit.plant_id);
+    const plant = plants.find(p => p.id === unit.plant_id);
+    
+    return (
+      (unit.uc_number || '').toLowerCase().includes(searchLower) ||
+      (unit.address || '').toLowerCase().includes(searchLower) ||
+      (unit.holder_name || '').toLowerCase().includes(searchLower) ||
+      plantName.toLowerCase().includes(searchLower) ||
+      (plant?.city || '').toLowerCase().includes(searchLower) ||
+      (plant?.client_name || '').toLowerCase().includes(searchLower)
+    );
+  });
 
   if (loading) {
     return (
