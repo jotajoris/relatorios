@@ -420,7 +420,9 @@ const ConsumerUnits = () => {
                   </div>
                   <div className="flex items-center gap-2 text-sm text-neutral-500">
                     <Building2 className="h-4 w-4 text-neutral-400" />
-                    {getPlantName(unit.plant_id)}
+                    {getPlantName(unit.plant_id) || (
+                      <span className="text-amber-600 text-xs">Vincular a uma usina</span>
+                    )}
                   </div>
                   {!unit.is_generator && (
                     <div className="flex items-center gap-2 text-sm text-neutral-500">
