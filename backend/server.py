@@ -928,6 +928,27 @@ async def update_consumer_unit(unit_id: str, unit_data: ConsumerUnitCreate, curr
         raise HTTPException(status_code=404, detail="Unidade consumidora não encontrada")
     return await get_consumer_unit(unit_id, current_user)
 
+@api_router.patch("/consumer-units/{unit_id}")
+async def partial_update_consumer_unit(unit_id: str, updates: Dict[str, Any], current_user: dict = Depends(get_current_user)):
+    """Partially update a consumer unit"""
+    # Filter only allowed fields
+    allowed_fields = ['plant_id', 'uc_number', 'address', 'holder_name', 'is_generator', 
+                      'percentage', 'generator_uc_id', 'copel_cpf', 'copel_login']
+    filtered_updates = {k: v for k, v in updates.items() if k in allowed_fields}
+    
+    if not filtered_updates:
+        raise HTTPException(status_code=400, detail="Nenhum campo válido para atualizar")
+    
+    result = await db.consumer_units.update_one(
+        {'id': unit_id, 'is_active': True},
+        {'$set': filtered_updates}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Unidade consumidora não encontrada")
+    
+    updated = await db.consumer_units.find_one({'id': unit_id}, {'_id': 0})
+    return updated
+
 @api_router.delete("/consumer-units/{unit_id}")
 async def delete_consumer_unit(unit_id: str, current_user: dict = Depends(get_current_user)):
     result = await db.consumer_units.update_one({'id': unit_id}, {'$set': {'is_active': False}})
