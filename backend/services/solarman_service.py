@@ -100,6 +100,63 @@ class SolarmanService:
             await self.page.goto(login_url, wait_until="networkidle", timeout=30000)
             await self.page.wait_for_timeout(3000)
             
+            # Accept cookie banner if present
+            try:
+                accept_cookies_selectors = [
+                    'button:has-text("Accept All")',
+                    'button:has-text("Accept")',
+                    'button:has-text("Aceitar")',
+                    '.cookie-accept',
+                    '#accept-cookies',
+                ]
+                for sel in accept_cookies_selectors:
+                    try:
+                        btn = self.page.locator(sel).first
+                        if await btn.is_visible(timeout=2000):
+                            await btn.click()
+                            logger.info(f"Accepted cookies with: {sel}")
+                            await self.page.wait_for_timeout(1000)
+                            break
+                    except Exception:
+                        continue
+            except Exception as e:
+                logger.debug(f"Cookie acceptance failed: {e}")
+            
+            # Handle country/region selection modal if present
+            try:
+                region_modal = self.page.locator('text=Please enter/select your country/region')
+                if await region_modal.is_visible(timeout=2000):
+                    logger.info("Country/region modal detected")
+                    
+                    # Click on the dropdown to open it
+                    dropdown = self.page.locator('text=Please enter/select your country/region').locator('..').locator('input, select, [role="combobox"]')
+                    if not await dropdown.is_visible(timeout=1000):
+                        # Try clicking on the dropdown area
+                        dropdown_area = self.page.locator('.ant-select, [class*="select"], [class*="dropdown"]').first
+                        if await dropdown_area.is_visible(timeout=1000):
+                            await dropdown_area.click()
+                            await self.page.wait_for_timeout(500)
+                    
+                    # Type Brazil to filter
+                    await self.page.keyboard.type("Brazil")
+                    await self.page.wait_for_timeout(500)
+                    
+                    # Select Brazil option
+                    brazil_option = self.page.locator('text=Brazil').first
+                    if await brazil_option.is_visible(timeout=2000):
+                        await brazil_option.click()
+                        logger.info("Selected Brazil")
+                        await self.page.wait_for_timeout(500)
+                    
+                    # Click Confirm button
+                    confirm_btn = self.page.locator('button:has-text("Confirm")').first
+                    if await confirm_btn.is_visible(timeout=2000):
+                        await confirm_btn.click()
+                        logger.info("Clicked Confirm on region modal")
+                        await self.page.wait_for_timeout(1000)
+            except Exception as e:
+                logger.debug(f"Region modal handling: {e}")
+            
             # Take screenshot for debugging
             try:
                 await self.page.screenshot(path="/tmp/solarman_login_page.png")
@@ -134,13 +191,15 @@ class SolarmanService:
                             logger.info("Filled password field")
                             break
                     
-                    # Look for login button
+                    # Look for login button - specific selectors for Solarman
                     login_btn_selectors = [
-                        'button[type="submit"]',
+                        'button:has-text("Log In")',
+                        'button:has-text("Log in")',
+                        'button:has-text("LOGIN")',
                         'button:has-text("Login")',
                         'button:has-text("登录")',
                         'button:has-text("Sign in")',
-                        'button:has-text("Log in")',
+                        'button[type="submit"]',
                         '.login-btn',
                         '#loginBtn',
                         'input[type="submit"]',
@@ -149,8 +208,10 @@ class SolarmanService:
                     for sel in login_btn_selectors:
                         try:
                             btn = self.page.locator(sel).first
-                            if await btn.is_visible(timeout=1000):
-                                await btn.click()
+                            if await btn.is_visible(timeout=2000):
+                                # Wait a bit for form validation
+                                await self.page.wait_for_timeout(500)
+                                await btn.click(force=True)
                                 login_success = True
                                 logger.info(f"Clicked login button: {sel}")
                                 break
