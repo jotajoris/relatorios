@@ -1946,8 +1946,8 @@ async def get_power_curve(
 ):
     """
     Get intraday power curve (kW) for a plant on a specific date.
-    By default returns simulated curve based on daily generation.
-    Use force_real=true to attempt fetching real data from Growatt (slower).
+    Attempts to fetch REAL data from Growatt first if credentials are configured.
+    Falls back to simulated curve based on daily generation if real data unavailable.
     """
     import math
     
@@ -1959,6 +1959,122 @@ async def get_power_curve(
     if not plant:
         raise HTTPException(status_code=404, detail="Usina não encontrada")
     
+    capacity_kwp = plant.get('capacity_kwp', 0)
+    prognosis = plant.get('monthly_prognosis_kwh', 0)
+    daily_prognosis = prognosis / 30 if prognosis > 0 else 0
+    
+    # Check if we have Growatt credentials to fetch real data
+    username = plant.get('growatt_username', '')
+    password = plant.get('growatt_password', '')
+    growatt_plant_id = plant.get('growatt_plant_id', '')
+    growatt_name = plant.get('growatt_plant_name') or plant.get('name', '')
+    
+    # Try to fetch REAL data from Growatt
+    if username and password:
+        try:
+            logger.info(f"[PowerCurve] Tentando buscar dados reais da Growatt para {plant.get('name')}")
+            await reset_growatt_oss_service()
+            service = get_growatt_oss_service()
+            login_result = await service.login(username, password)
+            
+            if login_result.get('success') and service.page:
+                # Get growatt_plant_id if we don't have it or if it's invalid (too small = row number not real ID)
+                # Real Growatt plant IDs are typically 7-8 digit numbers
+                if not growatt_plant_id or (growatt_plant_id.isdigit() and int(growatt_plant_id) < 100000):
+                    logger.info(f"[PowerCurve] Buscando ID real da usina (atual: {growatt_plant_id})")
+                    plants_list = await service.get_plants()
+                    for p in plants_list:
+                        if growatt_name.lower() in p.get('name', '').lower():
+                            new_id = p.get('plant_id') or ''
+                            # Only use if it's a valid long ID
+                            if new_id and new_id.isdigit() and int(new_id) > 100000:
+                                growatt_plant_id = new_id
+                                # Save for future use
+                                await db.plants.update_one({'id': plant_id}, {'$set': {'growatt_plant_id': growatt_plant_id}})
+                                logger.info(f"[PowerCurve] Encontrado growatt_plant_id real: {growatt_plant_id}")
+                            break
+                
+                if growatt_plant_id and growatt_plant_id.isdigit() and int(growatt_plant_id) > 100000:
+                    # Fetch power data using type=0 (power in intervals)
+                    logger.info(f"[PowerCurve] Buscando dados de potência: plantId={growatt_plant_id}, date={date}")
+                    power_data = await service.page.evaluate(f'''
+                        async () => {{
+                            try {{
+                                const res = await fetch('/panel/plant/getPlantData', {{
+                                    method: 'POST',
+                                    headers: {{'Content-Type': 'application/x-www-form-urlencoded'}},
+                                    body: 'plantId={growatt_plant_id}&type=0&date={date}'
+                                }});
+                                return await res.json();
+                            }} catch(e) {{
+                                return {{error: e.toString()}};
+                            }}
+                        }}
+                    ''')
+                    
+                    logger.info(f"[PowerCurve] Resposta Growatt: {str(power_data)[:500]}")
+                    
+                    # Parse the response
+                    if power_data and not power_data.get('error'):
+                        obj = power_data.get('obj', {})
+                        powers = obj.get('powers', [])  # Power in W at each interval
+                        times = obj.get('times', [])    # Time strings like "05:00", "05:05"
+                        
+                        if powers and times and len(powers) > 0:
+                            curve_points = []
+                            peak_kw = 0
+                            total_energy_wh = 0
+                            
+                            for i, (time_str, power_w) in enumerate(zip(times, powers)):
+                                try:
+                                    power_kw = float(power_w) / 1000 if power_w else 0
+                                    if power_kw > 0:
+                                        curve_points.append({
+                                            'time': time_str,
+                                            'power_kw': round(power_kw, 2)
+                                        })
+                                        if power_kw > peak_kw:
+                                            peak_kw = power_kw
+                                        # Estimate energy (5 min intervals = 1/12 hour)
+                                        total_energy_wh += float(power_w) / 12 if power_w else 0
+                                except (ValueError, TypeError):
+                                    pass
+                            
+                            if curve_points:
+                                total_kwh = total_energy_wh / 1000
+                                performance = (total_kwh / daily_prognosis * 100) if daily_prognosis > 0 else 0
+                                
+                                await reset_growatt_oss_service()
+                                logger.info(f"[PowerCurve] Dados reais obtidos: {len(curve_points)} pontos, peak={peak_kw:.2f}kW, total={total_kwh:.2f}kWh")
+                                
+                                return {
+                                    'plant_name': plant.get('name', ''),
+                                    'date': date,
+                                    'capacity_kwp': capacity_kwp,
+                                    'total_kwh': round(total_kwh, 2),
+                                    'peak_kw': round(peak_kw, 2),
+                                    'performance': round(performance, 1),
+                                    'status': plant.get('growatt_status') or plant.get('status', 'unknown'),
+                                    'curve': curve_points,
+                                    'source': 'growatt_real'  # REAL data from Growatt!
+                                }
+                        
+                        logger.warning(f"[PowerCurve] Dados vazios do Growatt: powers={len(powers) if powers else 0}, times={len(times) if times else 0}")
+                    else:
+                        logger.warning(f"[PowerCurve] Erro na resposta Growatt: {power_data.get('error', 'unknown')}")
+                
+                await reset_growatt_oss_service()
+            else:
+                logger.warning(f"[PowerCurve] Login Growatt falhou: {login_result.get('error', 'unknown')}")
+                await reset_growatt_oss_service()
+                
+        except Exception as e:
+            logger.error(f"[PowerCurve] Erro ao buscar dados reais: {e}")
+            await reset_growatt_oss_service()
+    
+    # FALLBACK: Generate simulated power curve based on total daily generation
+    logger.info(f"[PowerCurve] Usando dados simulados para {plant.get('name')}")
+    
     # Get generation data for the date
     gen_data = await db.generation_data.find_one(
         {'plant_id': plant_id, 'date': date},
@@ -1966,10 +2082,7 @@ async def get_power_curve(
     )
     
     total_kwh = gen_data.get('generation_kwh', 0) if gen_data else 0
-    capacity_kwp = plant.get('capacity_kwp', 0)
     
-    # Generate simulated power curve based on total daily generation
-    # This is a fast response that doesn't require Growatt login
     curve = []
     peak_kw = 0
     
@@ -2002,8 +2115,6 @@ async def get_power_curve(
                     })
     
     # Calculate performance
-    prognosis = plant.get('monthly_prognosis_kwh', 0)
-    daily_prognosis = prognosis / 30 if prognosis > 0 else 0
     performance = (total_kwh / daily_prognosis * 100) if daily_prognosis > 0 and total_kwh > 0 else 0
     
     return {

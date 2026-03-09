@@ -1368,6 +1368,12 @@ const PlantDetail = () => {
                       {powerCurveDate ? new Date(powerCurveDate + 'T12:00:00').toLocaleDateString('pt-BR') : '-'}
                     </span>
                   </div>
+                  <div className="flex justify-between text-sm pt-2 border-t border-neutral-200">
+                    <span className="text-neutral-500">Fonte:</span>
+                    <span className={`font-medium ${powerCurveData?.source === 'growatt_real' ? 'text-emerald-600' : 'text-amber-600'}`}>
+                      {powerCurveData?.source === 'growatt_real' ? '✓ Growatt (Real)' : '~ Estimado'}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>

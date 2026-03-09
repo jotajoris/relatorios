@@ -178,12 +178,19 @@ class GrowattOSSService:
                                         }
                                     }
                                     
-                                    // Method 2: Check onclick attributes
+                                    // Method 2: Check onclick attributes for plantId
                                     if (!plantId) {
                                         const elementsWithOnclick = row.querySelectorAll('[onclick]');
                                         for (const el of elementsWithOnclick) {
                                             const onclick = el.getAttribute('onclick') || '';
-                                            const match = onclick.match(/plantId[=:'"\\s]*(\d+)/i);
+                                            // Pattern 1: clickEditPlant(1,'10444778') or showPlant('1','hash',10444778)
+                                            let match = onclick.match(/[',]\\s*'?(\\d{6,})'?\\s*[,)]/);
+                                            if (match) {
+                                                plantId = match[1];
+                                                break;
+                                            }
+                                            // Pattern 2: plantId=123 or plantId:123
+                                            match = onclick.match(/plantId[=:'"\\s]*'?(\\d+)'?/i);
                                             if (match) {
                                                 plantId = match[1];
                                                 break;

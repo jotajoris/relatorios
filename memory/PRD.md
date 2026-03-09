@@ -136,7 +136,24 @@ Aplicação web full-stack para gerenciamento e elaboração de relatórios de u
   - Frontend: Formulário com campos Email, Senha, Servidor, Grupo
   - **NOTA**: Web scraping está com dificuldades devido a CAPTCHA. Aguardando API oficial (APP_ID/SECRET solicitados).
 
+- [x] **Gráfico de Curva de Potência** (09/12/2025): Implementado gráfico de potência diária na página de detalhes da usina:
+  - Backend: Endpoint `GET /api/dashboard/power-curve/{plant_id}?date=YYYY-MM-DD`
+  - Backend: Lógica para tentar buscar dados reais da Growatt OSS (via Playwright)
+  - Backend: Validação de `growatt_plant_id` real (IDs > 100000 são reais, menores são índices de tabela)
+  - Backend: Fallback para curva estimada baseada na geração diária total (modelo senoidal)
+  - Frontend: Gráfico de área Recharts mostrando potência (kW) ao longo do dia
+  - Frontend: Indicador "✓ Growatt (Real)" vs "~ Estimado" no card de estatísticas
+  - **NOTA**: Dados reais da Growatt OSS não estão disponíveis via API `/panel/plant/getPlantData` (retorna HTML). O gráfico mostra estimativa visual baseada na geração total do dia quando dados reais não disponíveis.
+  - Alterações em:
+    - `/app/backend/server.py`: Endpoint `/dashboard/power-curve/{plant_id}` reescrito
+    - `/app/backend/services/growatt_service.py`: Melhorado regex para extração de `plantId` de atributos onclick
+    - `/app/frontend/src/pages/PlantDetail.jsx`: Indicador de fonte de dados (real/estimado)
+
 ## P1 - Upcoming
+- [ ] **Curva de Potência Real da Growatt**: Investigar API alternativa para obter dados de potência em intervalos (5 min). O portal OSS não disponibiliza este endpoint via API. Possíveis soluções:
+  - Usar API oficial `openapi.growatt.com` (atualmente bloqueada 403)
+  - Navegar até página de detalhes no `server.growatt.com` após SSO do OSS
+  - Aguardar API oficial com credenciais de desenvolvedor
 - [ ] Frontend para gerenciamento do Sistema de Créditos (distribuição entre UCs)
 - [ ] Adicionar seção de detalhamento por UC beneficiária no relatório PDF (dados das faturas)
 - [ ] Implementar integrações com outros portais (Huawei FusionSolar, Deye/Sofar Solarman, Solis)
