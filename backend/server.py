@@ -56,13 +56,33 @@ app = FastAPI(title="ON Soluções Energéticas - Solar Management API")
 
 # Custom CORS Middleware - Forces CORS headers on ALL responses
 class ForceCORSMiddleware(BaseHTTPMiddleware):
+    # Allowed origins
+    ALLOWED_ORIGINS = [
+        "https://onusinas.com",
+        "https://www.onusinas.com",
+        "https://energy-hub-24.emergent.host",
+        "https://solar-report-hub.preview.emergentagent.com",
+        "http://localhost:3000",
+    ]
+    
+    def get_cors_origin(self, request: Request) -> str:
+        origin = request.headers.get("origin", "")
+        # If origin is in allowed list, return it; otherwise return wildcard
+        if origin in self.ALLOWED_ORIGINS:
+            return origin
+        # For development/preview, allow all
+        return "*"
+    
     async def dispatch(self, request: Request, call_next):
+        origin = self.get_cors_origin(request)
+        
         # Handle preflight OPTIONS requests
         if request.method == "OPTIONS":
             response = Response(status_code=204)
-            response.headers["Access-Control-Allow-Origin"] = "*"
+            response.headers["Access-Control-Allow-Origin"] = origin
             response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD"
-            response.headers["Access-Control-Allow-Headers"] = "*"
+            response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, Accept, Origin"
+            response.headers["Access-Control-Allow-Credentials"] = "true"
             response.headers["Access-Control-Max-Age"] = "3600"
             return response
         
@@ -70,10 +90,11 @@ class ForceCORSMiddleware(BaseHTTPMiddleware):
         response = await call_next(request)
         
         # Force CORS headers on ALL responses
-        response.headers["Access-Control-Allow-Origin"] = "*"
+        response.headers["Access-Control-Allow-Origin"] = origin
         response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD"
-        response.headers["Access-Control-Allow-Headers"] = "*"
-        response.headers["Access-Control-Expose-Headers"] = "*"
+        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, Accept, Origin"
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Access-Control-Expose-Headers"] = "Content-Length, Content-Type"
         
         return response
 
@@ -83,8 +104,14 @@ app.add_middleware(ForceCORSMiddleware)
 # Standard CORS middleware as backup
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
+    allow_origins=[
+        "https://onusinas.com",
+        "https://www.onusinas.com", 
+        "https://energy-hub-24.emergent.host",
+        "https://solar-report-hub.preview.emergentagent.com",
+        "http://localhost:3000",
+    ],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],
