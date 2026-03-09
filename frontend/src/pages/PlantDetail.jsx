@@ -117,6 +117,7 @@ const PlantDetail = () => {
   const [downloadingMonth, setDownloadingMonth] = useState(null);
   const [downloadJobId, setDownloadJobId] = useState(null);
   const [downloadProgress, setDownloadProgress] = useState({ processed: 0, total: 0 });
+  const [singleDownloadingUc, setSingleDownloadingUc] = useState(null); // {ucId, month} for individual download in table
   
   // Image cropper state
   const [cropperOpen, setCropperOpen] = useState(false);
@@ -133,7 +134,7 @@ const PlantDetail = () => {
   const [reportDialogOpen, setReportDialogOpen] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(null);
   const [reportType, setReportType] = useState('basic');
-  const [downloadingUc, setDownloadingUc] = useState({});  // {`${uc}-${month}`: 'loading'|'unavailable'|null}
+  const [downloadingUc, setDownloadingUc] = useState({});  // {`${uc}-${month}`: 'loading'|'unavailable'|null} - for month cards
   const [monthlySummary, setMonthlySummary] = useState([]);
   
   // Excel Upload
@@ -645,6 +646,56 @@ const PlantDetail = () => {
       console.error('Error polling job:', error);
       setDownloadingMonth(null);
       setDownloadJobId(null);
+    }
+  };
+
+  // Download individual invoice for a specific UC and month
+  const handleDownloadSingleInvoice = async (ucId, ucNumber, month) => {
+    if (singleDownloadingUc || downloadingMonth) {
+      toast.error('Já existe um download em andamento');
+      return;
+    }
+
+    const monthNames = ['','Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+    setSingleDownloadingUc({ ucId, month });
+    toast.info(`Baixando fatura UC ${ucNumber} - ${monthNames[month]}/${selectedYear}...`);
+
+    try {
+      const refMonth = `${String(month).padStart(2, '0')}/${selectedYear}`;
+      const res = await api.post(`/integrations/copel/download-invoice/${plantId}`, {
+        uc_number: ucNumber,
+        reference_month: refMonth
+      });
+
+      if (res.data.success) {
+        toast.success(`Fatura baixada: UC ${ucNumber} - ${monthNames[month]}/${selectedYear}`);
+        // Reload statuses
+        loadUcInvoiceStatus();
+        loadInvoiceDownloadStatus();
+      } else {
+        toast.warning(res.data.message || 'Fatura não disponível');
+      }
+    } catch (error) {
+      const detail = error.response?.data?.detail || 'Erro ao baixar fatura';
+      if (detail.includes('não disponível') || detail.includes('nao disponivel')) {
+        toast.warning(`Fatura indisponível na COPEL: UC ${ucNumber}`);
+        // Update status to unavailable
+        try {
+          await api.post(`/plants/${plantId}/update-download-status`, {
+            consumer_unit_id: ucId,
+            year: selectedYear,
+            month: month,
+            status: 'unavailable'
+          });
+          loadInvoiceDownloadStatus();
+        } catch (e) {
+          console.error('Error updating status:', e);
+        }
+      } else {
+        toast.error(detail);
+      }
+    } finally {
+      setSingleDownloadingUc(null);
     }
   };
 
@@ -1799,22 +1850,40 @@ const PlantDetail = () => {
                             }
                             
                             if (downloadStatus === 'error') {
+                              const isDownloadingErr = singleDownloadingUc?.ucId === uc.id && singleDownloadingUc?.month === month;
                               return (
                                 <td key={m} className="text-center py-1.5 px-1">
-                                  <AlertCircle className="h-4 w-4 text-orange-500 mx-auto" title="Erro ao baixar - tente novamente" />
+                                  <button
+                                    onClick={() => handleDownloadSingleInvoice(uc.id, uc.uc_number, month)}
+                                    disabled={!!singleDownloadingUc || !!downloadingMonth}
+                                    className="mx-auto block hover:scale-110 transition-transform"
+                                    title="Erro ao baixar - clique para tentar novamente"
+                                  >
+                                    {isDownloadingErr ? (
+                                      <Loader2 className="h-4 w-4 text-orange-500 animate-spin" />
+                                    ) : (
+                                      <AlertCircle className="h-4 w-4 text-orange-500" />
+                                    )}
+                                  </button>
                                 </td>
                               );
                             }
                             
-                            // Pending - show clock
+                            // Pending - show clock (clickable to download)
+                            const isDownloadingThis = singleDownloadingUc?.ucId === uc.id && singleDownloadingUc?.month === month;
                             return (
                               <td key={m} className="text-center py-1.5 px-1">
                                 <button
-                                  onClick={() => navigate('/faturas')}
-                                  className="mx-auto block hover:scale-110 transition-transform"
-                                  title={`Download pendente - ${['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][m]}/${selectedYear}`}
+                                  onClick={() => handleDownloadSingleInvoice(uc.id, uc.uc_number, month)}
+                                  disabled={!!singleDownloadingUc || !!downloadingMonth}
+                                  className={`mx-auto block transition-transform ${isDownloadingThis ? '' : 'hover:scale-110'}`}
+                                  title={`Clique para baixar fatura - ${['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][m]}/${selectedYear}`}
                                 >
-                                  <Clock className="h-4 w-4 text-amber-400" />
+                                  {isDownloadingThis ? (
+                                    <Loader2 className="h-4 w-4 text-amber-500 animate-spin" />
+                                  ) : (
+                                    <Clock className="h-4 w-4 text-amber-400" />
+                                  )}
                                 </button>
                               </td>
                             );
