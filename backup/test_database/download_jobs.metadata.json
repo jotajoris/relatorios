@@ -1,0 +1,1 @@
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"}],"uuid":"75b5d5a790d94a05a1a4ea4dfe35454b","collectionName":"download_jobs","type":"collection"}
