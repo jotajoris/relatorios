@@ -32,9 +32,10 @@ class SolarmanService:
     
     # Server URLs
     SERVERS = {
-        'internacional': 'https://home.solarmanpv.com',
-        'china': 'https://home.solarman.cn',
+        'internacional': 'https://pro.solarmanpv.com',
+        'china': 'https://pro.solarman.cn',
         'business': 'https://pro.solarmanpv.com',
+        'home': 'https://home.solarmanpv.com',
     }
     
     def __init__(self):
@@ -97,8 +98,8 @@ class SolarmanService:
             
             # Navigate to login page
             login_url = f"{base_url}/login" if 'home' in base_url else base_url
-            await self.page.goto(login_url, wait_until="networkidle", timeout=30000)
-            await self.page.wait_for_timeout(3000)
+            await self.page.goto(login_url, wait_until="domcontentloaded", timeout=60000)
+            await self.page.wait_for_timeout(5000)
             
             # Accept cookie banner if present
             try:
@@ -121,6 +122,49 @@ class SolarmanService:
                         continue
             except Exception as e:
                 logger.debug(f"Cookie acceptance failed: {e}")
+            
+            # Accept Terms & Conditions modal if present (Solarman Business)
+            try:
+                agree_selectors = [
+                    'button:has-text("I agree")',
+                    'button:has-text("Agree")',
+                    'button:has-text("Accept")',
+                    'button:has-text("Eu concordo")',
+                ]
+                for sel in agree_selectors:
+                    try:
+                        btn = self.page.locator(sel).first
+                        if await btn.is_visible(timeout=2000):
+                            await btn.click()
+                            logger.info(f"Accepted T&C with: {sel}")
+                            await self.page.wait_for_timeout(1000)
+                            break
+                    except Exception:
+                        continue
+            except Exception as e:
+                logger.debug(f"T&C acceptance failed: {e}")
+            
+            # Handle Region Selection modal (Solarman Business)
+            try:
+                region_title = self.page.locator('text=Please Select Region')
+                if await region_title.is_visible(timeout=2000):
+                    logger.info("Region selection modal detected")
+                    
+                    # Select International if not already selected
+                    intl_radio = self.page.locator('text=International').first
+                    if await intl_radio.is_visible(timeout=1000):
+                        await intl_radio.click()
+                        logger.info("Selected International region")
+                        await self.page.wait_for_timeout(500)
+                    
+                    # Click Confirm
+                    confirm_btn = self.page.locator('button:has-text("Confirm")').first
+                    if await confirm_btn.is_visible(timeout=2000):
+                        await confirm_btn.click()
+                        logger.info("Confirmed region selection")
+                        await self.page.wait_for_timeout(2000)
+            except Exception as e:
+                logger.debug(f"Region selection failed: {e}")
             
             # Handle country/region selection modal if present
             try:
@@ -231,6 +275,28 @@ class SolarmanService:
             
             # Wait for login to process
             await self.page.wait_for_timeout(8000)
+            
+            # Handle any post-login modals (Region selection might appear after login)
+            try:
+                # Region selection modal
+                region_title = self.page.locator('text=Please Select Region')
+                if await region_title.is_visible(timeout=3000):
+                    logger.info("Post-login region selection modal detected")
+                    
+                    # Select International
+                    intl_radio = self.page.locator('text=International').first
+                    if await intl_radio.is_visible(timeout=1000):
+                        await intl_radio.click()
+                        await self.page.wait_for_timeout(500)
+                    
+                    # Click Confirm
+                    confirm_btn = self.page.locator('button:has-text("Confirm")').first
+                    if await confirm_btn.is_visible(timeout=2000):
+                        await confirm_btn.click()
+                        logger.info("Confirmed post-login region selection")
+                        await self.page.wait_for_timeout(3000)
+            except Exception as e:
+                logger.debug(f"Post-login region modal: {e}")
             
             # Take screenshot after login attempt
             try:
