@@ -112,6 +112,30 @@ Aplicação web full-stack para gerenciamento e elaboração de relatórios de u
     - `/app/backend/server.py`: Modelos Utility/UtilityBase/UtilityCreate, endpoints CRUD, seed_utilities()
     - `/app/frontend/src/pages/PlantDetail.jsx`: Estado utilities, loadUtilities(), handleCreateUtility(), seletor e dialog
 
+- [x] **Download Automático de Faturas COPEL** (09/03/2026): Sistema completo de download em lote de faturas da Agência Virtual COPEL:
+  - Backend: Modelo `InvoiceDownloadStatus` para rastrear status por UC/mês
+  - Backend: Endpoint `GET /api/plants/{id}/invoice-download-status?year=YYYY` - retorna status de todas UCs
+  - Backend: Endpoint `POST /api/plants/{id}/download-invoices-batch` - inicia download em lote
+  - Backend: Endpoint `GET /api/download-jobs/{job_id}` - verifica progresso do job
+  - Backend: Background task que processa UCs sequencialmente via Playwright/COPEL
+  - Frontend: Tabela de status de faturas por UC com ícones:
+    - 🕐 Relógio amarelo = Download pendente
+    - ❌ X vermelho = Fatura indisponível na COPEL
+    - ✅ Check verde = Fatura baixada com sucesso
+    - ⚠️ Laranja = Erro ao baixar
+  - Frontend: Linha de botões "COPEL Auto" para iniciar download por mês
+  - Frontend: Indicador de progresso em tempo real durante download
+  - Alterações em:
+    - `/app/backend/server.py`: Modelo InvoiceDownloadStatus, endpoints e background task
+    - `/app/frontend/src/pages/PlantDetail.jsx`: Estados, funções e UI para download
+
+- [x] **Integração Solarman (Parcial)** (09/03/2026): Estrutura inicial para integração com portal Solarman (Deye/Sofar):
+  - Backend: Serviço `solarman_service.py` com Playwright
+  - Backend: Endpoints `/api/integrations/solarman/login` e `/api/portals/solarman/import-plants`
+  - Frontend: Card "Deye / Sofar (Solarman)" na página Portais
+  - Frontend: Formulário com campos Email, Senha, Servidor, Grupo
+  - **NOTA**: Web scraping está com dificuldades devido a CAPTCHA. Aguardando API oficial (APP_ID/SECRET solicitados).
+
 ## P1 - Upcoming
 - [ ] Frontend para gerenciamento do Sistema de Créditos (distribuição entre UCs)
 - [ ] Adicionar seção de detalhamento por UC beneficiária no relatório PDF (dados das faturas)

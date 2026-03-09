@@ -65,7 +65,8 @@ import {
   MoreVertical,
   CloudDownload,
   History,
-  Crop
+  Crop,
+  XCircle
 } from 'lucide-react';
 import ImageCropper from '../components/ImageCropper';
 import {
@@ -110,6 +111,12 @@ const PlantDetail = () => {
   const [ucInvoiceStatus, setUcInvoiceStatus] = useState([]);
   const [monthPrognosis, setMonthPrognosis] = useState(0);
   const [daysInMonth, setDaysInMonth] = useState(30);
+  
+  // Invoice download state
+  const [invoiceDownloadStatus, setInvoiceDownloadStatus] = useState([]);
+  const [downloadingMonth, setDownloadingMonth] = useState(null);
+  const [downloadJobId, setDownloadJobId] = useState(null);
+  const [downloadProgress, setDownloadProgress] = useState({ processed: 0, total: 0 });
   
   // Image cropper state
   const [cropperOpen, setCropperOpen] = useState(false);
@@ -541,8 +548,103 @@ const PlantDetail = () => {
         return { ...u, invoiceMonths: months };
       });
       setUcInvoiceStatus(statuses);
+      
+      // Also load download status
+      loadInvoiceDownloadStatus();
     } catch (error) {
       console.error('Error loading UC invoice status:', error);
+    }
+  };
+
+  const loadInvoiceDownloadStatus = async () => {
+    try {
+      const res = await api.get(`/plants/${plantId}/invoice-download-status?year=${selectedYear}`);
+      setInvoiceDownloadStatus(res.data || []);
+    } catch (error) {
+      console.error('Error loading invoice download status:', error);
+    }
+  };
+
+  const getUcMonthStatus = (ucId, month) => {
+    // Find UC in download status
+    const ucStatus = invoiceDownloadStatus.find(u => u.consumer_unit_id === ucId);
+    if (!ucStatus) return 'pending';
+    const monthStatus = ucStatus.months?.[month];
+    return monthStatus?.status || 'pending';
+  };
+
+  const handleDownloadInvoices = async (month) => {
+    if (downloadingMonth) {
+      toast.error('Já existe um download em andamento');
+      return;
+    }
+
+    setDownloadingMonth(month);
+    setDownloadProgress({ processed: 0, total: 0 });
+
+    try {
+      const res = await api.post(`/plants/${plantId}/download-invoices-batch`, {
+        year: selectedYear,
+        month: month
+      });
+
+      if (res.data.total_to_download === 0) {
+        toast.info('Todas as UCs já possuem fatura para este mês');
+        setDownloadingMonth(null);
+        return;
+      }
+
+      setDownloadJobId(res.data.job_id);
+      setDownloadProgress({ processed: 0, total: res.data.total_to_download });
+      toast.info(`Iniciando download de ${res.data.total_to_download} faturas...`);
+
+      // Poll for job status
+      pollDownloadJob(res.data.job_id);
+    } catch (error) {
+      const msg = error.response?.data?.detail || 'Erro ao iniciar download';
+      toast.error(msg);
+      setDownloadingMonth(null);
+    }
+  };
+
+  const pollDownloadJob = async (jobId) => {
+    try {
+      const res = await api.get(`/download-jobs/${jobId}`);
+      const job = res.data;
+
+      setDownloadProgress({ processed: job.processed || 0, total: job.total || 0 });
+
+      if (job.status === 'completed') {
+        const successCount = job.results?.filter(r => r.status === 'success').length || 0;
+        const unavailableCount = job.results?.filter(r => r.status === 'unavailable').length || 0;
+        const errorCount = job.results?.filter(r => r.status === 'error').length || 0;
+        
+        let message = `Download concluído: ${successCount} baixadas`;
+        if (unavailableCount > 0) message += `, ${unavailableCount} indisponíveis`;
+        if (errorCount > 0) message += `, ${errorCount} erros`;
+        
+        if (successCount > 0) {
+          toast.success(message);
+        } else {
+          toast.warning(message);
+        }
+        
+        setDownloadingMonth(null);
+        setDownloadJobId(null);
+        loadUcInvoiceStatus();
+        loadInvoiceDownloadStatus();
+      } else if (job.status === 'error') {
+        toast.error(job.error || 'Erro no download');
+        setDownloadingMonth(null);
+        setDownloadJobId(null);
+      } else {
+        // Still running, poll again
+        setTimeout(() => pollDownloadJob(jobId), 2000);
+      }
+    } catch (error) {
+      console.error('Error polling job:', error);
+      setDownloadingMonth(null);
+      setDownloadJobId(null);
     }
   };
 
@@ -1623,8 +1725,26 @@ const PlantDetail = () => {
           {ucInvoiceStatus.length > 0 && (
             <Card className="mt-4">
               <CardHeader className="pb-2">
-                <CardTitle className="text-base">Status de Faturas por UC - {selectedYear}</CardTitle>
-                <p className="text-xs text-neutral-500">Clique no relogio para adicionar a fatura que esta faltando</p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-base">Status de Faturas por UC - {selectedYear}</CardTitle>
+                    <p className="text-xs text-neutral-500">
+                      <Clock className="h-3 w-3 inline text-amber-400 mr-1" /> Pendente
+                      <span className="mx-2">|</span>
+                      <XCircle className="h-3 w-3 inline text-red-500 mr-1" /> Indisponível
+                      <span className="mx-2">|</span>
+                      <CheckCircle className="h-3 w-3 inline text-green-500 mr-1" /> Baixada
+                    </p>
+                  </div>
+                  {downloadingMonth && (
+                    <div className="flex items-center gap-2 text-xs bg-amber-50 px-3 py-1.5 rounded-full">
+                      <Loader2 className="h-3 w-3 animate-spin text-amber-600" />
+                      <span className="text-amber-700">
+                        Baixando {['','Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][downloadingMonth]}: {downloadProgress.processed}/{downloadProgress.total}
+                      </span>
+                    </div>
+                  )}
+                </div>
               </CardHeader>
               <CardContent>
                 <div className="overflow-x-auto">
@@ -1648,25 +1768,98 @@ const PlantDetail = () => {
                             </span>
                           </td>
                           {Array.from({length:12}, (_,m) => {
-                            const has = uc.invoiceMonths?.[m+1];
+                            const month = m + 1;
+                            const hasInvoice = uc.invoiceMonths?.[month];
+                            const downloadStatus = getUcMonthStatus(uc.id, month);
+                            
+                            // If invoice exists, always show green check
+                            if (hasInvoice) {
+                              return (
+                                <td key={m} className="text-center py-1.5 px-1">
+                                  <CheckCircle className="h-4 w-4 text-green-500 mx-auto" title="Fatura baixada" />
+                                </td>
+                              );
+                            }
+                            
+                            // Show status based on download attempt
+                            if (downloadStatus === 'success') {
+                              return (
+                                <td key={m} className="text-center py-1.5 px-1">
+                                  <CheckCircle className="h-4 w-4 text-green-500 mx-auto" title="Fatura baixada" />
+                                </td>
+                              );
+                            }
+                            
+                            if (downloadStatus === 'unavailable') {
+                              return (
+                                <td key={m} className="text-center py-1.5 px-1">
+                                  <XCircle className="h-4 w-4 text-red-500 mx-auto" title="Fatura não disponível na concessionária" />
+                                </td>
+                              );
+                            }
+                            
+                            if (downloadStatus === 'error') {
+                              return (
+                                <td key={m} className="text-center py-1.5 px-1">
+                                  <AlertCircle className="h-4 w-4 text-orange-500 mx-auto" title="Erro ao baixar - tente novamente" />
+                                </td>
+                              );
+                            }
+                            
+                            // Pending - show clock
                             return (
                               <td key={m} className="text-center py-1.5 px-1">
-                                {has ? (
-                                  <CheckCircle className="h-4 w-4 text-green-500 mx-auto" />
-                                ) : (
-                                  <button
-                                    onClick={() => navigate('/faturas')}
-                                    className="mx-auto block hover:scale-110 transition-transform"
-                                    title={`Adicionar fatura ${['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][m]}/${selectedYear}`}
-                                  >
-                                    <Clock className="h-4 w-4 text-amber-400" />
-                                  </button>
-                                )}
+                                <button
+                                  onClick={() => navigate('/faturas')}
+                                  className="mx-auto block hover:scale-110 transition-transform"
+                                  title={`Download pendente - ${['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][m]}/${selectedYear}`}
+                                >
+                                  <Clock className="h-4 w-4 text-amber-400" />
+                                </button>
                               </td>
                             );
                           })}
                         </tr>
                       ))}
+                      {/* Row for download buttons */}
+                      <tr className="bg-neutral-100 border-t-2 border-neutral-200">
+                        <td colSpan={2} className="py-2 px-2 font-medium text-neutral-600 text-[10px]">
+                          COPEL Auto
+                        </td>
+                        {Array.from({length:12}, (_,m) => {
+                          const month = m + 1;
+                          const isDownloading = downloadingMonth === month;
+                          // Check if any UC still needs download for this month
+                          const needsDownload = ucInvoiceStatus.some(uc => {
+                            const hasInvoice = uc.invoiceMonths?.[month];
+                            const status = getUcMonthStatus(uc.id, month);
+                            return !hasInvoice && status !== 'success';
+                          });
+                          
+                          return (
+                            <td key={m} className="text-center py-2 px-1">
+                              <button
+                                onClick={() => handleDownloadInvoices(month)}
+                                disabled={!!downloadingMonth || !needsDownload}
+                                className={`p-1 rounded transition-all ${
+                                  isDownloading 
+                                    ? 'bg-amber-100' 
+                                    : needsDownload 
+                                      ? 'hover:bg-blue-100 text-blue-600 hover:text-blue-700' 
+                                      : 'text-neutral-300 cursor-not-allowed'
+                                }`}
+                                title={needsDownload ? `Baixar faturas de ${['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'][m]}` : 'Todas as faturas já foram baixadas'}
+                              >
+                                {isDownloading ? (
+                                  <Loader2 className="h-4 w-4 animate-spin mx-auto" />
+                                ) : (
+                                  <CloudDownload className="h-4 w-4 mx-auto" />
+                                )}
+                              </button>
+                            </td>
+                          );
+                        })}
+                      </tr>
                     </tbody>
                   </table>
                 </div>

@@ -338,6 +338,23 @@ class InvoiceData(InvoiceDataBase):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
+# ==================== INVOICE DOWNLOAD STATUS MODEL ====================
+
+class InvoiceDownloadStatus(BaseModel):
+    """Track download status of invoices per UC per month"""
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    plant_id: str
+    consumer_unit_id: str
+    uc_number: str
+    year: int
+    month: int  # 1-12
+    status: str = "pending"  # pending, success, unavailable, error
+    error_message: Optional[str] = None
+    invoice_id: Optional[str] = None  # ID da fatura baixada (se sucesso)
+    attempted_at: Optional[datetime] = None
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
 class InverterCredentialBase(BaseModel):
     plant_id: str
     brand: str
@@ -2402,6 +2419,319 @@ async def download_copel_invoice(
 
 # ==================== COPEL CREDENTIALS ====================
 
+# ==================== INVOICE DOWNLOAD STATUS ====================
+
+@api_router.get("/plants/{plant_id}/invoice-download-status")
+async def get_invoice_download_status(
+    plant_id: str,
+    year: int,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get invoice download status for all UCs of a plant for a given year."""
+    # Get all consumer units of the plant
+    units = await db.consumer_units.find(
+        {'plant_id': plant_id, 'is_active': True},
+        {'_id': 0}
+    ).to_list(100)
+    
+    # Get all download status records for this plant/year
+    statuses = await db.invoice_download_status.find(
+        {'plant_id': plant_id, 'year': year},
+        {'_id': 0}
+    ).to_list(1000)
+    
+    # Build a lookup dict: (uc_id, month) -> status
+    status_map = {}
+    for s in statuses:
+        key = (s['consumer_unit_id'], s['month'])
+        status_map[key] = s
+    
+    # Get existing invoices for each UC/month
+    invoices = await db.invoices.find(
+        {'plant_id': plant_id, 'is_active': True},
+        {'_id': 0}
+    ).to_list(1000)
+    
+    invoice_map = {}
+    for inv in invoices:
+        ref = inv.get('reference_month', '')
+        if ref:
+            try:
+                # Parse reference month (MM/YYYY or YYYY-MM)
+                if '/' in ref:
+                    m, y = ref.split('/')
+                else:
+                    y, m = ref.split('-')
+                if int(y) == year:
+                    key = (inv.get('consumer_unit_id'), int(m))
+                    invoice_map[key] = inv
+            except:
+                pass
+    
+    # Build response with status for each UC and month
+    result = []
+    for unit in units:
+        uc_status = {
+            'consumer_unit_id': unit['id'],
+            'uc_number': unit['uc_number'],
+            'is_generator': unit.get('is_generator', False),
+            'months': {}
+        }
+        for month in range(1, 13):
+            key = (unit['id'], month)
+            # Check if invoice already exists (success)
+            if key in invoice_map:
+                uc_status['months'][month] = {
+                    'status': 'success',
+                    'invoice_id': invoice_map[key].get('id'),
+                }
+            # Check download status record
+            elif key in status_map:
+                uc_status['months'][month] = {
+                    'status': status_map[key]['status'],
+                    'error': status_map[key].get('error_message'),
+                    'attempted_at': status_map[key].get('attempted_at'),
+                }
+            else:
+                uc_status['months'][month] = {'status': 'pending'}
+        result.append(uc_status)
+    
+    return result
+
+
+@api_router.post("/plants/{plant_id}/download-invoices-batch")
+async def download_invoices_batch(
+    plant_id: str,
+    request: dict,
+    background_tasks: BackgroundTasks,
+    current_user: dict = Depends(get_current_user)
+):
+    """Start batch download of invoices for a specific month from COPEL."""
+    plant = await db.plants.find_one({'id': plant_id, 'is_active': True}, {'_id': 0})
+    if not plant:
+        raise HTTPException(status_code=404, detail="Usina não encontrada")
+    
+    cnpj = plant.get('copel_cnpj', '')
+    password = plant.get('copel_password', '')
+    
+    if not cnpj or not password:
+        raise HTTPException(status_code=400, detail="Credenciais COPEL não configuradas. Vá em Configurações da Usina.")
+    
+    year = request.get('year', datetime.now().year)
+    month = request.get('month')
+    
+    if not month:
+        raise HTTPException(status_code=400, detail="Mês é obrigatório")
+    
+    # Get UCs that need download (pending or unavailable can be retried)
+    units = await db.consumer_units.find(
+        {'plant_id': plant_id, 'is_active': True},
+        {'_id': 0}
+    ).to_list(100)
+    
+    # Filter UCs that don't have invoice for this month yet
+    ucs_to_download = []
+    for unit in units:
+        # Check if invoice exists
+        ref_month = f"{month:02d}/{year}"
+        existing_invoice = await db.invoices.find_one({
+            'consumer_unit_id': unit['id'],
+            'reference_month': ref_month,
+            'is_active': True
+        })
+        if not existing_invoice:
+            ucs_to_download.append(unit)
+    
+    if not ucs_to_download:
+        return {
+            "success": True,
+            "message": "Todas as UCs já possuem fatura para este mês",
+            "total_to_download": 0
+        }
+    
+    # Start background task for downloading
+    job_id = str(uuid.uuid4())
+    
+    # Initialize job status
+    await db.download_jobs.insert_one({
+        'id': job_id,
+        'plant_id': plant_id,
+        'year': year,
+        'month': month,
+        'status': 'running',
+        'total': len(ucs_to_download),
+        'processed': 0,
+        'results': [],
+        'created_at': datetime.now(timezone.utc).isoformat(),
+    })
+    
+    # Run download in background
+    background_tasks.add_task(
+        _download_invoices_background,
+        job_id, plant_id, cnpj, password, year, month, ucs_to_download
+    )
+    
+    return {
+        "success": True,
+        "job_id": job_id,
+        "total_to_download": len(ucs_to_download),
+        "message": f"Iniciando download de {len(ucs_to_download)} faturas..."
+    }
+
+
+async def _download_invoices_background(
+    job_id: str,
+    plant_id: str,
+    cnpj: str,
+    password: str,
+    year: int,
+    month: int,
+    ucs: List[dict]
+):
+    """Background task to download invoices sequentially."""
+    from services.copel_ava_service import CopelAVAService
+    from services.pdf_parser_service import parse_copel_invoice
+    from io import BytesIO
+    
+    service = CopelAVAService()
+    results = []
+    
+    try:
+        # Login to COPEL
+        login_result = await service.login(cnpj, password)
+        if not login_result.get('success'):
+            await db.download_jobs.update_one(
+                {'id': job_id},
+                {'$set': {
+                    'status': 'error',
+                    'error': login_result.get('error', 'Login COPEL falhou'),
+                    'finished_at': datetime.now(timezone.utc).isoformat()
+                }}
+            )
+            return
+        
+        ref_month = f"{month:02d}/{year}"
+        
+        for i, uc in enumerate(ucs):
+            uc_number = uc['uc_number']
+            uc_id = uc['id']
+            result = {'uc_number': uc_number, 'consumer_unit_id': uc_id}
+            
+            try:
+                # Try to download invoice
+                pdf_data = await service.download_invoice(uc_number, ref_month)
+                
+                if pdf_data:
+                    # Parse the PDF
+                    parsed = parse_copel_invoice(BytesIO(pdf_data))
+                    
+                    if parsed.get('success'):
+                        # Save invoice to database
+                        invoice_data = {
+                            'id': str(uuid.uuid4()),
+                            'plant_id': plant_id,
+                            'consumer_unit_id': uc_id,
+                            'reference_month': ref_month,
+                            'due_date': parsed.get('due_date', ''),
+                            'total_amount_brl': parsed.get('total_amount', 0),
+                            'energy_consumed_kwh': parsed.get('energy_consumed_kwh', 0),
+                            'energy_injected_fp_kwh': parsed.get('energy_injected_kwh', 0),
+                            'energy_compensated_kwh': parsed.get('energy_compensated_kwh', 0),
+                            'source': 'copel_auto',
+                            'is_active': True,
+                            'created_at': datetime.now(timezone.utc).isoformat(),
+                        }
+                        await db.invoices.insert_one(invoice_data)
+                        
+                        # Update download status
+                        await db.invoice_download_status.update_one(
+                            {'plant_id': plant_id, 'consumer_unit_id': uc_id, 'year': year, 'month': month},
+                            {'$set': {
+                                'status': 'success',
+                                'invoice_id': invoice_data['id'],
+                                'attempted_at': datetime.now(timezone.utc).isoformat(),
+                                'error_message': None,
+                            }},
+                            upsert=True
+                        )
+                        result['status'] = 'success'
+                        result['invoice_id'] = invoice_data['id']
+                    else:
+                        result['status'] = 'error'
+                        result['error'] = 'Erro ao processar PDF'
+                        await db.invoice_download_status.update_one(
+                            {'plant_id': plant_id, 'consumer_unit_id': uc_id, 'year': year, 'month': month},
+                            {'$set': {
+                                'status': 'error',
+                                'error_message': 'Erro ao processar PDF',
+                                'attempted_at': datetime.now(timezone.utc).isoformat(),
+                            }},
+                            upsert=True
+                        )
+                else:
+                    # Invoice not available
+                    result['status'] = 'unavailable'
+                    await db.invoice_download_status.update_one(
+                        {'plant_id': plant_id, 'consumer_unit_id': uc_id, 'year': year, 'month': month},
+                        {'$set': {
+                            'status': 'unavailable',
+                            'error_message': 'Fatura não disponível na COPEL',
+                            'attempted_at': datetime.now(timezone.utc).isoformat(),
+                        }},
+                        upsert=True
+                    )
+            except Exception as e:
+                result['status'] = 'error'
+                result['error'] = str(e)
+                await db.invoice_download_status.update_one(
+                    {'plant_id': plant_id, 'consumer_unit_id': uc_id, 'year': year, 'month': month},
+                    {'$set': {
+                        'status': 'error',
+                        'error_message': str(e),
+                        'attempted_at': datetime.now(timezone.utc).isoformat(),
+                    }},
+                    upsert=True
+                )
+            
+            results.append(result)
+            
+            # Update job progress
+            await db.download_jobs.update_one(
+                {'id': job_id},
+                {'$set': {
+                    'processed': i + 1,
+                    'results': results,
+                }}
+            )
+    except Exception as e:
+        logger.error(f"Background download error: {e}")
+        await db.download_jobs.update_one(
+            {'id': job_id},
+            {'$set': {'status': 'error', 'error': str(e)}}
+        )
+    finally:
+        await service.close()
+        await db.download_jobs.update_one(
+            {'id': job_id},
+            {'$set': {
+                'status': 'completed',
+                'finished_at': datetime.now(timezone.utc).isoformat()
+            }}
+        )
+
+
+@api_router.get("/download-jobs/{job_id}")
+async def get_download_job_status(
+    job_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get status of a download job."""
+    job = await db.download_jobs.find_one({'id': job_id}, {'_id': 0})
+    if not job:
+        raise HTTPException(status_code=404, detail="Job não encontrado")
+    return job
+
+
 @api_router.post("/copel-credentials")
 async def create_copel_credential(cred_data: CopelCredentialCreate, current_user: dict = Depends(get_current_user)):
     cred = CopelCredential(
@@ -2931,7 +3261,7 @@ async def generate_pdf_report(
 
 # ==================== COPEL INTEGRATION ====================
 
-from services.copel_service import CopelService, test_copel_login, download_copel_invoice
+from services.copel_service import CopelService, test_copel_login, download_copel_invoice as copel_download_invoice
 
 class CopelLoginRequest(BaseModel):
     cpf_cnpj: str
@@ -2984,7 +3314,7 @@ async def download_copel_invoice_endpoint(request: CopelSyncRequest, current_use
     if not unit:
         raise HTTPException(status_code=404, detail="Unidade consumidora não encontrada")
     
-    result = await download_copel_invoice(request.cpf_cnpj, request.password)
+    result = await copel_download_invoice(request.cpf_cnpj, request.password)
     
     if not result.get('success'):
         raise HTTPException(status_code=400, detail=result.get('error', 'Falha ao baixar fatura'))
