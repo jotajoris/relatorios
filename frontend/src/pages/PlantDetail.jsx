@@ -167,6 +167,13 @@ const PlantDetail = () => {
   const [importHistory, setImportHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
 
+  // Utilities (Concessionárias) state
+  const [utilities, setUtilities] = useState([]);
+  const [loadingUtilities, setLoadingUtilities] = useState(false);
+  const [newUtilityDialogOpen, setNewUtilityDialogOpen] = useState(false);
+  const [newUtilityName, setNewUtilityName] = useState('');
+  const [savingUtility, setSavingUtility] = useState(false);
+
   // Sync Growatt data for this plant
   const handleSyncGrowattDirect = async () => {
     setSyncingGrowatt(true);
@@ -402,6 +409,50 @@ const PlantDetail = () => {
       loadUcInvoiceStatus();
     }
   }, [plantId, selectedYear]);
+
+  // Load utilities (concessionárias) when config dialog opens
+  useEffect(() => {
+    if (configDialogOpen) {
+      loadUtilities();
+    }
+  }, [configDialogOpen]);
+
+  const loadUtilities = async () => {
+    setLoadingUtilities(true);
+    try {
+      const res = await api.get('/utilities');
+      setUtilities(res.data || []);
+    } catch (err) {
+      console.error('Error loading utilities:', err);
+      setUtilities([]);
+    } finally {
+      setLoadingUtilities(false);
+    }
+  };
+
+  const handleCreateUtility = async () => {
+    if (!newUtilityName.trim()) {
+      toast.error('Nome da concessionária é obrigatório');
+      return;
+    }
+    setSavingUtility(true);
+    try {
+      const res = await api.post('/utilities', { name: newUtilityName.trim() });
+      if (res.data.success) {
+        toast.success('Concessionária cadastrada com sucesso!');
+        setNewUtilityDialogOpen(false);
+        setNewUtilityName('');
+        // Reload utilities and select the new one
+        await loadUtilities();
+        setPlantFormData(prev => ({ ...prev, utility_id: res.data.utility.id }));
+      }
+    } catch (err) {
+      const msg = err.response?.data?.detail || 'Erro ao cadastrar concessionária';
+      toast.error(msg);
+    } finally {
+      setSavingUtility(false);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -2213,6 +2264,42 @@ const PlantDetail = () => {
               </Select>
             </div>
 
+            {/* Concessionária (Utility) Selection */}
+            <div className="space-y-2">
+              <Label>Concessionária</Label>
+              <div className="flex gap-2">
+                <Select
+                  value={plantFormData.utility_id || ''}
+                  onValueChange={(v) => setPlantFormData({...plantFormData, utility_id: v})}
+                  disabled={loadingUtilities}
+                >
+                  <SelectTrigger className="flex-1" data-testid="utility-select">
+                    <SelectValue placeholder={loadingUtilities ? "Carregando..." : "Selecione a concessionária"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {utilities.map(u => (
+                      <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  size="icon"
+                  onClick={() => setNewUtilityDialogOpen(true)}
+                  title="Adicionar nova concessionária"
+                  data-testid="add-utility-btn"
+                >
+                  <Plus className="h-4 w-4" />
+                </Button>
+              </div>
+              {plantFormData.utility_id && (
+                <p className="text-xs text-neutral-500">
+                  Concessionária: {utilities.find(u => u.id === plantFormData.utility_id)?.name || '-'}
+                </p>
+              )}
+            </div>
+
             {/* COPEL Credentials */}
             <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
               <Label className="text-sm font-semibold flex items-center gap-2">
@@ -2626,6 +2713,45 @@ const PlantDetail = () => {
               ) : (
                 'Importar dados'
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Nova Concessionária */}
+      <Dialog open={newUtilityDialogOpen} onOpenChange={setNewUtilityDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Adicionar Nova Concessionária</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Nome da Concessionária</Label>
+              <Input
+                value={newUtilityName}
+                onChange={(e) => setNewUtilityName(e.target.value)}
+                placeholder="Ex: COPEL, Celesc, Energisa MS"
+                data-testid="new-utility-name-input"
+              />
+            </div>
+            <p className="text-xs text-neutral-500">
+              Adicione a distribuidora de energia que atende a região da usina.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => {
+              setNewUtilityDialogOpen(false);
+              setNewUtilityName('');
+            }}>
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleCreateUtility} 
+              disabled={savingUtility || !newUtilityName.trim()}
+              className="bg-[#FFD600] hover:bg-[#EAB308] text-[#1A1A1A]"
+              data-testid="save-utility-btn"
+            >
+              {savingUtility ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Salvar'}
             </Button>
           </DialogFooter>
         </DialogContent>

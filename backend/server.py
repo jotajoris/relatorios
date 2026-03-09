@@ -167,6 +167,24 @@ class Client(ClientBase):
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     is_active: bool = True
 
+# ==================== UTILITY (CONCESSIONÁRIA) MODELS ====================
+
+class UtilityBase(BaseModel):
+    name: str  # Ex: COPEL, Celesc, Energisa MS
+    code: Optional[str] = None  # Código identificador
+    state: Optional[str] = None  # Estado principal de atuação
+
+class UtilityCreate(UtilityBase):
+    pass
+
+class Utility(UtilityBase):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    is_active: bool = True
+
+# ==================== PLANT MODELS ====================
+
 class PlantBase(BaseModel):
     name: str
     client_id: str
@@ -178,6 +196,7 @@ class PlantBase(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     inverter_brand: Optional[str] = None
+    utility_id: Optional[str] = None  # ID da concessionária
     monthly_prognosis_kwh: Optional[float] = None
     annual_prognosis_kwh: Optional[float] = None
     total_investment: Optional[float] = None
@@ -617,6 +636,7 @@ async def seed_irradiance_cities():
 async def startup_event():
     await seed_users()
     await seed_irradiance_cities()
+    await seed_utilities()
     
     # Start Playwright installation in background (non-blocking)
     import asyncio
@@ -706,6 +726,85 @@ async def delete_client(client_id: str, current_user: dict = Depends(get_current
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Cliente não encontrado")
     return {"message": "Cliente removido com sucesso"}
+
+# ==================== UTILITIES (CONCESSIONÁRIAS) ROUTES ====================
+
+@api_router.get("/utilities")
+async def list_utilities(current_user: dict = Depends(get_current_user)):
+    """List all utilities (concessionárias)"""
+    utilities = await db.utilities.find({'is_active': True}, {'_id': 0}).to_list(100)
+    for u in utilities:
+        if isinstance(u.get('created_at'), str):
+            u['created_at'] = datetime.fromisoformat(u['created_at'])
+    return utilities
+
+@api_router.get("/utilities/{utility_id}")
+async def get_utility(utility_id: str, current_user: dict = Depends(get_current_user)):
+    """Get a specific utility"""
+    utility = await db.utilities.find_one({'id': utility_id, 'is_active': True}, {'_id': 0})
+    if not utility:
+        raise HTTPException(status_code=404, detail="Concessionária não encontrada")
+    if isinstance(utility.get('created_at'), str):
+        utility['created_at'] = datetime.fromisoformat(utility['created_at'])
+    return utility
+
+@api_router.post("/utilities")
+async def create_utility(utility_data: UtilityCreate, current_user: dict = Depends(get_current_user)):
+    """Create a new utility"""
+    # Check if utility with same name already exists
+    existing = await db.utilities.find_one({'name': utility_data.name, 'is_active': True})
+    if existing:
+        raise HTTPException(status_code=400, detail="Concessionária com este nome já existe")
+    
+    utility = Utility(**utility_data.model_dump())
+    doc = utility.model_dump()
+    doc['created_at'] = doc['created_at'].isoformat()
+    await db.utilities.insert_one(doc)
+    # Remove _id before returning (MongoDB adds it automatically)
+    doc.pop('_id', None)
+    return {"success": True, "utility": doc}
+
+@api_router.put("/utilities/{utility_id}")
+async def update_utility(utility_id: str, utility_data: UtilityCreate, current_user: dict = Depends(get_current_user)):
+    """Update a utility"""
+    result = await db.utilities.update_one(
+        {'id': utility_id, 'is_active': True},
+        {'$set': utility_data.model_dump()}
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Concessionária não encontrada")
+    return await get_utility(utility_id, current_user)
+
+@api_router.delete("/utilities/{utility_id}")
+async def delete_utility(utility_id: str, current_user: dict = Depends(get_current_user)):
+    """Delete a utility (soft delete)"""
+    result = await db.utilities.update_one({'id': utility_id}, {'$set': {'is_active': False}})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Concessionária não encontrada")
+    return {"message": "Concessionária removida com sucesso"}
+
+# Seed initial utilities
+async def seed_utilities():
+    """Create initial utilities if they don't exist"""
+    initial_utilities = [
+        {"name": "COPEL", "code": "copel", "state": "PR"},
+        {"name": "Celesc", "code": "celesc", "state": "SC"},
+        {"name": "Energisa MS", "code": "energisa_ms", "state": "MS"},
+        {"name": "CPFL Paulista", "code": "cpfl_paulista", "state": "SP"},
+        {"name": "Enel SP", "code": "enel_sp", "state": "SP"},
+        {"name": "Cemig", "code": "cemig", "state": "MG"},
+        {"name": "Light", "code": "light", "state": "RJ"},
+        {"name": "Coelba", "code": "coelba", "state": "BA"},
+    ]
+    
+    for util_data in initial_utilities:
+        existing = await db.utilities.find_one({'name': util_data['name']})
+        if not existing:
+            utility = Utility(**util_data)
+            doc = utility.model_dump()
+            doc['created_at'] = doc['created_at'].isoformat()
+            await db.utilities.insert_one(doc)
+            logger.info(f"Created utility: {util_data['name']}")
 
 # ==================== LOGO UPLOAD ====================
 

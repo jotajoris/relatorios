@@ -4,6 +4,15 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Hide Emergent badge */
+#emergent-badge,
+a[href*="emergent.sh"][style*="position: fixed"],
+a[href*="emergent-badge"] {
+    display: none !important;
+    visibility: hidden !important;
+    opacity: 0 !important;
+}
+
 :root {
     --brand-yellow: #FFD600;
     --brand-yellow-hover: #EAB308;

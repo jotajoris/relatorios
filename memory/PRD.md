@@ -100,6 +100,18 @@ Aplicação web full-stack para gerenciamento e elaboração de relatórios de u
 - [x] **Salvamento do Growatt PlantId** (23/02/2026): A sincronização automática agora salva o `growatt_plant_id` real da usina no banco de dados para uso futuro.
   - Alterações em: `/app/backend/services/scheduler.py`
 
+- [x] **Gerenciamento de Concessionárias (Utilities)** (09/03/2026): Implementado sistema completo de gerenciamento de concessionárias de energia:
+  - Backend: Modelo `Utility` com campos name, code, state
+  - Backend: Endpoints CRUD completos (`GET/POST/PUT/DELETE /api/utilities`)
+  - Backend: Seed inicial com concessionárias principais (COPEL, Celesc, Energisa MS, CPFL Paulista, Enel SP, Cemig, Light, Coelba)
+  - Backend: Campo `utility_id` adicionado ao modelo Plant para vincular usina à concessionária
+  - Frontend: Seletor dropdown de concessionárias no formulário de edição da usina
+  - Frontend: Botão "+" para adicionar novas concessionárias sem sair do formulário
+  - Frontend: Dialog para criação de novas concessionárias
+  - Alterações em:
+    - `/app/backend/server.py`: Modelos Utility/UtilityBase/UtilityCreate, endpoints CRUD, seed_utilities()
+    - `/app/frontend/src/pages/PlantDetail.jsx`: Estado utilities, loadUtilities(), handleCreateUtility(), seletor e dialog
+
 ## P1 - Upcoming
 - [ ] Frontend para gerenciamento do Sistema de Créditos (distribuição entre UCs)
 - [ ] Adicionar seção de detalhamento por UC beneficiária no relatório PDF (dados das faturas)
