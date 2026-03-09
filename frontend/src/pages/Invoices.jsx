@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Upload, FileText, Search, Trash2, CheckCircle, AlertCircle, Loader2, Filter, ArrowLeft } from 'lucide-react';
+import { Upload, FileText, Search, Trash2, CheckCircle, AlertCircle, Loader2, Filter, ArrowLeft, CloudDownload, Calendar } from 'lucide-react';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
@@ -33,6 +33,13 @@ const InvoicesPage = () => {
   const [savingInvoice, setSavingInvoice] = useState(false);
   const [showEditForm, setShowEditForm] = useState(false);
   const [parsedMeta, setParsedMeta] = useState(null);
+  
+  // Global download states
+  const [globalDownloadMonth, setGlobalDownloadMonth] = useState(new Date().getMonth() + 1);
+  const [globalDownloadYear, setGlobalDownloadYear] = useState(new Date().getFullYear());
+  const [globalDownloading, setGlobalDownloading] = useState(false);
+  const [globalJobId, setGlobalJobId] = useState(null);
+  const [globalProgress, setGlobalProgress] = useState({ processed: 0, total: 0, currentUc: '', currentPlant: '' });
 
   const loadInvoices = useCallback(async () => {
     try {
@@ -46,6 +53,79 @@ const InvoicesPage = () => {
   }, []);
 
   useEffect(() => { loadInvoices(); }, [loadInvoices]);
+
+  // Global download functions
+  const handleGlobalDownload = async () => {
+    if (globalDownloading) {
+      toast.error('Já existe um download em andamento');
+      return;
+    }
+
+    setGlobalDownloading(true);
+    setGlobalProgress({ processed: 0, total: 0, currentUc: '', currentPlant: '' });
+
+    try {
+      const res = await api.post('/invoices/download-all-plants', {
+        year: globalDownloadYear,
+        month: globalDownloadMonth
+      });
+
+      if (res.data.total_to_download === 0) {
+        toast.info(res.data.message || 'Todas as faturas já foram baixadas');
+        setGlobalDownloading(false);
+        return;
+      }
+
+      setGlobalJobId(res.data.job_id);
+      setGlobalProgress({ processed: 0, total: res.data.total_to_download, currentUc: '', currentPlant: '' });
+      toast.info(`Iniciando download de ${res.data.total_to_download} faturas de ${res.data.plants_count} usinas...`);
+      
+      pollGlobalJob(res.data.job_id);
+    } catch (error) {
+      const msg = error.response?.data?.detail || 'Erro ao iniciar download global';
+      toast.error(msg);
+      setGlobalDownloading(false);
+    }
+  };
+
+  const pollGlobalJob = async (jobId) => {
+    try {
+      const res = await api.get(`/download-jobs/${jobId}`);
+      const job = res.data;
+
+      setGlobalProgress({
+        processed: job.processed || 0,
+        total: job.total || 0,
+        currentUc: job.current_uc || '',
+        currentPlant: job.current_plant || ''
+      });
+
+      if (job.status === 'completed') {
+        const summary = job.summary || {};
+        const msg = `Download concluído: ${summary.success || 0} baixadas, ${summary.unavailable || 0} indisponíveis, ${summary.error || 0} erros`;
+        
+        if (summary.success > 0) {
+          toast.success(msg);
+        } else {
+          toast.warning(msg);
+        }
+        
+        setGlobalDownloading(false);
+        setGlobalJobId(null);
+        loadInvoices();
+      } else if (job.status === 'error') {
+        toast.error(job.error || 'Erro no download global');
+        setGlobalDownloading(false);
+        setGlobalJobId(null);
+      } else {
+        setTimeout(() => pollGlobalJob(jobId), 2000);
+      }
+    } catch (error) {
+      console.error('Error polling global job:', error);
+      setGlobalDownloading(false);
+      setGlobalJobId(null);
+    }
+  };
 
   const handleFileUpload = async (e) => {
     const files = Array.from(e.target.files || []);
@@ -365,6 +445,72 @@ const InvoicesPage = () => {
                   </span>
                 </Button>
               </label>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* COPEL Global Download Card */}
+      <Card className="border-2 border-blue-200 bg-blue-50/30">
+        <CardContent className="p-6">
+          <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
+            <div className="flex-1">
+              <h3 className="font-semibold text-[#1A1A1A] mb-1 flex items-center gap-2">
+                <CloudDownload className="h-5 w-5 text-blue-600" />
+                Baixar Todas - COPEL
+              </h3>
+              <p className="text-sm text-neutral-500">
+                Baixa automaticamente as faturas de todas as UCs de todas as usinas com COPEL configurado.
+              </p>
+              {globalDownloading && globalProgress.currentUc && (
+                <div className="mt-2 text-xs bg-blue-100 px-3 py-1.5 rounded-md inline-flex items-center gap-2">
+                  <Loader2 className="h-3 w-3 animate-spin text-blue-600" />
+                  <span>
+                    Baixando UC <strong>{globalProgress.currentUc}</strong> - {globalProgress.currentPlant}... 
+                    <span className="ml-1 font-medium">{globalProgress.processed}/{globalProgress.total}</span>
+                  </span>
+                </div>
+              )}
+            </div>
+            <div className="flex items-center gap-2 w-full md:w-auto">
+              <Select value={String(globalDownloadMonth)} onValueChange={(v) => setGlobalDownloadMonth(parseInt(v))}>
+                <SelectTrigger className="w-[100px]" data-testid="global-month-select">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'].map((m, i) => (
+                    <SelectItem key={i+1} value={String(i+1)}>{m}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={String(globalDownloadYear)} onValueChange={(v) => setGlobalDownloadYear(parseInt(v))}>
+                <SelectTrigger className="w-[90px]" data-testid="global-year-select">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[2024, 2025, 2026].map((y) => (
+                    <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button 
+                onClick={handleGlobalDownload}
+                disabled={globalDownloading}
+                className="bg-blue-600 hover:bg-blue-700 text-white gap-2"
+                data-testid="global-download-btn"
+              >
+                {globalDownloading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    {globalProgress.processed}/{globalProgress.total}
+                  </>
+                ) : (
+                  <>
+                    <CloudDownload className="h-4 w-4" />
+                    Baixar Todas
+                  </>
+                )}
+              </Button>
             </div>
           </div>
         </CardContent>
