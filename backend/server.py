@@ -3931,6 +3931,143 @@ async def upload_growatt_excel(
         "total_processed": records_inserted + records_updated
     }
 
+# ==================== SOLARMAN INTEGRATION (Deye/Sofar) ====================
+
+from services.solarman_service import get_solarman_service, reset_solarman_service
+
+class SolarmanLoginRequest(BaseModel):
+    email: str
+    password: str
+    server: str = 'internacional'  # internacional, china, business
+    group: Optional[str] = None
+
+@api_router.post("/integrations/solarman/login")
+async def solarman_login(request: SolarmanLoginRequest, current_user: dict = Depends(get_current_user)):
+    """Login to Solarman portal and get plant list"""
+    try:
+        await reset_solarman_service()
+        service = get_solarman_service()
+        login_result = await service.login(
+            request.email, 
+            request.password, 
+            request.server,
+            request.group
+        )
+    
+        if not login_result.get('success'):
+            raise HTTPException(status_code=400, detail=login_result.get('error', 'Login Solarman falhou'))
+    
+        return {
+            "success": True,
+            "message": "Login realizado com sucesso",
+            "plants": login_result.get('plants', []),
+            "total": login_result.get('total', 0)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Solarman login error: {e}")
+        await reset_solarman_service()
+        raise HTTPException(status_code=500, detail=f"Erro ao conectar com Solarman: {str(e)}")
+
+@api_router.post("/integrations/solarman/plants")
+async def list_solarman_plants(request: SolarmanLoginRequest, current_user: dict = Depends(get_current_user)):
+    """List all plants from Solarman account"""
+    service = get_solarman_service()
+    
+    # Login if not already logged in
+    if not service.logged_in:
+        login_result = await service.login(request.email, request.password, request.server, request.group)
+        if not login_result.get('success'):
+            raise HTTPException(status_code=400, detail=login_result.get('error', 'Login Solarman falhou'))
+    
+    # Get plants
+    plants = await service.get_plants()
+    
+    return {
+        "success": True,
+        "plants": plants,
+        "total": len(plants)
+    }
+
+@api_router.post("/portals/solarman/import-plants")
+async def import_solarman_plants(
+    request: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """Import selected Solarman plants into the system."""
+    email = request.get('email', '')
+    password = request.get('password', '')
+    server = request.get('server', 'internacional')
+    group = request.get('group', '')
+    selected_plants = request.get('plants', [])
+    client_id = request.get('client_id', '')
+
+    if not selected_plants:
+        raise HTTPException(status_code=400, detail="Nenhuma usina selecionada")
+
+    # Verify client exists if provided
+    if client_id:
+        client = await db.clients.find_one({'id': client_id, 'is_active': True})
+        if not client:
+            raise HTTPException(status_code=404, detail="Cliente nao encontrado")
+
+    imported = []
+    skipped = []
+
+    for sp in selected_plants:
+        # Check if already exists by name
+        existing = await db.plants.find_one({
+            'name': {'$regex': f'^{sp["name"]}$', '$options': 'i'},
+            'is_active': True
+        })
+        if existing:
+            # Update existing with Solarman credentials if missing
+            update_fields = {
+                'solarman_email': email,
+                'solarman_password': password,
+                'solarman_server': server,
+                'solarman_group': group,
+                'solarman_plant_name': sp.get('name', ''),
+                'solarman_plant_id': sp.get('id', ''),
+                'inverter_integration': 'solarman',
+            }
+            if sp.get('capacity_kwp') and not existing.get('capacity_kwp'):
+                update_fields['capacity_kwp'] = float(sp.get('capacity_kwp', 0))
+            await db.plants.update_one({'id': existing['id']}, {'$set': update_fields})
+            skipped.append(sp['name'])
+            continue
+
+        plant = Plant(
+            name=sp.get('name', ''),
+            client_id=client_id or '',
+            capacity_kwp=float(sp.get('capacity_kwp', 0)),
+            inverter_brand='deye',  # Default to Deye for Solarman
+        )
+        doc = plant.model_dump()
+        doc['created_at'] = doc['created_at'].isoformat()
+        doc['solarman_plant_name'] = sp.get('name', '')
+        doc['solarman_plant_id'] = sp.get('id', '')
+        doc['solarman_email'] = email
+        doc['solarman_password'] = password
+        doc['solarman_server'] = server
+        doc['solarman_group'] = group
+        doc['inverter_integration'] = 'solarman'
+        await db.plants.insert_one(doc)
+        imported.append(sp['name'])
+
+        await log_activity(plant.id, "imported_from_solarman",
+            f"Usina importada do Solarman: {sp['name']} ({sp.get('capacity_kwp',0)} kWp)",
+            current_user.get('name'))
+
+    return {
+        "success": True,
+        "imported": imported,
+        "skipped": skipped,
+        "total_imported": len(imported),
+        "total_skipped": len(skipped),
+    }
+
 # ==================== PDF REPORT GENERATION ====================
 
 from services.pdf_generator_service import generate_plant_report

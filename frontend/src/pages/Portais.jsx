@@ -14,15 +14,15 @@ import {
 
 const PORTALS = [
   { id: 'growatt', name: 'Growatt (ShinePhone)', color: '#FFD600', available: true },
+  { id: 'solarman', name: 'Deye / Sofar (Solarman)', color: '#0066CC', available: true },
   { id: 'huawei', name: 'Huawei (FusionSolar)', color: '#E60012', available: false },
-  { id: 'deye', name: 'Deye / Sofar (Solarman)', color: '#0066CC', available: false },
   { id: 'solis', name: 'Solis (SolisCloud)', color: '#00B050', available: false },
 ];
 
 const Portais = () => {
   const [activePortal, setActivePortal] = useState('growatt');
   const [portalConnections, setPortalConnections] = useState({});
-  const [credentials, setCredentials] = useState({ username: '', password: '' });
+  const [credentials, setCredentials] = useState({ username: '', password: '', server: 'internacional', group: '' });
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [plants, setPlants] = useState([]);
@@ -41,6 +41,23 @@ const Portais = () => {
     loadExistingPlants();
   }, []);
 
+  // Update credentials when switching portals
+  useEffect(() => {
+    const connection = portalConnections[activePortal];
+    if (connection) {
+      setCredentials({
+        username: connection.username || connection.email || '',
+        password: connection.password || '',
+        server: connection.server || 'internacional',
+        group: connection.group || ''
+      });
+    } else {
+      setCredentials({ username: '', password: '', server: 'internacional', group: '' });
+    }
+    setPlants([]);
+    setSelectedPlants(new Set());
+  }, [activePortal, portalConnections]);
+
   const loadSavedConnections = async () => {
     try {
       const res = await api.get('/portal-connections');
@@ -49,14 +66,6 @@ const Portais = () => {
         connections[conn.portal_id] = conn;
       });
       setPortalConnections(connections);
-      
-      // If there's a saved Growatt connection, set the credentials
-      if (connections.growatt) {
-        setCredentials({
-          username: connections.growatt.username || '',
-          password: connections.growatt.password || ''
-        });
-      }
     } catch (err) {
       // Silently fail if endpoint doesn't exist yet
     }
@@ -73,8 +82,11 @@ const Portais = () => {
     try {
       const res = await api.get('/plants');
       setExistingPlants(res.data);
-      // Create a set of growatt_name for quick lookup
-      const imported = new Set(res.data.map(p => p.growatt_name?.toLowerCase()).filter(Boolean));
+      // Create a set of growatt_name and solarman_plant_name for quick lookup
+      const imported = new Set([
+        ...res.data.map(p => p.growatt_name?.toLowerCase()).filter(Boolean),
+        ...res.data.map(p => p.solarman_plant_name?.toLowerCase()).filter(Boolean)
+      ]);
       setImportedPlantIds(imported);
     } catch (err) {}
   };
@@ -82,6 +94,7 @@ const Portais = () => {
   const isPlantImported = useCallback((plantName) => {
     return existingPlants.some(p => 
       p.growatt_name?.toLowerCase() === plantName?.toLowerCase() ||
+      p.solarman_plant_name?.toLowerCase() === plantName?.toLowerCase() ||
       p.name?.toLowerCase() === plantName?.toLowerCase()
     );
   }, [existingPlants]);
@@ -89,6 +102,7 @@ const Portais = () => {
   const getImportedPlant = useCallback((plantName) => {
     return existingPlants.find(p => 
       p.growatt_name?.toLowerCase() === plantName?.toLowerCase() ||
+      p.solarman_plant_name?.toLowerCase() === plantName?.toLowerCase() ||
       p.name?.toLowerCase() === plantName?.toLowerCase()
     );
   }, [existingPlants]);
@@ -100,7 +114,7 @@ const Portais = () => {
       return;
     }
     if (!credentials.username || !credentials.password) {
-      toast.error('Preencha usuário e senha');
+      toast.error('Preencha usuário/email e senha');
       return;
     }
     
@@ -109,21 +123,35 @@ const Portais = () => {
     setSelectedPlants(new Set());
     
     try {
-      const res = await api.post('/integrations/growatt/login', {
-        username: credentials.username,
-        password: credentials.password,
-      });
+      let res;
       
-      if (res.data.success !== false) {
+      if (activePortal === 'growatt') {
+        res = await api.post('/integrations/growatt/login', {
+          username: credentials.username,
+          password: credentials.password,
+        });
+      } else if (activePortal === 'solarman') {
+        res = await api.post('/integrations/solarman/login', {
+          email: credentials.username,
+          password: credentials.password,
+          server: credentials.server || 'internacional',
+          group: credentials.group || '',
+        });
+      }
+      
+      if (res?.data?.success !== false) {
         const p = res.data.plants || [];
         setPlants(p);
         
         // Save connection
-        await saveConnection(portal.id, credentials.username, credentials.password, true);
+        await saveConnection(portal.id, credentials.username, credentials.password, true, {
+          server: credentials.server,
+          group: credentials.group
+        });
         
         toast.success(`Conectado! ${p.length} usinas encontradas`);
       } else {
-        toast.error(res.data.error || 'Erro ao conectar');
+        toast.error(res?.data?.error || 'Erro ao conectar');
       }
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Erro ao conectar com o portal');
@@ -137,7 +165,7 @@ const Portais = () => {
     if (!portal?.available) return;
     
     const connection = portalConnections[activePortal];
-    const user = credentials.username || connection?.username;
+    const user = credentials.username || connection?.username || connection?.email;
     const pass = credentials.password || connection?.password;
     
     if (!user || !pass) {
@@ -148,18 +176,29 @@ const Portais = () => {
     setRefreshing(true);
     
     try {
-      const res = await api.post('/integrations/growatt/login', {
-        username: user,
-        password: pass,
-      });
+      let res;
       
-      if (res.data.success !== false) {
+      if (activePortal === 'growatt') {
+        res = await api.post('/integrations/growatt/login', {
+          username: user,
+          password: pass,
+        });
+      } else if (activePortal === 'solarman') {
+        res = await api.post('/integrations/solarman/login', {
+          email: user,
+          password: pass,
+          server: credentials.server || connection?.server || 'internacional',
+          group: credentials.group || connection?.group || '',
+        });
+      }
+      
+      if (res?.data?.success !== false) {
         const p = res.data.plants || [];
         setPlants(p);
         await loadExistingPlants(); // Refresh imported plants list
         toast.success(`Lista atualizada! ${p.length} usinas`);
       } else {
-        toast.error(res.data.error || 'Erro ao atualizar');
+        toast.error(res?.data?.error || 'Erro ao atualizar');
       }
     } catch (err) {
       toast.error(err.response?.data?.detail || 'Erro ao atualizar lista');
@@ -168,19 +207,22 @@ const Portais = () => {
     }
   };
 
-  const saveConnection = async (portalId, username, password, connected) => {
+  const saveConnection = async (portalId, username, password, connected, extras = {}) => {
     try {
       await api.post('/portal-connections', {
         portal_id: portalId,
         username,
+        email: portalId === 'solarman' ? username : undefined,
         password,
         connected,
+        server: extras.server,
+        group: extras.group,
         last_connected: new Date().toISOString()
       });
       
       setPortalConnections(prev => ({
         ...prev,
-        [portalId]: { portal_id: portalId, username, password, connected }
+        [portalId]: { portal_id: portalId, username, password, connected, ...extras }
       }));
     } catch (err) {
       // Silently fail
@@ -244,16 +286,31 @@ const Portais = () => {
         status: plants[i].status,
         total_energy_kwh: plants[i].total_energy_kwh,
         device_count: plants[i].device_count,
+        id: plants[i].id,
       }));
       
-      const res = await api.post('/portals/growatt/import-plants', {
-        username: credentials.username || portalConnections[activePortal]?.username,
-        password: credentials.password || portalConnections[activePortal]?.password,
-        plants: selected,
-        client_id: selectedClient,
-      });
+      let res;
+      const connection = portalConnections[activePortal];
       
-      if (res.data.success) {
+      if (activePortal === 'growatt') {
+        res = await api.post('/portals/growatt/import-plants', {
+          username: credentials.username || connection?.username,
+          password: credentials.password || connection?.password,
+          plants: selected,
+          client_id: selectedClient,
+        });
+      } else if (activePortal === 'solarman') {
+        res = await api.post('/portals/solarman/import-plants', {
+          email: credentials.username || connection?.username || connection?.email,
+          password: credentials.password || connection?.password,
+          server: credentials.server || connection?.server || 'internacional',
+          group: credentials.group || connection?.group || '',
+          plants: selected,
+          client_id: selectedClient,
+        });
+      }
+      
+      if (res?.data?.success) {
         toast.success(`${res.data.total_imported} usinas importadas!`);
         setSelectedPlants(new Set());
         await loadExistingPlants(); // Refresh to update imported status
@@ -269,16 +326,26 @@ const Portais = () => {
     const importedPlant = getImportedPlant(plantName);
     if (!importedPlant) return;
     
-    if (!window.confirm(`Deseja parar de acompanhar a usina "${plantName}"? Isso removerá o vínculo com a Growatt, mas manterá os dados históricos.`)) {
+    const portalName = activePortal === 'solarman' ? 'Solarman' : 'Growatt';
+    if (!window.confirm(`Deseja parar de acompanhar a usina "${plantName}"? Isso removerá o vínculo com a ${portalName}, mas manterá os dados históricos.`)) {
       return;
     }
     
     try {
-      await api.patch(`/plants/${importedPlant.id}`, {
+      const updateFields = activePortal === 'solarman' ? {
+        solarman_plant_name: null,
+        solarman_plant_id: null,
+        solarman_email: null,
+        solarman_password: null,
+        solarman_server: null,
+        solarman_group: null
+      } : {
         growatt_name: null,
         growatt_plant_id: null,
         last_growatt_sync: null
-      });
+      };
+      
+      await api.patch(`/plants/${importedPlant.id}`, updateFields);
       toast.success(`Usina "${plantName}" removida do acompanhamento`);
       await loadExistingPlants();
     } catch (err) {
@@ -386,14 +453,15 @@ const Portais = () => {
           </CardHeader>
           <CardContent className="space-y-4">
             {/* Credentials Section */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
               <div className="space-y-1">
-                <Label className="text-xs">Usuário / Código Instalador</Label>
+                <Label className="text-xs">{activePortal === 'solarman' ? 'Email' : 'Usuário / Código Instalador'}</Label>
                 <Input 
                   value={credentials.username} 
                   onChange={e => setCredentials({ ...credentials, username: e.target.value })}
-                  placeholder="Ex: BTAVB001" 
+                  placeholder={activePortal === 'solarman' ? 'email@exemplo.com' : 'Ex: BTAVB001'} 
                   disabled={isConnected}
+                  data-testid="portal-username-input"
                 />
               </div>
               <div className="space-y-1">
@@ -405,6 +473,7 @@ const Portais = () => {
                     onChange={e => setCredentials({ ...credentials, password: e.target.value })}
                     placeholder="Senha do portal" 
                     disabled={isConnected}
+                    data-testid="portal-password-input"
                   />
                   <button 
                     type="button"
@@ -415,12 +484,43 @@ const Portais = () => {
                   </button>
                 </div>
               </div>
+
+              {/* Solarman-specific fields */}
+              {activePortal === 'solarman' && (
+                <>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Servidor</Label>
+                    <select 
+                      value={credentials.server || 'internacional'} 
+                      onChange={e => setCredentials({ ...credentials, server: e.target.value })}
+                      disabled={isConnected}
+                      className="w-full h-9 px-3 rounded-md border border-neutral-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#FFD600]"
+                      data-testid="solarman-server-select"
+                    >
+                      <option value="internacional">Internacional</option>
+                      <option value="china">China</option>
+                      <option value="business">Business</option>
+                    </select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Grupo/Organização</Label>
+                    <Input 
+                      value={credentials.group || ''} 
+                      onChange={e => setCredentials({ ...credentials, group: e.target.value })}
+                      placeholder="Ex: ON SOLUCOES" 
+                      disabled={isConnected}
+                      data-testid="solarman-group-input"
+                    />
+                  </div>
+                </>
+              )}
               
               {!isConnected ? (
                 <Button 
                   onClick={handleConnect}
                   disabled={loading} 
                   className="bg-[#1A1A1A] hover:bg-[#333] text-white h-9"
+                  data-testid="portal-connect-btn"
                 >
                   {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Link className="h-4 w-4 mr-2" />}
                   {loading ? 'Conectando...' : 'Conectar'}
@@ -430,18 +530,22 @@ const Portais = () => {
                   onClick={handleRefreshPlants}
                   disabled={refreshing} 
                   className="bg-[#FFD600] hover:bg-[#EAB308] text-[#1A1A1A] h-9"
+                  data-testid="portal-refresh-btn"
                 >
                   {refreshing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
                   {refreshing ? 'Atualizando...' : 'Atualizar Lista'}
                 </Button>
               )}
-              
-              {isConnected && (
-                <div className="text-xs text-neutral-500">
-                  Conectado como: <strong>{currentConnection?.username}</strong>
-                </div>
-              )}
             </div>
+
+            {isConnected && (
+              <div className="text-xs text-neutral-500">
+                Conectado como: <strong>{currentConnection?.username || currentConnection?.email}</strong>
+                {activePortal === 'solarman' && currentConnection?.group && (
+                  <span> | Grupo: <strong>{currentConnection.group}</strong></span>
+                )}
+              </div>
+            )}
 
             {/* Plants List */}
             {plants.length > 0 && (
