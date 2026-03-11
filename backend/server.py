@@ -4826,8 +4826,8 @@ async def complete_solarman_login(
                 'type': 'pro',
                 'cookies': cookies,
                 'logged_in': True,
-                'captured_at': datetime.now(BRT).isoformat(),
-                'expires_at': (datetime.now(BRT) + timedelta(days=7)).isoformat()
+                'captured_at': datetime.now(timezone.utc).isoformat(),
+                'expires_at': (datetime.now(timezone.utc) + timedelta(days=7)).isoformat()
             }},
             upsert=True
         )
