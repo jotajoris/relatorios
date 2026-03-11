@@ -253,18 +253,17 @@ class SolarmanSessionService:
             
             cookies = session.get('cookies', [])
             auth_token = session.get('auth_token')
-            local_storage = session.get('local_storage', {})
-            session_storage = session.get('session_storage', {})
             
             # Build cookie header string
             cookie_str = '; '.join([f"{c['name']}={c['value']}" for c in cookies]) if cookies else ''
             
-            # Headers with proper authentication
+            # Headers with proper authentication (based on working cURL)
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
                 'Accept': 'application/json, text/plain, */*',
-                'Accept-Language': 'pt-BR,pt;q=0.9,en;q=0.8',
-                'Referer': f'{self.PORTAL_URL}/',
+                'Accept-Language': 'pt-BR,pt;q=0.9,en-US;q=0.8,en;q=0.7',
+                'Content-Type': 'application/json;charset=UTF-8',
+                'Referer': f'{self.PORTAL_URL}/business/maintain/plant',
                 'Origin': self.PORTAL_URL,
             }
             
@@ -273,119 +272,92 @@ class SolarmanSessionService:
             
             # Add Authorization header from captured token
             if auth_token:
-                # Clean the token (remove Bearer prefix if present)
                 token_value = auth_token.strip()
                 if token_value.lower().startswith('bearer '):
                     token_value = token_value[7:]
                 headers['Authorization'] = f'Bearer {token_value}'
                 logger.info(f"[Solarman] Usando token de autenticação (len={len(token_value)})")
             else:
-                # Try to extract token from cookies as fallback
-                for cookie in cookies:
-                    if cookie['name'].lower() in ['tokenkey', 'token', 'access_token']:
-                        headers['Authorization'] = f'Bearer {cookie["value"]}'
-                        logger.info(f"[Solarman] Usando token de cookie: {cookie['name']}")
-                        break
-            
-            # Log session info for debugging
-            logger.info(f"[Solarman] Tentando buscar usinas com {len(cookies)} cookies")
-            logger.info(f"[Solarman] Headers: {list(headers.keys())}")
-            logger.info(f"[Solarman] Has Authorization: {'Authorization' in headers}")
+                return {'success': False, 'error': 'Token de autenticação não encontrado na sessão'}
             
             async with aiohttp.ClientSession() as http_session:
-                # Try different API endpoints for Solarman PRO
-                # These endpoints are based on common Solarman API patterns
-                endpoints = [
-                    # Station/Plant list endpoints
-                    ('/maintain-s/maintain/station/page', 'POST', {'page': 1, 'size': 100}),
-                    ('/maintain-s/maintain/station/list', 'GET', None),
-                    ('/business/station/list', 'GET', None),
-                    ('/api/v1/plant/list', 'GET', None),
-                    ('/api/station/list', 'GET', None),
-                    ('/maintain/plant/list', 'GET', None),
-                    ('/business/maintain/plant/list', 'GET', None),
-                    # Alternative patterns
-                    ('/station/v1.0/list', 'GET', None),
-                    ('/plant/v1.0/list', 'GET', None),
-                ]
+                # Use the correct endpoint discovered from user's cURL
+                url = f"{self.PORTAL_URL}/maintain-s/operating/station/v2/search?page=1&size=100&order.direction=ASC&order.property=name"
+                body = {"station": {"powerTypeList": ["PV"]}}
                 
-                for endpoint, method, body in endpoints:
-                    try:
-                        url = f"{self.API_BASE}{endpoint}"
-                        logger.debug(f"[Solarman] Tentando {method} {url}")
+                logger.info(f"[Solarman] Buscando usinas via {url}")
+                
+                try:
+                    async with http_session.post(url, headers=headers, json=body, timeout=30, ssl=False) as resp:
+                        response_status = resp.status
+                        response_text = await resp.text()
                         
-                        if method == 'POST':
-                            async with http_session.post(url, headers=headers, json=body, timeout=30, ssl=False) as resp:
-                                response_status = resp.status
-                                response_text = await resp.text()
-                        else:
-                            async with http_session.get(url, headers=headers, timeout=30, ssl=False) as resp:
-                                response_status = resp.status
-                                response_text = await resp.text()
-                        
-                        logger.debug(f"[Solarman] {endpoint} -> status {response_status}")
+                        logger.info(f"[Solarman] Resposta: status {response_status}")
                         
                         if response_status == 200:
                             try:
                                 data = json.loads(response_text)
                                 
-                                # Check various response formats
-                                plants = None
-                                if isinstance(data, dict):
-                                    # Handle different API response structures
-                                    if data.get('success') == True or data.get('code') == 0 or data.get('code') == '0':
-                                        plants = data.get('data', data.get('list', data.get('plants', data.get('stationList', data.get('records', [])))))
-                                        # If data is a dict with list inside
-                                        if isinstance(plants, dict):
-                                            plants = plants.get('records', plants.get('list', plants.get('data', [])))
-                                    elif data.get('success') == False or data.get('code') not in [0, '0', None]:
-                                        logger.debug(f"[Solarman] API error response: {data.get('msg', data.get('message', 'Unknown'))}")
-                                        continue
-                                    else:
-                                        plants = data.get('data', data.get('list', data.get('plants', data.get('stationList', []))))
-                                elif isinstance(data, list):
-                                    plants = data
+                                # Parse the response structure
+                                raw_plants = data.get('data', [])
+                                total = data.get('total', len(raw_plants))
                                 
-                                if plants and len(plants) > 0:
-                                    logger.info(f"[Solarman] Encontradas {len(plants)} usinas via {endpoint}")
-                                    return {
-                                        'success': True,
-                                        'plants': plants,
-                                        'count': len(plants),
-                                        'endpoint': endpoint
-                                    }
+                                # Extract station info from nested structure
+                                plants = []
+                                for item in raw_plants:
+                                    station = item.get('station', item)
+                                    plants.append({
+                                        'id': station.get('id'),
+                                        'name': station.get('name'),
+                                        'address': station.get('locationAddress'),
+                                        'capacity': station.get('installedCapacity'),
+                                        'networkStatus': station.get('networkStatus'),
+                                        'type': station.get('type'),
+                                        'operating': station.get('operating'),
+                                        'gridInterconnectionType': station.get('gridInterconnectionType'),
+                                        'generationTotal': station.get('generationTotal'),
+                                        'generationPower': station.get('generationPower'),
+                                        'timezone': station.get('regionTimezone'),
+                                        'createdDate': station.get('createdDate'),
+                                        'tags': item.get('tags', []),
+                                        'following': item.get('following', False),
+                                    })
+                                
+                                logger.info(f"[Solarman] Encontradas {len(plants)} usinas")
+                                return {
+                                    'success': True,
+                                    'plants': plants,
+                                    'count': len(plants),
+                                    'total': total
+                                }
                             except json.JSONDecodeError:
-                                logger.debug(f"[Solarman] {endpoint} não retornou JSON válido: {response_text[:200]}")
-                                continue
+                                logger.error(f"[Solarman] JSON inválido: {response_text[:200]}")
+                                return {'success': False, 'error': 'Resposta inválida do servidor'}
+                        
                         elif response_status == 401:
-                            logger.warning(f"[Solarman] 401 Unauthorized em {endpoint}")
-                            continue  # Try next endpoint instead of failing immediately
-                        elif response_status == 403:
-                            logger.warning(f"[Solarman] 403 Forbidden em {endpoint}")
-                            continue
-                                
-                    except asyncio.TimeoutError:
-                        logger.debug(f"[Solarman] Timeout em {endpoint}")
-                        continue
-                    except Exception as e:
-                        logger.debug(f"[Solarman] Erro em {endpoint}: {e}")
-                        continue
-                
-                # If none of the endpoints worked, check if we got any 401s
-                logger.warning("[Solarman] Nenhum endpoint retornou dados")
-                
-                # Invalidate session since nothing worked
-                if self.db is not None:
-                    await self.db.solarman_sessions.update_one(
-                        {'type': 'pro'},
-                        {'$set': {'logged_in': False}}
-                    )
-                
-                return {
-                    'success': False, 
-                    'error': 'Não foi possível buscar as usinas. Verifique se o login está ativo no portal.',
-                    'hint': 'Tente fazer login novamente no Solarman e use o bookmarklet para capturar a sessão.'
-                }
+                            logger.warning("[Solarman] 401 Unauthorized - sessão expirada")
+                            # Invalidate session
+                            if self.db is not None:
+                                await self.db.solarman_sessions.update_one(
+                                    {'type': 'pro'},
+                                    {'$set': {'logged_in': False}}
+                                )
+                            return {'success': False, 'error': 'Sessão expirada. Faça login novamente.'}
+                        
+                        else:
+                            logger.error(f"[Solarman] Erro {response_status}: {response_text[:200]}")
+                            return {
+                                'success': False, 
+                                'error': f'Erro ao buscar usinas (status {response_status})',
+                                'details': response_text[:200]
+                            }
+                            
+                except asyncio.TimeoutError:
+                    logger.error("[Solarman] Timeout ao buscar usinas")
+                    return {'success': False, 'error': 'Timeout ao conectar com o servidor Solarman'}
+                except Exception as e:
+                    logger.error(f"[Solarman] Erro de conexão: {e}")
+                    return {'success': False, 'error': str(e)}
                 
         except Exception as e:
             logger.error(f"[Solarman] Erro geral: {e}")

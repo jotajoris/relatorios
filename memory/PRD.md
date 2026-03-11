@@ -166,6 +166,15 @@ Aplicação web full-stack para gerenciamento e elaboração de relatórios de u
     - `/app/backend/server.py`: Endpoints capture-session e debug-session expandidos
     - `/app/frontend/src/pages/SolarmanSetup.jsx`: Novo bookmarklet e instruções de debug
 
+- [x] **Integração Solarman - FUNCIONANDO!** (11/03/2026): Integração completa com Solarman PRO após descoberta do endpoint correto:
+  - **Endpoint correto descoberto**: `POST /maintain-s/operating/station/v2/search?page=1&size=100&order.direction=ASC&order.property=name`
+  - **Body**: `{"station":{"powerTypeList":["PV"]}}`
+  - Backend: `solarman_service.py` atualizado com endpoint correto
+  - Backend: Parsing da estrutura de resposta `{total, data: [{station: {...}, tags, following}]}`
+  - **TESTADO E FUNCIONANDO**: 10 usinas carregadas com sucesso (Alzemir, Cgnatalia, CLICHERIA PANTANAL, DINATEC, Granulados, JOTA, etc.)
+  - Alterações em:
+    - `/app/backend/services/solarman_service.py`: Método `fetch_plants()` reescrito com endpoint correto
+
 - [x] **Gráfico de Curva de Potência** (09/12/2025): Implementado gráfico de potência diária na página de detalhes da usina:
   - Backend: Endpoint `GET /api/dashboard/power-curve/{plant_id}?date=YYYY-MM-DD`
   - Backend: Lógica para tentar buscar dados reais da Growatt OSS (via Playwright)
