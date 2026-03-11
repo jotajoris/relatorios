@@ -484,6 +484,7 @@ const Portais = () => {
   const statusIcon = (status) => {
     if (status === 'online') return <Wifi className="h-4 w-4 text-emerald-500" />;
     if (status === 'abnormal') return <AlertCircle className="h-4 w-4 text-amber-500" />;
+    if (status === 'no_device') return <AlertCircle className="h-4 w-4 text-amber-500" title="Sem dispositivo" />;
     return <WifiOff className="h-4 w-4 text-neutral-400" />;
   };
 

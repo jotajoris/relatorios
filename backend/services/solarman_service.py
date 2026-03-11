@@ -303,20 +303,54 @@ class SolarmanSessionService:
                                 total = data.get('total', len(raw_plants))
                                 
                                 # Extract station info from nested structure
+                                # Map fields to match frontend expectations
                                 plants = []
                                 for item in raw_plants:
                                     station = item.get('station', item)
+                                    
+                                    # Map networkStatus to simple status for frontend
+                                    network_status = station.get('networkStatus', '')
+                                    if network_status == 'NORMAL':
+                                        status = 'online'
+                                    elif network_status == 'ALL_OFFLINE':
+                                        status = 'offline'
+                                    elif network_status == 'NO_DEVICE':
+                                        status = 'no_device'
+                                    else:
+                                        status = 'offline'
+                                    
+                                    # Extract city from address (usually 3rd part: Street, Neighborhood, City)
+                                    address = station.get('locationAddress', '')
+                                    parts = address.split(',')
+                                    if len(parts) >= 3:
+                                        city = parts[2].strip()  # City is usually the 3rd part
+                                    elif len(parts) >= 2:
+                                        city = parts[-1].strip()  # Last part might be city
+                                    else:
+                                        city = '-'
+                                    
                                     plants.append({
                                         'id': station.get('id'),
                                         'name': station.get('name'),
-                                        'address': station.get('locationAddress'),
+                                        'address': address,
+                                        'city': city,  # For frontend compatibility
                                         'capacity': station.get('installedCapacity'),
-                                        'networkStatus': station.get('networkStatus'),
+                                        'capacity_kwp': station.get('installedCapacity'),  # For frontend compatibility
+                                        'networkStatus': network_status,
+                                        'status': status,  # For frontend compatibility
                                         'type': station.get('type'),
                                         'operating': station.get('operating'),
                                         'gridInterconnectionType': station.get('gridInterconnectionType'),
                                         'generationTotal': station.get('generationTotal'),
+                                        'total_energy_kwh': station.get('generationTotal'),  # For frontend
                                         'generationPower': station.get('generationPower'),
+                                        'generationValue': station.get('generationValue'),  # Today's generation
+                                        'today_energy_kwh': station.get('generationValue') or 0,  # For frontend
+                                        'current_power_w': station.get('generationPower'),
+                                        'generationMonth': station.get('generationMonth'),
+                                        'generationYear': station.get('generationYear'),
+                                        'fullPowerHoursDay': station.get('fullPowerHoursDay'),
+                                        'lastUpdateTime': station.get('lastUpdateTime'),
                                         'timezone': station.get('regionTimezone'),
                                         'createdDate': station.get('createdDate'),
                                         'tags': item.get('tags', []),
