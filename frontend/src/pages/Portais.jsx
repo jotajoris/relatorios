@@ -36,7 +36,6 @@ const Portais = () => {
   
   // Solarman session-based state
   const [solarmanStatus, setSolarmanStatus] = useState({ connected: false, loading: true });
-  const [solarmanLoginWindow, setSolarmanLoginWindow] = useState(null);
   const [showCookieDialog, setShowCookieDialog] = useState(false);
   const [cookiesInput, setCookiesInput] = useState('');
 
@@ -60,65 +59,18 @@ const Portais = () => {
   
   // Handle Solarman login via popup
   const handleSolarmanLogin = () => {
-    // Open Solarman PRO login (installer portal) in popup
-    const width = 500;
-    const height = 700;
-    const left = window.screenX + (window.outerWidth - width) / 2;
-    const top = window.screenY + (window.outerHeight - height) / 2;
-    
-    const popup = window.open(
-      'https://pro.solarmanpv.com/login',
-      'SolarmanLogin',
-      `width=${width},height=${height},left=${left},top=${top},scrollbars=yes`
-    );
-    
-    setSolarmanLoginWindow(popup);
-    setLoading(true);
+    // Open Solarman PRO login (installer portal) in new tab
+    window.open('https://pro.solarmanpv.com/login', '_blank');
     
     toast.info(
       <div>
         <p className="font-medium">Faça login no Solarman</p>
         <p className="text-sm text-neutral-500 mt-1">
-          Complete o login na janela que abriu e clique em "Capturar Sessão" quando terminar.
+          Após fazer login, volte aqui e clique em "Colar Cookies" para capturar a sessão.
         </p>
       </div>,
-      { duration: 10000 }
+      { duration: 8000 }
     );
-  };
-  
-  // Capture Solarman session from popup
-  const captureSolarmanSession = async () => {
-    if (!solarmanLoginWindow) {
-      toast.error('Nenhuma janela de login aberta');
-      return;
-    }
-    
-    try {
-      // Get cookies from the popup window (same origin policy may prevent this)
-      // Instead, we'll ask user to paste cookies or use browser extension
-      
-      // For now, let's try a different approach - open in iframe and capture
-      toast.info('Verificando sessão...');
-      
-      // Close popup
-      solarmanLoginWindow.close();
-      setSolarmanLoginWindow(null);
-      
-      // Check if login was successful by trying to fetch plants
-      const res = await api.get('/integrations/solarman/plants');
-      
-      if (res.data.success) {
-        toast.success(`Conectado! ${res.data.count} usinas encontradas`);
-        setSolarmanStatus({ connected: true, loading: false });
-        setPlants(res.data.plants || []);
-      } else {
-        toast.error('Sessão não capturada. Tente novamente.');
-      }
-    } catch (err) {
-      toast.error(err.response?.data?.detail || 'Erro ao capturar sessão');
-    } finally {
-      setLoading(false);
-    }
   };
   
   // Disconnect Solarman
@@ -681,44 +633,15 @@ const Portais = () => {
                   </div>
                 </div>
                 
-                {/* Login window open indicator */}
-                {solarmanLoginWindow && (
-                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                    <p className="text-sm text-blue-800 font-medium">
-                      Uma janela de login foi aberta. Complete o login no Solarman e depois clique no botão abaixo.
-                    </p>
-                    <div className="flex gap-2 mt-3">
-                      <Button 
-                        onClick={captureSolarmanSession}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white"
-                      >
-                        <Check className="h-4 w-4 mr-2" />
-                        Login Concluído - Capturar Sessão
-                      </Button>
-                      <Button 
-                        variant="outline"
-                        onClick={() => {
-                          solarmanLoginWindow?.close();
-                          setSolarmanLoginWindow(null);
-                          setLoading(false);
-                        }}
-                      >
-                        <X className="h-4 w-4 mr-2" />
-                        Cancelar
-                      </Button>
-                    </div>
-                  </div>
-                )}
-                
                 {/* Instructions */}
-                {!solarmanStatus.connected && !solarmanLoginWindow && (
+                {!solarmanStatus.connected && (
                   <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
                     <p className="font-medium mb-1">Como funciona:</p>
                     <ol className="list-decimal list-inside space-y-1 text-xs">
-                      <li>Clique em "Fazer Login" para abrir o portal Solarman</li>
+                      <li>Clique em "Fazer Login" para abrir o portal Solarman em nova aba</li>
                       <li>Faça login normalmente (incluindo CAPTCHA se necessário)</li>
-                      <li>Após logar, clique em "Login Concluído" para capturar a sessão</li>
-                      <li>O sistema usará essa sessão para sincronizar dados automaticamente</li>
+                      <li>Após logar, volte aqui e clique em "Colar Cookies"</li>
+                      <li>Siga as instruções para copiar os cookies do navegador</li>
                     </ol>
                     <p className="text-xs mt-2 text-amber-600">
                       A sessão expira após alguns dias. Quando isso acontecer, você precisará fazer login novamente.
