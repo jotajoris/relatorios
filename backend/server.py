@@ -60,6 +60,8 @@ class ForceCORSMiddleware(BaseHTTPMiddleware):
     ALLOWED_ORIGINS = [
         "https://onusinas.com",
         "https://www.onusinas.com",
+        "https://pro.solarmanpv.com",  # For Solarman bookmarklet
+        "https://solarmanpv.com",
         "https://energy-hub-24.emergent.host",
         "https://solar-report-1.preview.emergentagent.com",
         "http://localhost:3000",
@@ -106,7 +108,9 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://onusinas.com",
-        "https://www.onusinas.com", 
+        "https://www.onusinas.com",
+        "https://pro.solarmanpv.com",  # For Solarman bookmarklet
+        "https://solarmanpv.com",
         "https://energy-hub-24.emergent.host",
         "https://solar-report-1.preview.emergentagent.com",
         "http://localhost:3000",
