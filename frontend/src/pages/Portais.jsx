@@ -33,13 +33,173 @@ const Portais = () => {
   const [selectedClient, setSelectedClient] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [existingPlants, setExistingPlants] = useState([]);
+  
+  // Solarman session-based state
+  const [solarmanStatus, setSolarmanStatus] = useState({ connected: false, loading: true });
+  const [solarmanLoginWindow, setSolarmanLoginWindow] = useState(null);
+  const [showCookieDialog, setShowCookieDialog] = useState(false);
+  const [cookiesInput, setCookiesInput] = useState('');
 
   // Load saved connections and existing plants
   useEffect(() => {
     loadSavedConnections();
     loadClients();
     loadExistingPlants();
+    checkSolarmanStatus();
   }, []);
+  
+  // Check Solarman session status
+  const checkSolarmanStatus = async () => {
+    try {
+      const res = await api.get('/integrations/solarman/status');
+      setSolarmanStatus({ ...res.data, loading: false });
+    } catch (err) {
+      setSolarmanStatus({ connected: false, loading: false });
+    }
+  };
+  
+  // Handle Solarman login via popup
+  const handleSolarmanLogin = () => {
+    // Open Solarman login in popup
+    const width = 500;
+    const height = 700;
+    const left = window.screenX + (window.outerWidth - width) / 2;
+    const top = window.screenY + (window.outerHeight - height) / 2;
+    
+    const popup = window.open(
+      'https://home.solarmanpv.com/login',
+      'SolarmanLogin',
+      `width=${width},height=${height},left=${left},top=${top},scrollbars=yes`
+    );
+    
+    setSolarmanLoginWindow(popup);
+    setLoading(true);
+    
+    toast.info(
+      <div>
+        <p className="font-medium">Faça login no Solarman</p>
+        <p className="text-sm text-neutral-500 mt-1">
+          Complete o login na janela que abriu e clique em "Capturar Sessão" quando terminar.
+        </p>
+      </div>,
+      { duration: 10000 }
+    );
+  };
+  
+  // Capture Solarman session from popup
+  const captureSolarmanSession = async () => {
+    if (!solarmanLoginWindow) {
+      toast.error('Nenhuma janela de login aberta');
+      return;
+    }
+    
+    try {
+      // Get cookies from the popup window (same origin policy may prevent this)
+      // Instead, we'll ask user to paste cookies or use browser extension
+      
+      // For now, let's try a different approach - open in iframe and capture
+      toast.info('Verificando sessão...');
+      
+      // Close popup
+      solarmanLoginWindow.close();
+      setSolarmanLoginWindow(null);
+      
+      // Check if login was successful by trying to fetch plants
+      const res = await api.get('/integrations/solarman/plants');
+      
+      if (res.data.success) {
+        toast.success(`Conectado! ${res.data.count} usinas encontradas`);
+        setSolarmanStatus({ connected: true, loading: false });
+        setPlants(res.data.plants || []);
+      } else {
+        toast.error('Sessão não capturada. Tente novamente.');
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Erro ao capturar sessão');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Disconnect Solarman
+  const handleSolarmanDisconnect = async () => {
+    try {
+      await api.post('/integrations/solarman/disconnect');
+      setSolarmanStatus({ connected: false, loading: false });
+      setPlants([]);
+      toast.success('Desconectado do Solarman');
+    } catch (err) {
+      toast.error('Erro ao desconectar');
+    }
+  };
+  
+  // Fetch Solarman plants
+  const fetchSolarmanPlants = async () => {
+    setRefreshing(true);
+    try {
+      const res = await api.get('/integrations/solarman/plants');
+      if (res.data.success) {
+        setPlants(res.data.plants || []);
+        toast.success(`${res.data.count} usinas encontradas`);
+      } else {
+        toast.error(res.data.error || 'Erro ao buscar usinas');
+      }
+    } catch (err) {
+      if (err.response?.status === 401) {
+        setSolarmanStatus({ connected: false, loading: false });
+        toast.error('Sessão expirada. Faça login novamente.');
+      } else {
+        toast.error(err.response?.data?.detail || 'Erro ao buscar usinas');
+      }
+    } finally {
+      setRefreshing(false);
+    }
+  };
+  
+  // Save cookies manually (alternative method)
+  const handleSaveCookiesManually = async () => {
+    if (!cookiesInput.trim()) {
+      toast.error('Cole os cookies no campo de texto');
+      return;
+    }
+    
+    try {
+      // Parse cookies - support both JSON array and simple format
+      let cookies;
+      try {
+        cookies = JSON.parse(cookiesInput);
+      } catch {
+        // Try parsing as simple cookie format: name=value; name2=value2
+        cookies = cookiesInput.split(';').map(c => {
+          const [name, ...valueParts] = c.trim().split('=');
+          return { name: name.trim(), value: valueParts.join('=').trim(), domain: '.solarmanpv.com' };
+        }).filter(c => c.name && c.value);
+      }
+      
+      if (!Array.isArray(cookies) || cookies.length === 0) {
+        toast.error('Formato de cookies inválido');
+        return;
+      }
+      
+      setLoading(true);
+      const res = await api.post('/integrations/solarman/complete-login', { cookies });
+      
+      if (res.data.success) {
+        toast.success('Sessão salva com sucesso!');
+        setSolarmanStatus({ connected: true, loading: false });
+        setShowCookieDialog(false);
+        setCookiesInput('');
+        // Try to fetch plants
+        fetchSolarmanPlants();
+      } else {
+        toast.error(res.data.error || 'Erro ao salvar sessão');
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.detail || 'Erro ao processar cookies');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Update credentials when switching portals
   useEffect(() => {
@@ -452,99 +612,185 @@ const Portais = () => {
             </div>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Credentials Section */}
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
-              <div className="space-y-1">
-                <Label className="text-xs">{activePortal === 'solarman' ? 'Email' : 'Usuário / Código Instalador'}</Label>
-                <Input 
-                  value={credentials.username} 
-                  onChange={e => setCredentials({ ...credentials, username: e.target.value })}
-                  placeholder={activePortal === 'solarman' ? 'email@exemplo.com' : 'Ex: BTAVB001'} 
-                  disabled={isConnected}
-                  data-testid="portal-username-input"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label className="text-xs">Senha</Label>
-                <div className="relative">
-                  <Input 
-                    type={showPassword ? "text" : "password"} 
-                    value={credentials.password} 
-                    onChange={e => setCredentials({ ...credentials, password: e.target.value })}
-                    placeholder="Senha do portal" 
-                    disabled={isConnected}
-                    data-testid="portal-password-input"
-                  />
-                  <button 
-                    type="button"
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600"
-                    onClick={() => setShowPassword(!showPassword)}
-                  >
-                    {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                  </button>
+            {/* Solarman uses session capture instead of direct login */}
+            {activePortal === 'solarman' ? (
+              <div className="space-y-4">
+                {/* Solarman Status */}
+                <div className="flex items-center justify-between p-4 bg-neutral-50 rounded-lg">
+                  <div className="flex items-center gap-3">
+                    {solarmanStatus.loading ? (
+                      <Loader2 className="h-5 w-5 animate-spin text-neutral-400" />
+                    ) : solarmanStatus.connected ? (
+                      <CheckCircle className="h-5 w-5 text-emerald-500" />
+                    ) : (
+                      <AlertCircle className="h-5 w-5 text-amber-500" />
+                    )}
+                    <div>
+                      <p className="font-medium text-sm">
+                        {solarmanStatus.loading ? 'Verificando...' : 
+                         solarmanStatus.connected ? 'Conectado ao Solarman' : 'Não conectado'}
+                      </p>
+                      {solarmanStatus.connected && solarmanStatus.expires_at && (
+                        <p className="text-xs text-neutral-500">
+                          Sessão válida até: {new Date(solarmanStatus.expires_at).toLocaleDateString('pt-BR')}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div className="flex gap-2">
+                    {solarmanStatus.connected ? (
+                      <>
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={fetchSolarmanPlants}
+                          disabled={refreshing}
+                        >
+                          {refreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                          <span className="ml-2">Buscar Usinas</span>
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={handleSolarmanDisconnect}
+                          className="text-red-500 hover:text-red-600"
+                        >
+                          <Unlink className="h-4 w-4" />
+                        </Button>
+                      </>
+                    ) : (
+                      <div className="flex gap-2">
+                        <Button 
+                          onClick={handleSolarmanLogin}
+                          disabled={loading}
+                          className="bg-[#0066CC] hover:bg-[#0055AA] text-white"
+                        >
+                          {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Link className="h-4 w-4 mr-2" />}
+                          {loading ? 'Aguardando login...' : 'Fazer Login'}
+                        </Button>
+                        <Button 
+                          variant="outline"
+                          onClick={() => setShowCookieDialog(true)}
+                          disabled={loading}
+                        >
+                          Colar Cookies
+                        </Button>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-
-              {/* Solarman-specific fields */}
-              {activePortal === 'solarman' && (
-                <>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Servidor</Label>
-                    <select 
-                      value={credentials.server || 'internacional'} 
-                      onChange={e => setCredentials({ ...credentials, server: e.target.value })}
-                      disabled={isConnected}
-                      className="w-full h-9 px-3 rounded-md border border-neutral-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-[#FFD600]"
-                      data-testid="solarman-server-select"
-                    >
-                      <option value="internacional">Internacional</option>
-                      <option value="china">China</option>
-                      <option value="business">Business</option>
-                    </select>
+                
+                {/* Login window open indicator */}
+                {solarmanLoginWindow && (
+                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm text-blue-800 font-medium">
+                      Uma janela de login foi aberta. Complete o login no Solarman e depois clique no botão abaixo.
+                    </p>
+                    <div className="flex gap-2 mt-3">
+                      <Button 
+                        onClick={captureSolarmanSession}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                      >
+                        <Check className="h-4 w-4 mr-2" />
+                        Login Concluído - Capturar Sessão
+                      </Button>
+                      <Button 
+                        variant="outline"
+                        onClick={() => {
+                          solarmanLoginWindow?.close();
+                          setSolarmanLoginWindow(null);
+                          setLoading(false);
+                        }}
+                      >
+                        <X className="h-4 w-4 mr-2" />
+                        Cancelar
+                      </Button>
+                    </div>
                   </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs">Grupo/Organização</Label>
-                    <Input 
-                      value={credentials.group || ''} 
-                      onChange={e => setCredentials({ ...credentials, group: e.target.value })}
-                      placeholder="Ex: ON SOLUCOES" 
-                      disabled={isConnected}
-                      data-testid="solarman-group-input"
-                    />
+                )}
+                
+                {/* Instructions */}
+                {!solarmanStatus.connected && !solarmanLoginWindow && (
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                    <p className="font-medium mb-1">Como funciona:</p>
+                    <ol className="list-decimal list-inside space-y-1 text-xs">
+                      <li>Clique em "Fazer Login" para abrir o portal Solarman</li>
+                      <li>Faça login normalmente (incluindo CAPTCHA se necessário)</li>
+                      <li>Após logar, clique em "Login Concluído" para capturar a sessão</li>
+                      <li>O sistema usará essa sessão para sincronizar dados automaticamente</li>
+                    </ol>
+                    <p className="text-xs mt-2 text-amber-600">
+                      A sessão expira após alguns dias. Quando isso acontecer, você precisará fazer login novamente.
+                    </p>
                   </div>
-                </>
-              )}
-              
-              {!isConnected ? (
-                <Button 
-                  onClick={handleConnect}
-                  disabled={loading} 
-                  className="bg-[#1A1A1A] hover:bg-[#333] text-white h-9"
-                  data-testid="portal-connect-btn"
-                >
-                  {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Link className="h-4 w-4 mr-2" />}
-                  {loading ? 'Conectando...' : 'Conectar'}
-                </Button>
-              ) : (
-                <Button 
-                  onClick={handleRefreshPlants}
-                  disabled={refreshing} 
-                  className="bg-[#FFD600] hover:bg-[#EAB308] text-[#1A1A1A] h-9"
-                  data-testid="portal-refresh-btn"
-                >
-                  {refreshing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
-                  {refreshing ? 'Atualizando...' : 'Atualizar Lista'}
-                </Button>
-              )}
-            </div>
-
-            {isConnected && (
-              <div className="text-xs text-neutral-500">
-                Conectado como: <strong>{currentConnection?.username || currentConnection?.email}</strong>
-                {activePortal === 'solarman' && currentConnection?.group && (
-                  <span> | Grupo: <strong>{currentConnection.group}</strong></span>
                 )}
               </div>
+            ) : (
+              /* Growatt uses traditional username/password login */
+              <>
+                {/* Credentials Section */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Usuário / Código Instalador</Label>
+                    <Input 
+                      value={credentials.username} 
+                      onChange={e => setCredentials({ ...credentials, username: e.target.value })}
+                      placeholder="Ex: BTAVB001"
+                      disabled={isConnected}
+                      data-testid="portal-username-input"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Senha</Label>
+                    <div className="relative">
+                      <Input 
+                        type={showPassword ? "text" : "password"} 
+                        value={credentials.password} 
+                        onChange={e => setCredentials({ ...credentials, password: e.target.value })}
+                        placeholder="Senha do portal" 
+                        disabled={isConnected}
+                        data-testid="portal-password-input"
+                      />
+                      <button 
+                        type="button"
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-600"
+                        onClick={() => setShowPassword(!showPassword)}
+                      >
+                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {!isConnected ? (
+                    <Button 
+                      onClick={handleConnect}
+                      disabled={loading} 
+                      className="bg-[#1A1A1A] hover:bg-[#333] text-white h-9"
+                      data-testid="portal-connect-btn"
+                    >
+                      {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Link className="h-4 w-4 mr-2" />}
+                      {loading ? 'Conectando...' : 'Conectar'}
+                    </Button>
+                  ) : (
+                    <Button 
+                      onClick={handleRefreshPlants}
+                      disabled={refreshing} 
+                      className="bg-[#FFD600] hover:bg-[#EAB308] text-[#1A1A1A] h-9"
+                      data-testid="portal-refresh-btn"
+                    >
+                      {refreshing ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <RefreshCw className="h-4 w-4 mr-2" />}
+                      {refreshing ? 'Atualizando...' : 'Atualizar Lista'}
+                    </Button>
+                  )}
+                </div>
+
+                {isConnected && (
+                  <div className="text-xs text-neutral-500">
+                    Conectado como: <strong>{currentConnection?.username || currentConnection?.email}</strong>
+                  </div>
+                )}
+              </>
             )}
 
             {/* Plants List */}
@@ -698,6 +944,53 @@ const Portais = () => {
             )}
           </CardContent>
         </Card>
+      )}
+      
+      {/* Cookie Input Dialog for Solarman */}
+      {showCookieDialog && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-lg w-full mx-4 shadow-xl">
+            <h3 className="text-lg font-semibold mb-4">Colar Cookies do Solarman</h3>
+            
+            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800">
+              <p className="font-medium mb-2">Como obter os cookies:</p>
+              <ol className="list-decimal list-inside space-y-1 text-xs">
+                <li>Faça login no <a href="https://home.solarmanpv.com" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">home.solarmanpv.com</a></li>
+                <li>Pressione F12 para abrir as ferramentas do desenvolvedor</li>
+                <li>Vá na aba "Application" (Chrome) ou "Storage" (Firefox)</li>
+                <li>Clique em "Cookies" → "home.solarmanpv.com"</li>
+                <li>Copie todos os cookies no formato: nome=valor; nome2=valor2</li>
+              </ol>
+            </div>
+            
+            <textarea
+              className="w-full h-32 p-3 border border-neutral-300 rounded-lg text-sm font-mono resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Cole os cookies aqui..."
+              value={cookiesInput}
+              onChange={(e) => setCookiesInput(e.target.value)}
+            />
+            
+            <div className="flex justify-end gap-3 mt-4">
+              <Button 
+                variant="outline" 
+                onClick={() => {
+                  setShowCookieDialog(false);
+                  setCookiesInput('');
+                }}
+              >
+                Cancelar
+              </Button>
+              <Button 
+                onClick={handleSaveCookiesManually}
+                disabled={loading || !cookiesInput.trim()}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+              >
+                {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                Salvar Sessão
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

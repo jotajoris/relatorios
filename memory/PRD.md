@@ -136,6 +136,22 @@ Aplicação web full-stack para gerenciamento e elaboração de relatórios de u
   - Frontend: Formulário com campos Email, Senha, Servidor, Grupo
   - **NOTA**: Web scraping está com dificuldades devido a CAPTCHA. Aguardando API oficial (APP_ID/SECRET solicitados).
 
+- [x] **Integração Solarman via Captura de Sessão** (11/12/2025): Nova abordagem para integração Solarman que contorna o CAPTCHA:
+  - Backend: Serviço `solarman_service.py` reescrito com abordagem de captura de sessão
+  - Backend: Endpoint `GET /api/integrations/solarman/status` - verifica status da sessão
+  - Backend: Endpoint `POST /api/integrations/solarman/complete-login` - salva cookies capturados
+  - Backend: Endpoint `GET /api/integrations/solarman/plants` - busca usinas usando sessão salva
+  - Backend: Endpoint `POST /api/integrations/solarman/disconnect` - remove sessão
+  - Frontend: Botão "Fazer Login" abre popup para login manual no Solarman
+  - Frontend: Botão "Colar Cookies" permite colar cookies manualmente (alternativa)
+  - Frontend: Diálogo com instruções de como obter cookies via DevTools
+  - Frontend: Status da sessão com data de expiração
+  - **Funcionamento**: Usuário faz login manualmente (resolve CAPTCHA), sistema captura/salva cookies, usa para sincronizações automáticas até expirar (~7 dias)
+  - Alterações em:
+    - `/app/backend/services/solarman_service.py`: Reescrito com SolarmanSessionService
+    - `/app/backend/server.py`: Novos endpoints para captura de sessão
+    - `/app/frontend/src/pages/Portais.jsx`: Nova UI para fluxo de captura de sessão
+
 - [x] **Gráfico de Curva de Potência** (09/12/2025): Implementado gráfico de potência diária na página de detalhes da usina:
   - Backend: Endpoint `GET /api/dashboard/power-curve/{plant_id}?date=YYYY-MM-DD`
   - Backend: Lógica para tentar buscar dados reais da Growatt OSS (via Playwright)

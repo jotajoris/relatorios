@@ -4758,63 +4758,126 @@ async def upload_growatt_excel(
     }
 
 # ==================== SOLARMAN INTEGRATION (Deye/Sofar) ====================
+# Uses session capture approach - user logs in manually, system captures cookies
 
-from services.solarman_service import get_solarman_service, reset_solarman_service
+from services.solarman_service import SolarmanSessionService, get_solarman_service, reset_solarman_service
 
 class SolarmanLoginRequest(BaseModel):
     email: str
     password: str
-    server: str = 'internacional'  # internacional, china, business
+    server: str = 'home'  # home, pro
     group: Optional[str] = None
 
-@api_router.post("/integrations/solarman/login")
-async def solarman_login(request: SolarmanLoginRequest, current_user: dict = Depends(get_current_user)):
-    """Login to Solarman portal and get plant list"""
+@api_router.get("/integrations/solarman/status")
+async def get_solarman_status(current_user: dict = Depends(get_current_user)):
+    """Check if Solarman session is valid"""
+    try:
+        service = get_solarman_service(db)
+        session = await service.get_saved_session()
+        
+        if session and session.get('logged_in'):
+            return {
+                "connected": True,
+                "captured_at": session.get('captured_at'),
+                "expires_at": session.get('expires_at'),
+                "message": "Sessão Solarman ativa"
+            }
+        else:
+            return {
+                "connected": False,
+                "message": "Não conectado ao Solarman"
+            }
+    except Exception as e:
+        return {"connected": False, "error": str(e)}
+
+@api_router.post("/integrations/solarman/start-login")
+async def start_solarman_login(current_user: dict = Depends(get_current_user)):
+    """
+    Start a login session for Solarman.
+    User will need to complete login manually via the provided URL.
+    """
     try:
         await reset_solarman_service()
-        service = get_solarman_service()
-        login_result = await service.login(
-            request.email, 
-            request.password, 
-            request.server,
-            request.group
+        service = get_solarman_service(db)
+        result = await service.start_login_session()
+        return result
+    except Exception as e:
+        logger.error(f"Solarman start login error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/integrations/solarman/complete-login")
+async def complete_solarman_login(
+    request: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Complete Solarman login by providing cookies captured from browser.
+    Frontend sends cookies after user completes manual login.
+    """
+    try:
+        cookies = request.get('cookies', [])
+        if not cookies:
+            raise HTTPException(status_code=400, detail="Cookies não fornecidos")
+        
+        # Save cookies to DB
+        await db.solarman_sessions.update_one(
+            {'type': 'home'},
+            {'$set': {
+                'type': 'home',
+                'cookies': cookies,
+                'logged_in': True,
+                'captured_at': datetime.now(BRT).isoformat(),
+                'expires_at': (datetime.now(BRT) + timedelta(days=7)).isoformat()
+            }},
+            upsert=True
         )
-    
-        if not login_result.get('success'):
-            raise HTTPException(status_code=400, detail=login_result.get('error', 'Login Solarman falhou'))
-    
+        
         return {
             "success": True,
-            "message": "Login realizado com sucesso",
-            "plants": login_result.get('plants', []),
-            "total": login_result.get('total', 0)
+            "message": "Sessão Solarman salva com sucesso!",
+            "cookies_count": len(cookies)
         }
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Solarman login error: {e}")
-        await reset_solarman_service()
-        raise HTTPException(status_code=500, detail=f"Erro ao conectar com Solarman: {str(e)}")
+        logger.error(f"Solarman complete login error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
-@api_router.post("/integrations/solarman/plants")
-async def list_solarman_plants(request: SolarmanLoginRequest, current_user: dict = Depends(get_current_user)):
-    """List all plants from Solarman account"""
-    service = get_solarman_service()
-    
-    # Login if not already logged in
-    if not service.logged_in:
-        login_result = await service.login(request.email, request.password, request.server, request.group)
-        if not login_result.get('success'):
-            raise HTTPException(status_code=400, detail=login_result.get('error', 'Login Solarman falhou'))
-    
-    # Get plants
-    plants = await service.get_plants()
-    
-    return {
-        "success": True,
-        "plants": plants,
-        "total": len(plants)
-    }
+@api_router.get("/integrations/solarman/plants")
+async def list_solarman_plants(current_user: dict = Depends(get_current_user)):
+    """List all plants from Solarman using saved session"""
+    try:
+        service = get_solarman_service(db)
+        
+        # Check if session exists
+        if not await service.is_session_valid():
+            raise HTTPException(
+                status_code=401, 
+                detail="Sessão Solarman não encontrada ou expirada. Faça login primeiro."
+            )
+        
+        result = await service.fetch_plants()
+        
+        if not result.get('success'):
+            raise HTTPException(status_code=400, detail=result.get('error', 'Erro ao buscar usinas'))
+        
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Solarman plants error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.post("/integrations/solarman/disconnect")
+async def disconnect_solarman(current_user: dict = Depends(get_current_user)):
+    """Remove saved Solarman session"""
+    try:
+        service = get_solarman_service(db)
+        result = await service.disconnect()
+        await reset_solarman_service()
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @api_router.post("/portals/solarman/import-plants")
 async def import_solarman_plants(

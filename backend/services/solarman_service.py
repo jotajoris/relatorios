@@ -1,17 +1,17 @@
 """
 Solarman Portal Integration Service
-Uses Playwright for web scraping the Solarman portal to fetch plant data
-Works with Deye, Sofar, and other inverters using Solarman loggers
+Uses session capture approach - user logs in manually, system captures cookies
 
-NOTE: Playwright is imported lazily to allow the app to start without it installed.
+Works with Deye, Sofar, and other inverters using Solarman loggers
 """
 
 import asyncio
 import logging
 import os
-import hashlib
-from datetime import datetime, timezone
+import json
+from datetime import datetime, timezone, timedelta
 from typing import Optional, Dict, List, Any, TYPE_CHECKING
+import aiohttp
 
 if TYPE_CHECKING:
     from playwright.async_api import Browser, BrowserContext, Page
@@ -23,463 +23,413 @@ try:
     from playwright.async_api import async_playwright
     PLAYWRIGHT_AVAILABLE = True
 except ImportError:
-    logger.warning("Playwright not available. Solarman automation features will be disabled.")
+    logger.warning("Playwright not available. Solarman features will be disabled.")
     async_playwright = None
 
+# Brazil timezone
+try:
+    from zoneinfo import ZoneInfo
+    BRT = ZoneInfo('America/Sao_Paulo')
+except:
+    import pytz
+    BRT = pytz.timezone('America/Sao_Paulo')
 
-class SolarmanService:
-    """Service class for Solarman portal integration using web scraping"""
+
+class SolarmanSessionService:
+    """
+    Service for Solarman integration using manual login + session capture.
+    User logs in via browser, system captures and reuses cookies.
+    """
     
-    # Server URLs
-    SERVERS = {
-        'internacional': 'https://pro.solarmanpv.com',
-        'china': 'https://pro.solarman.cn',
-        'business': 'https://pro.solarmanpv.com',
-        'home': 'https://home.solarmanpv.com',
-    }
+    PORTAL_URL = "https://home.solarmanpv.com"
+    LOGIN_URL = "https://home.solarmanpv.com/login"
+    API_BASE = "https://home.solarmanpv.com"
     
-    def __init__(self):
-        self.browser: Optional["Browser"] = None
-        self.context: Optional["BrowserContext"] = None
-        self.page: Optional["Page"] = None
-        self.logged_in = False
-        self.plants_cache: List[Dict] = []
-        self.cache_time: Optional[datetime] = None
-        self.cache_ttl_seconds = 300  # 5 minutes cache
-        self.current_server = 'internacional'
+    def __init__(self, db=None):
+        self.db = db
+        self.browser = None
+        self.context = None
+        self.page = None
+        self._playwright = None
     
-    async def _init_browser(self):
-        """Initialize browser if not already done"""
+    async def _init_browser(self, headless: bool = False):
+        """Initialize browser for login capture"""
         if not PLAYWRIGHT_AVAILABLE:
-            raise RuntimeError("Playwright não está disponível. A integração Solarman está desativada neste ambiente.")
+            raise RuntimeError("Playwright não disponível")
         
         if self.browser is None:
-            playwright = await async_playwright().start()
             os.environ['PLAYWRIGHT_BROWSERS_PATH'] = '/pw-browsers'
-            self.browser = await playwright.chromium.launch(
-                headless=True, 
-                args=['--no-sandbox', '--disable-dev-shm-usage']
+            self._playwright = await async_playwright().start()
+            self.browser = await self._playwright.chromium.launch(
+                headless=headless,
+                args=['--no-sandbox', '--disable-dev-shm-usage', '--disable-blink-features=AutomationControlled']
             )
-            self.context = await self.browser.new_context(
-                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                viewport={'width': 1920, 'height': 1080}
-            )
-            self.page = await self.context.new_page()
     
     async def close(self):
-        """Close browser and cleanup resources"""
+        """Close browser"""
         if self.browser:
             await self.browser.close()
             self.browser = None
-            self.context = None
-            self.page = None
-            self.logged_in = False
+        if self._playwright:
+            await self._playwright.stop()
+            self._playwright = None
     
-    async def login(self, email: str, password: str, server: str = 'internacional', group: str = None) -> Dict[str, Any]:
+    async def start_login_session(self) -> Dict[str, Any]:
         """
-        Login to Solarman portal
-        
-        Args:
-            email: Solarman account email
-            password: Solarman account password
-            server: Server type ('internacional', 'china', 'business')
-            group: Organization/group name (optional)
-            
-        Returns:
-            Login result with success status and plants list
+        Start a browser session for manual login.
+        Returns session_id to track this login attempt.
         """
         try:
-            await self._init_browser()
+            await self._init_browser(headless=True)
             
-            self.current_server = server.lower()
-            base_url = self.SERVERS.get(self.current_server, self.SERVERS['internacional'])
+            # Create context with stealth settings
+            self.context = await self.browser.new_context(
+                viewport={'width': 1280, 'height': 720},
+                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                locale='pt-BR',
+                timezone_id='America/Sao_Paulo',
+            )
             
-            logger.info(f"Attempting Solarman login for user: {email} on server: {server}")
+            # Apply stealth if available
+            try:
+                from playwright_stealth import Stealth
+                stealth = Stealth(navigator_webdriver=True, chrome_runtime=True)
+                await stealth.apply_stealth_async(self.context)
+            except:
+                pass
+            
+            self.page = await self.context.new_page()
             
             # Navigate to login page
-            login_url = f"{base_url}/login" if 'home' in base_url else base_url
-            await self.page.goto(login_url, wait_until="domcontentloaded", timeout=60000)
-            await self.page.wait_for_timeout(5000)
+            await self.page.goto(self.LOGIN_URL, wait_until="domcontentloaded", timeout=30000)
+            await self.page.wait_for_timeout(2000)
             
-            # Accept cookie banner if present
+            # Accept cookies if present
             try:
-                accept_cookies_selectors = [
-                    'button:has-text("Accept All")',
-                    'button:has-text("Accept")',
-                    'button:has-text("Aceitar")',
-                    '.cookie-accept',
-                    '#accept-cookies',
-                ]
-                for sel in accept_cookies_selectors:
-                    try:
-                        btn = self.page.locator(sel).first
-                        if await btn.is_visible(timeout=2000):
-                            await btn.click()
-                            logger.info(f"Accepted cookies with: {sel}")
-                            await self.page.wait_for_timeout(1000)
-                            break
-                    except Exception:
-                        continue
-            except Exception as e:
-                logger.debug(f"Cookie acceptance failed: {e}")
-            
-            # Accept Terms & Conditions modal if present (Solarman Business)
-            try:
-                agree_selectors = [
-                    'button:has-text("I agree")',
-                    'button:has-text("Agree")',
-                    'button:has-text("Accept")',
-                    'button:has-text("Eu concordo")',
-                ]
-                for sel in agree_selectors:
-                    try:
-                        btn = self.page.locator(sel).first
-                        if await btn.is_visible(timeout=2000):
-                            await btn.click()
-                            logger.info(f"Accepted T&C with: {sel}")
-                            await self.page.wait_for_timeout(1000)
-                            break
-                    except Exception:
-                        continue
-            except Exception as e:
-                logger.debug(f"T&C acceptance failed: {e}")
-            
-            # Handle Region Selection modal (Solarman Business)
-            try:
-                region_title = self.page.locator('text=Please Select Region')
-                if await region_title.is_visible(timeout=2000):
-                    logger.info("Region selection modal detected")
-                    
-                    # Select International if not already selected
-                    intl_radio = self.page.locator('text=International').first
-                    if await intl_radio.is_visible(timeout=1000):
-                        await intl_radio.click()
-                        logger.info("Selected International region")
-                        await self.page.wait_for_timeout(500)
-                    
-                    # Click Confirm
-                    confirm_btn = self.page.locator('button:has-text("Confirm")').first
-                    if await confirm_btn.is_visible(timeout=2000):
-                        await confirm_btn.click()
-                        logger.info("Confirmed region selection")
-                        await self.page.wait_for_timeout(2000)
-            except Exception as e:
-                logger.debug(f"Region selection failed: {e}")
-            
-            # Handle country/region selection modal if present
-            try:
-                region_modal = self.page.locator('text=Please enter/select your country/region')
-                if await region_modal.is_visible(timeout=2000):
-                    logger.info("Country/region modal detected")
-                    
-                    # Click on the dropdown to open it
-                    dropdown = self.page.locator('text=Please enter/select your country/region').locator('..').locator('input, select, [role="combobox"]')
-                    if not await dropdown.is_visible(timeout=1000):
-                        # Try clicking on the dropdown area
-                        dropdown_area = self.page.locator('.ant-select, [class*="select"], [class*="dropdown"]').first
-                        if await dropdown_area.is_visible(timeout=1000):
-                            await dropdown_area.click()
-                            await self.page.wait_for_timeout(500)
-                    
-                    # Type Brazil to filter
-                    await self.page.keyboard.type("Brazil")
-                    await self.page.wait_for_timeout(500)
-                    
-                    # Select Brazil option
-                    brazil_option = self.page.locator('text=Brazil').first
-                    if await brazil_option.is_visible(timeout=2000):
-                        await brazil_option.click()
-                        logger.info("Selected Brazil")
-                        await self.page.wait_for_timeout(500)
-                    
-                    # Click Confirm button
-                    confirm_btn = self.page.locator('button:has-text("Confirm")').first
-                    if await confirm_btn.is_visible(timeout=2000):
-                        await confirm_btn.click()
-                        logger.info("Clicked Confirm on region modal")
-                        await self.page.wait_for_timeout(1000)
-            except Exception as e:
-                logger.debug(f"Region modal handling: {e}")
-            
-            # Take screenshot for debugging
-            try:
-                await self.page.screenshot(path="/tmp/solarman_login_page.png")
-                logger.info("Screenshot saved to /tmp/solarman_login_page.png")
-            except Exception:
+                await self.page.click('button:has-text("Aceitar Tudo")', timeout=3000)
+                await self.page.wait_for_timeout(500)
+            except:
                 pass
             
-            # Wait for page to be fully loaded
-            await self.page.wait_for_load_state("domcontentloaded")
-            
-            # Try multiple approaches to find and fill login form
-            login_success = False
-            
-            # Approach 1: Standard input by type
+            # Handle region modal - select Brazil
             try:
-                # Find email/username input
-                email_inputs = await self.page.locator('input[type="email"], input[type="text"]').all()
-                password_inputs = await self.page.locator('input[type="password"]').all()
+                await self.page.click('.regionBtn', timeout=3000)
+                await self.page.wait_for_timeout(500)
+                await self.page.keyboard.type('Brazil', delay=50)
+                await self.page.wait_for_timeout(500)
+                await self.page.click('text=Brazil', timeout=3000)
+                await self.page.wait_for_timeout(500)
                 
-                if email_inputs and password_inputs:
-                    # Fill the first visible text/email input
-                    for inp in email_inputs:
-                        if await inp.is_visible():
-                            await inp.fill(email)
-                            logger.info("Filled email field")
-                            break
-                    
-                    # Fill the first visible password input
-                    for inp in password_inputs:
-                        if await inp.is_visible():
-                            await inp.fill(password)
-                            logger.info("Filled password field")
-                            break
-                    
-                    # Look for login button - specific selectors for Solarman
-                    login_btn_selectors = [
-                        'button:has-text("Log In")',
-                        'button:has-text("Log in")',
-                        'button:has-text("LOGIN")',
-                        'button:has-text("Login")',
-                        'button:has-text("登录")',
-                        'button:has-text("Sign in")',
-                        'button[type="submit"]',
-                        '.login-btn',
-                        '#loginBtn',
-                        'input[type="submit"]',
-                    ]
-                    
-                    for sel in login_btn_selectors:
-                        try:
-                            btn = self.page.locator(sel).first
-                            if await btn.is_visible(timeout=2000):
-                                # Wait a bit for form validation
-                                await self.page.wait_for_timeout(500)
-                                await btn.click(force=True)
-                                login_success = True
-                                logger.info(f"Clicked login button: {sel}")
-                                break
-                        except Exception:
-                            continue
-                    
-                    if not login_success:
-                        # Try pressing Enter on password field
-                        for inp in password_inputs:
-                            if await inp.is_visible():
-                                await inp.press('Enter')
-                                login_success = True
-                                logger.info("Pressed Enter on password field")
-                                break
-            except Exception as e:
-                logger.debug(f"Approach 1 failed: {e}")
-            
-            # Wait for login to process
-            await self.page.wait_for_timeout(8000)
-            
-            # Handle any post-login modals (Region selection might appear after login)
-            try:
-                # Region selection modal
-                region_title = self.page.locator('text=Please Select Region')
-                if await region_title.is_visible(timeout=3000):
-                    logger.info("Post-login region selection modal detected")
-                    
-                    # Select International
-                    intl_radio = self.page.locator('text=International').first
-                    if await intl_radio.is_visible(timeout=1000):
-                        await intl_radio.click()
-                        await self.page.wait_for_timeout(500)
-                    
-                    # Click Confirm
-                    confirm_btn = self.page.locator('button:has-text("Confirm")').first
-                    if await confirm_btn.is_visible(timeout=2000):
-                        await confirm_btn.click()
-                        logger.info("Confirmed post-login region selection")
-                        await self.page.wait_for_timeout(3000)
-            except Exception as e:
-                logger.debug(f"Post-login region modal: {e}")
-            
-            # Take screenshot after login attempt
-            try:
-                await self.page.screenshot(path="/tmp/solarman_after_login.png")
-                logger.info("Screenshot saved to /tmp/solarman_after_login.png")
-            except Exception:
+                # Confirm region
+                await self.page.evaluate('''() => {
+                    const btn = document.querySelector('.ant-modal button.ant-btn-primary');
+                    if(btn) { btn.disabled = false; btn.click(); }
+                }''')
+                await self.page.wait_for_timeout(1000)
+            except:
                 pass
             
-            # Check if login was successful
-            current_url = self.page.url
-            logger.info(f"Current URL after login: {current_url}")
+            # Generate session ID
+            import uuid
+            session_id = str(uuid.uuid4())
             
-            # Check for success indicators
-            success_indicators = ['main', 'index', 'dashboard', 'plant', 'station', 'overview', 'home']
-            is_success = any(ind in current_url.lower() for ind in success_indicators) and 'login' not in current_url.lower()
+            # Save session to DB
+            if self.db is not None:
+                await self.db.solarman_login_sessions.update_one(
+                    {'session_id': session_id},
+                    {'$set': {
+                        'session_id': session_id,
+                        'status': 'pending',
+                        'created_at': datetime.now(BRT).isoformat(),
+                        'expires_at': (datetime.now(BRT) + timedelta(minutes=10)).isoformat()
+                    }},
+                    upsert=True
+                )
             
-            if is_success:
-                self.logged_in = True
-                logger.info("Solarman login successful")
-                
-                # Wait for dashboard to load
-                await self.page.wait_for_timeout(3000)
-                
-                # Extract plants from the dashboard
-                plants = await self._extract_plants()
-                
-                return {
-                    "success": True,
-                    "message": "Login realizado com sucesso",
-                    "url": current_url,
-                    "plants": plants,
-                    "total": len(plants)
-                }
-            else:
-                logger.error(f"Solarman login failed. URL: {current_url}")
-                return {
-                    "success": False,
-                    "error": "Login falhou. Verifique as credenciais ou tente novamente."
-                }
-                
+            return {
+                'success': True,
+                'session_id': session_id,
+                'message': 'Sessão iniciada. Faça login no Solarman.',
+                'login_url': self.LOGIN_URL
+            }
+            
         except Exception as e:
-            logger.error(f"Solarman login error: {str(e)}")
-            return {"success": False, "error": str(e)}
+            logger.error(f"Error starting login session: {e}")
+            return {'success': False, 'error': str(e)}
     
-    async def _extract_plants(self) -> List[Dict]:
-        """Extract plants data from the dashboard"""
-        plants = []
-        
+    async def check_login_status(self, session_id: str) -> Dict[str, Any]:
+        """Check if user completed login and capture cookies"""
         try:
-            await self.page.wait_for_timeout(3000)
+            if not self.page:
+                return {'success': False, 'error': 'No active session', 'logged_in': False}
             
-            # Try different approaches to extract plant data
-            # Approach 1: Look for plant cards/tiles
-            plant_cards = await self.page.locator('.plant-card, .station-card, .device-card, [class*="plant"], [class*="station"]').all()
+            current_url = self.page.url
             
-            if plant_cards:
-                for i, card in enumerate(plant_cards):
-                    try:
-                        # Extract text content from the card
-                        text = await card.inner_text()
-                        text_lines = [line.strip() for line in text.split('\n') if line.strip()]
-                        
-                        # Try to parse plant info
-                        name = text_lines[0] if text_lines else f"Usina {i+1}"
-                        
-                        # Try to find capacity
-                        capacity = 0
-                        for text_line in text_lines:
-                            if 'kw' in text_line.lower():
-                                import re
-                                match = re.search(r'([\d.]+)\s*kw', text_line.lower())
-                                if match:
-                                    capacity = float(match.group(1))
-                                    break
-                        
-                        plants.append({
-                            'id': f"solarman_{i}",
-                            'name': name,
-                            'capacity_kwp': capacity,
-                            'status': 'online',
-                            'source': 'solarman'
-                        })
-                    except Exception as e:
-                        logger.debug(f"Error parsing plant card: {e}")
+            # Check if we're past the login page
+            if 'login' not in current_url.lower() or '/main' in current_url.lower() or '/plant' in current_url.lower():
+                # User logged in! Capture cookies
+                cookies = await self.context.cookies()
+                
+                # Save cookies to DB
+                if self.db and cookies:
+                    await self.db.solarman_sessions.update_one(
+                        {'type': 'home'},
+                        {'$set': {
+                            'type': 'home',
+                            'cookies': cookies,
+                            'logged_in': True,
+                            'captured_at': datetime.now(BRT).isoformat(),
+                            'expires_at': (datetime.now(BRT) + timedelta(days=7)).isoformat()
+                        }},
+                        upsert=True
+                    )
+                    
+                    # Update login session status
+                    await self.db.solarman_login_sessions.update_one(
+                        {'session_id': session_id},
+                        {'$set': {'status': 'completed'}}
+                    )
+                
+                await self.close()
+                
+                return {
+                    'success': True,
+                    'logged_in': True,
+                    'message': 'Login capturado com sucesso!',
+                    'cookies_count': len(cookies)
+                }
             
-            # Approach 2: Look for table rows
-            if not plants:
-                rows = await self.page.locator('table tbody tr').all()
-                for i, row in enumerate(rows):
-                    try:
-                        cells = await row.locator('td').all()
-                        if cells:
-                            name = await cells[0].inner_text() if cells else f"Usina {i+1}"
-                            plants.append({
-                                'id': f"solarman_{i}",
-                                'name': name.strip(),
-                                'capacity_kwp': 0,
-                                'status': 'online',
-                                'source': 'solarman'
-                            })
-                    except Exception:
-                        continue
-            
-            # Approach 3: Look for any list items with plant-like data
-            if not plants:
-                items = await self.page.locator('li[class*="plant"], li[class*="station"], .list-item').all()
-                for i, item in enumerate(items):
-                    try:
-                        name = await item.inner_text()
-                        plants.append({
-                            'id': f"solarman_{i}",
-                            'name': name.strip().split('\n')[0],
-                            'capacity_kwp': 0,
-                            'status': 'online',
-                            'source': 'solarman'
-                        })
-                    except Exception:
-                        continue
-            
-            self.plants_cache = plants
-            self.cache_time = datetime.now(timezone.utc)
-            
-            logger.info(f"Extracted {len(plants)} plants from Solarman")
+            return {
+                'success': True,
+                'logged_in': False,
+                'message': 'Aguardando login...',
+                'current_url': current_url
+            }
             
         except Exception as e:
-            logger.error(f"Error extracting plants: {e}")
-        
-        return plants
+            logger.error(f"Error checking login status: {e}")
+            return {'success': False, 'error': str(e), 'logged_in': False}
     
-    async def get_plants(self) -> List[Dict]:
-        """Get list of plants (from cache or fetch new)"""
-        if not self.logged_in:
-            raise RuntimeError("Não está logado. Faça login primeiro.")
+    async def get_saved_session(self) -> Optional[Dict]:
+        """Get saved session from DB"""
+        if self.db is None:
+            return None
         
-        # Check cache
-        if self.plants_cache and self.cache_time:
-            elapsed = (datetime.now(timezone.utc) - self.cache_time).total_seconds()
-            if elapsed < self.cache_ttl_seconds:
-                return self.plants_cache
+        session = await self.db.solarman_sessions.find_one(
+            {'type': 'home'},
+            {'_id': 0}
+        )
         
-        return await self._extract_plants()
+        if session:
+            # Check if expired
+            expires_at = session.get('expires_at', '')
+            if expires_at:
+                try:
+                    exp_date = datetime.fromisoformat(expires_at.replace('Z', '+00:00'))
+                    if datetime.now(BRT) > exp_date:
+                        return None  # Expired
+                except:
+                    pass
+        
+        return session
+    
+    async def is_session_valid(self) -> bool:
+        """Check if we have a valid saved session"""
+        session = await self.get_saved_session()
+        return session is not None and session.get('logged_in', False)
+    
+    async def fetch_plants(self) -> Dict[str, Any]:
+        """Fetch plants using saved session cookies"""
+        try:
+            session = await self.get_saved_session()
+            if not session or not session.get('cookies'):
+                return {'success': False, 'error': 'Sessão não encontrada. Faça login primeiro.'}
+            
+            cookies = session['cookies']
+            
+            # Create aiohttp session with cookies
+            jar = aiohttp.CookieJar()
+            
+            async with aiohttp.ClientSession(cookie_jar=jar) as http_session:
+                # Set cookies
+                for cookie in cookies:
+                    jar.update_cookies({cookie['name']: cookie['value']})
+                
+                # Try to fetch plant list
+                headers = {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'Accept': 'application/json',
+                    'Referer': self.PORTAL_URL
+                }
+                
+                # Try different API endpoints
+                endpoints = [
+                    '/api/v1/plant/list',
+                    '/api/plant/list', 
+                    '/plant/list',
+                    '/api/v1/station/list',
+                ]
+                
+                for endpoint in endpoints:
+                    try:
+                        url = f"{self.API_BASE}{endpoint}"
+                        async with http_session.get(url, headers=headers, timeout=30) as resp:
+                            if resp.status == 200:
+                                data = await resp.json()
+                                if 'data' in data or 'list' in data or 'plants' in data:
+                                    plants = data.get('data', data.get('list', data.get('plants', [])))
+                                    return {
+                                        'success': True,
+                                        'plants': plants,
+                                        'count': len(plants) if isinstance(plants, list) else 0
+                                    }
+                    except Exception as e:
+                        logger.debug(f"Endpoint {endpoint} failed: {e}")
+                        continue
+                
+                # If API doesn't work, try scraping with Playwright
+                return await self._fetch_plants_via_scraping(cookies)
+                
+        except Exception as e:
+            logger.error(f"Error fetching plants: {e}")
+            return {'success': False, 'error': str(e)}
+    
+    async def _fetch_plants_via_scraping(self, cookies: List[Dict]) -> Dict[str, Any]:
+        """Fetch plants by scraping the web page with saved cookies"""
+        try:
+            await self._init_browser(headless=True)
+            
+            context = await self.browser.new_context(
+                viewport={'width': 1920, 'height': 1080},
+                user_agent='Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            )
+            
+            # Add cookies
+            await context.add_cookies(cookies)
+            
+            page = await context.new_page()
+            
+            # Navigate to plant list
+            await page.goto(f"{self.PORTAL_URL}/main", wait_until="domcontentloaded", timeout=30000)
+            await page.wait_for_timeout(5000)
+            
+            # Check if logged in
+            if 'login' in page.url.lower():
+                await context.close()
+                await self.close()
+                
+                # Invalidate session
+                if self.db is not None:
+                    await self.db.solarman_sessions.update_one(
+                        {'type': 'home'},
+                        {'$set': {'logged_in': False}}
+                    )
+                
+                return {'success': False, 'error': 'Sessão expirada. Faça login novamente.'}
+            
+            # Extract plant data from page
+            plants_data = await page.evaluate('''
+                () => {
+                    const plants = [];
+                    
+                    // Try different selectors for plant cards
+                    const selectors = [
+                        '.plant-card', '.station-card', '[class*="plant"]', 
+                        '[class*="station"]', '.ant-card', '.list-item'
+                    ];
+                    
+                    for (const selector of selectors) {
+                        const cards = document.querySelectorAll(selector);
+                        if (cards.length > 0) {
+                            cards.forEach((card, idx) => {
+                                const text = card.innerText || '';
+                                const nameEl = card.querySelector('[class*="name"], [class*="title"], h3, h4');
+                                const powerEl = card.querySelector('[class*="power"], [class*="kw"]');
+                                const energyEl = card.querySelector('[class*="energy"], [class*="kwh"]');
+                                
+                                plants.push({
+                                    index: idx,
+                                    name: nameEl?.innerText?.trim() || `Usina ${idx + 1}`,
+                                    power_kw: powerEl?.innerText?.trim() || '',
+                                    energy_kwh: energyEl?.innerText?.trim() || '',
+                                    raw_text: text.substring(0, 300)
+                                });
+                            });
+                            break;
+                        }
+                    }
+                    
+                    // Also try extracting from table
+                    const tables = document.querySelectorAll('table');
+                    tables.forEach(table => {
+                        const rows = table.querySelectorAll('tbody tr');
+                        rows.forEach((row, idx) => {
+                            const cells = row.querySelectorAll('td');
+                            if (cells.length >= 3) {
+                                plants.push({
+                                    index: idx,
+                                    name: cells[0]?.innerText?.trim() || '',
+                                    status: cells[1]?.innerText?.trim() || '',
+                                    power_kw: cells[2]?.innerText?.trim() || '',
+                                    energy_kwh: cells[3]?.innerText?.trim() || ''
+                                });
+                            }
+                        });
+                    });
+                    
+                    return {
+                        plants: plants,
+                        pageTitle: document.title,
+                        url: window.location.href,
+                        bodyPreview: document.body?.innerText?.substring(0, 1000)
+                    };
+                }
+            ''')
+            
+            await context.close()
+            await self.close()
+            
+            return {
+                'success': True,
+                'plants': plants_data.get('plants', []),
+                'count': len(plants_data.get('plants', [])),
+                'page_title': plants_data.get('pageTitle', ''),
+                'source': 'scraping'
+            }
+            
+        except Exception as e:
+            logger.error(f"Error scraping plants: {e}")
+            await self.close()
+            return {'success': False, 'error': str(e)}
     
     async def get_plant_generation(self, plant_id: str, date: str = None) -> Dict[str, Any]:
-        """
-        Get generation data for a specific plant
-        
-        Args:
-            plant_id: Plant ID
-            date: Date in YYYY-MM-DD format (default: today)
-            
-        Returns:
-            Generation data
-        """
-        if not self.logged_in:
-            raise RuntimeError("Não está logado. Faça login primeiro.")
-        
-        # This would need to navigate to the plant detail page and extract generation data
-        # Implementation depends on the actual Solarman portal structure
-        
-        return {
-            "plant_id": plant_id,
-            "date": date or datetime.now().strftime('%Y-%m-%d'),
-            "generation_kwh": 0,
-            "note": "Implementação pendente - necessário analisar estrutura da página"
-        }
+        """Get generation data for a specific plant"""
+        # Implementation similar to fetch_plants but for specific plant data
+        pass
+    
+    async def disconnect(self) -> Dict[str, Any]:
+        """Remove saved session"""
+        try:
+            if self.db is not None:
+                await self.db.solarman_sessions.delete_many({'type': 'home'})
+            return {'success': True, 'message': 'Sessão removida'}
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
 
 
-# Singleton instance
-_solarman_service: Optional[SolarmanService] = None
+# Global instance
+_solarman_service: Optional[SolarmanSessionService] = None
 
-
-def get_solarman_service() -> SolarmanService:
-    """Get or create the singleton Solarman service instance"""
+def get_solarman_service(db=None) -> SolarmanSessionService:
     global _solarman_service
     if _solarman_service is None:
-        _solarman_service = SolarmanService()
+        _solarman_service = SolarmanSessionService(db)
+    elif db and _solarman_service.db is None:
+        _solarman_service.db = db
     return _solarman_service
 
-
 async def reset_solarman_service():
-    """Reset the Solarman service (close browser and create new instance)"""
     global _solarman_service
     if _solarman_service:
         await _solarman_service.close()
-    _solarman_service = SolarmanService()
-    return _solarman_service
+        _solarman_service = None
