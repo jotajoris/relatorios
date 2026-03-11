@@ -5039,6 +5039,56 @@ async def disconnect_solarman(current_user: dict = Depends(get_current_user)):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@api_router.post("/integrations/solarman/test-curl")
+async def test_solarman_curl(request: Request, current_user: dict = Depends(get_current_user)):
+    """
+    Endpoint para testar uma requisição cURL copiada do navegador.
+    Envie um objeto JSON com os campos: url, method, headers, body
+    """
+    import aiohttp
+    
+    try:
+        data = await request.json()
+        url = data.get('url', '')
+        method = data.get('method', 'GET').upper()
+        headers = data.get('headers', {})
+        body = data.get('body')
+        
+        if not url:
+            return {"success": False, "error": "URL é obrigatória"}
+        
+        logger.info(f"[Solarman Test] {method} {url}")
+        logger.info(f"[Solarman Test] Headers: {list(headers.keys())}")
+        
+        async with aiohttp.ClientSession() as http:
+            if method == 'POST':
+                async with http.post(url, headers=headers, json=body, timeout=30, ssl=False) as resp:
+                    text = await resp.text()
+            else:
+                async with http.get(url, headers=headers, timeout=30, ssl=False) as resp:
+                    text = await resp.text()
+            
+            logger.info(f"[Solarman Test] Status: {resp.status}")
+            
+            # Try to parse as JSON
+            try:
+                json_data = json.loads(text)
+                return {
+                    "success": resp.status == 200,
+                    "status": resp.status,
+                    "data": json_data
+                }
+            except:
+                return {
+                    "success": False,
+                    "status": resp.status,
+                    "response": text[:1000]
+                }
+                
+    except Exception as e:
+        logger.error(f"[Solarman Test] Error: {e}")
+        return {"success": False, "error": str(e)}
+
 @api_router.post("/portals/solarman/import-plants")
 async def import_solarman_plants(
     request: dict,
