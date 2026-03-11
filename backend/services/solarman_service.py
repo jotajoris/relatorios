@@ -41,9 +41,9 @@ class SolarmanSessionService:
     User logs in via browser, system captures and reuses cookies.
     """
     
-    PORTAL_URL = "https://home.solarmanpv.com"
-    LOGIN_URL = "https://home.solarmanpv.com/login"
-    API_BASE = "https://home.solarmanpv.com"
+    PORTAL_URL = "https://pro.solarmanpv.com"
+    LOGIN_URL = "https://pro.solarmanpv.com/login"
+    API_BASE = "https://pro.solarmanpv.com"
     
     def __init__(self, db=None):
         self.db = db
@@ -173,9 +173,9 @@ class SolarmanSessionService:
                 # Save cookies to DB
                 if self.db and cookies:
                     await self.db.solarman_sessions.update_one(
-                        {'type': 'home'},
+                        {'type': 'pro'},
                         {'$set': {
-                            'type': 'home',
+                            'type': 'pro',
                             'cookies': cookies,
                             'logged_in': True,
                             'captured_at': datetime.now(BRT).isoformat(),
@@ -216,7 +216,7 @@ class SolarmanSessionService:
             return None
         
         session = await self.db.solarman_sessions.find_one(
-            {'type': 'home'},
+            {'type': 'pro'},
             {'_id': 0}
         )
         
@@ -321,7 +321,7 @@ class SolarmanSessionService:
                 # Invalidate session
                 if self.db is not None:
                     await self.db.solarman_sessions.update_one(
-                        {'type': 'home'},
+                        {'type': 'pro'},
                         {'$set': {'logged_in': False}}
                     )
                 
@@ -411,7 +411,7 @@ class SolarmanSessionService:
         """Remove saved session"""
         try:
             if self.db is not None:
-                await self.db.solarman_sessions.delete_many({'type': 'home'})
+                await self.db.solarman_sessions.delete_many({'type': 'pro'})
             return {'success': True, 'message': 'Sessão removida'}
         except Exception as e:
             return {'success': False, 'error': str(e)}

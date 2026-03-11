@@ -4821,9 +4821,9 @@ async def complete_solarman_login(
         
         # Save cookies to DB
         await db.solarman_sessions.update_one(
-            {'type': 'home'},
+            {'type': 'pro'},
             {'$set': {
-                'type': 'home',
+                'type': 'pro',
                 'cookies': cookies,
                 'logged_in': True,
                 'captured_at': datetime.now(BRT).isoformat(),

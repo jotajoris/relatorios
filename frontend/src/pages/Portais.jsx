@@ -60,14 +60,14 @@ const Portais = () => {
   
   // Handle Solarman login via popup
   const handleSolarmanLogin = () => {
-    // Open Solarman login in popup
+    // Open Solarman PRO login (installer portal) in popup
     const width = 500;
     const height = 700;
     const left = window.screenX + (window.outerWidth - width) / 2;
     const top = window.screenY + (window.outerHeight - height) / 2;
     
     const popup = window.open(
-      'https://home.solarmanpv.com/login',
+      'https://pro.solarmanpv.com/login',
       'SolarmanLogin',
       `width=${width},height=${height},left=${left},top=${top},scrollbars=yes`
     );
@@ -955,10 +955,10 @@ const Portais = () => {
             <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800">
               <p className="font-medium mb-2">Como obter os cookies:</p>
               <ol className="list-decimal list-inside space-y-1 text-xs">
-                <li>Faça login no <a href="https://home.solarmanpv.com" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">home.solarmanpv.com</a></li>
+                <li>Faça login no <a href="https://pro.solarmanpv.com/login" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">pro.solarmanpv.com</a> (portal de instalador)</li>
                 <li>Pressione F12 para abrir as ferramentas do desenvolvedor</li>
                 <li>Vá na aba "Application" (Chrome) ou "Storage" (Firefox)</li>
-                <li>Clique em "Cookies" → "home.solarmanpv.com"</li>
+                <li>Clique em "Cookies" → "pro.solarmanpv.com"</li>
                 <li>Copie todos os cookies no formato: nome=valor; nome2=valor2</li>
               </ol>
             </div>
