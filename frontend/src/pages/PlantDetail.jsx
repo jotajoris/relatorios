@@ -877,15 +877,54 @@ const PlantDetail = () => {
     formData.append('file', file);
     
     try {
-      const response = await api.post(`/generation-data/upload-growatt-excel/${plantId}`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
+      // Detect if it's a Solarman or Growatt Excel by trying both endpoints
+      // First try Solarman (simpler format), then Growatt
+      let response;
+      let excelType = 'growatt';
+      
+      // Check plant's inverter integration to decide which to try first
+      const plantIntegration = plant?.inverter_integration || plant?.solarman_id ? 'solarman' : 'growatt';
+      
+      if (plantIntegration === 'solarman') {
+        // Try Solarman first
+        try {
+          response = await api.post(`/generation-data/upload-solarman-excel/${plantId}`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          });
+          excelType = 'solarman';
+        } catch (solarmanError) {
+          // If Solarman fails, try Growatt
+          const formData2 = new FormData();
+          formData2.append('file', file);
+          response = await api.post(`/generation-data/upload-growatt-excel/${plantId}`, formData2, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          });
+          excelType = 'growatt';
+        }
+      } else {
+        // Try Growatt first
+        try {
+          response = await api.post(`/generation-data/upload-growatt-excel/${plantId}`, formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          });
+          excelType = 'growatt';
+        } catch (growattError) {
+          // If Growatt fails, try Solarman
+          const formData2 = new FormData();
+          formData2.append('file', file);
+          response = await api.post(`/generation-data/upload-solarman-excel/${plantId}`, formData2, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          });
+          excelType = 'solarman';
+        }
+      }
       
       if (response.data.success) {
         const { parsed_data } = response.data;
+        const typeName = excelType === 'solarman' ? 'Solarman' : 'Growatt';
         toast.success(
-          `Excel importado: ${parsed_data.plant_name} - ${parsed_data.month_year}\n` +
-          `${response.data.total_processed} registros processados (${parsed_data.total_generation_kwh?.toLocaleString()} kWh)`
+          `Excel ${typeName} importado: ${parsed_data.plant_name || parsed_data.month_year || file.name}\n` +
+          `${response.data.total_processed} registros processados (${parsed_data.total_generation_kwh?.toLocaleString() || 0} kWh)`
         );
         loadData();
         loadChartData();
@@ -893,7 +932,7 @@ const PlantDetail = () => {
         toast.error(response.data.error || 'Erro ao processar Excel');
       }
     } catch (error) {
-      toast.error(error.response?.data?.detail || 'Erro ao fazer upload do Excel');
+      toast.error(error.response?.data?.detail || error.response?.data?.error || 'Erro ao fazer upload do Excel. Verifique se o formato é Growatt ou Solarman.');
     } finally {
       setUploadingExcel(false);
       if (excelInputRef.current) {
@@ -1598,7 +1637,7 @@ const PlantDetail = () => {
                     Geração
                   </div>
                   
-                  {/* Upload Excel Growatt - input is now global at top of component */}
+                  {/* Upload Excel Growatt/Solarman - input is now global at top of component */}
                   <Button 
                     variant="outline" 
                     size="sm"
@@ -1611,7 +1650,7 @@ const PlantDetail = () => {
                     ) : (
                       <FileSpreadsheet className="h-4 w-4 mr-2" />
                     )}
-                    Importar Excel Growatt
+                    Importar Excel
                   </Button>
                   
                   {/* Upload Invoice */}

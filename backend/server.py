@@ -4769,6 +4769,100 @@ async def upload_growatt_excel(
         "total_processed": records_inserted + records_updated
     }
 
+# ==================== SOLARMAN EXCEL UPLOAD ====================
+from services.solarman_excel_service import parse_solarman_excel, extract_solarman_generation_records
+
+@api_router.post("/generation-data/upload-solarman-excel/{plant_id}")
+async def upload_solarman_excel(
+    plant_id: str,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Upload a Solarman Excel report and extract generation data.
+    The Excel file should be the monthly report exported from Solarman portal.
+    """
+    # Verify plant exists
+    plant = await db.plants.find_one({'id': plant_id, 'is_active': True})
+    if not plant:
+        raise HTTPException(status_code=404, detail="Usina não encontrada")
+    
+    # Validate file type
+    if not file.filename.lower().endswith(('.xls', '.xlsx')):
+        raise HTTPException(status_code=400, detail="Apenas arquivos Excel (.xls, .xlsx) são aceitos")
+    
+    # Read and parse file
+    content = await file.read()
+    parsed_data = parse_solarman_excel(content, file.filename)
+    
+    if not parsed_data.get('success'):
+        return {
+            "success": False,
+            "error": parsed_data.get('error', 'Erro ao processar arquivo Excel'),
+            "filename": file.filename
+        }
+    
+    # Extract generation records
+    records = extract_solarman_generation_records(parsed_data, plant_id)
+    
+    # Insert/update records
+    records_inserted = 0
+    records_updated = 0
+    
+    for record in records:
+        existing = await db.generation_data.find_one({
+            'plant_id': record['plant_id'],
+            'date': record['date']
+        })
+        
+        if existing:
+            await db.generation_data.update_one(
+                {'plant_id': record['plant_id'], 'date': record['date']},
+                {'$set': {
+                    'generation_kwh': record['generation_kwh'], 
+                    'source': record['source'],
+                    'weather': record.get('weather'),
+                    'peak_hours': record.get('peak_hours')
+                }}
+            )
+            records_updated += 1
+        else:
+            gen_data = GenerationData(
+                plant_id=record['plant_id'],
+                date=record['date'],
+                generation_kwh=record['generation_kwh'],
+                source=record['source']
+            )
+            doc = gen_data.model_dump()
+            doc['created_at'] = doc['created_at'].isoformat()
+            doc['weather'] = record.get('weather')
+            doc['peak_hours'] = record.get('peak_hours')
+            await db.generation_data.insert_one(doc)
+            records_inserted += 1
+    
+    # Log activity
+    await log_activity(
+        plant_id,
+        "solarman_excel_upload",
+        f"Importado Excel Solarman: {file.filename} - {parsed_data.get('month_year', '')}",
+        current_user.get('name'),
+        {'total_kwh': parsed_data.get('total_generation_kwh', 0), 'days': parsed_data.get('days_with_data', 0)}
+    )
+    
+    return {
+        "success": True,
+        "message": "Excel Solarman processado com sucesso",
+        "filename": file.filename,
+        "parsed_data": {
+            "month_year": parsed_data.get('month_year'),
+            "total_generation_kwh": parsed_data.get('total_generation_kwh'),
+            "days_with_data": parsed_data.get('days_with_data')
+        },
+        "records_inserted": records_inserted,
+        "records_updated": records_updated,
+        "total_processed": records_inserted + records_updated
+    }
+
 # ==================== SOLARMAN INTEGRATION (Deye/Sofar) ====================
 # Uses session capture approach - user logs in manually, system captures cookies
 
