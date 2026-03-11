@@ -61,7 +61,7 @@ class ForceCORSMiddleware(BaseHTTPMiddleware):
         "https://onusinas.com",
         "https://www.onusinas.com",
         "https://energy-hub-24.emergent.host",
-        "https://solar-report-hub.preview.emergentagent.com",
+        "https://solar-report-1.preview.emergentagent.com",
         "http://localhost:3000",
     ]
     
@@ -108,7 +108,7 @@ app.add_middleware(
         "https://onusinas.com",
         "https://www.onusinas.com", 
         "https://energy-hub-24.emergent.host",
-        "https://solar-report-hub.preview.emergentagent.com",
+        "https://solar-report-1.preview.emergentagent.com",
         "http://localhost:3000",
     ],
     allow_credentials=True,
@@ -4780,6 +4780,9 @@ async def get_solarman_status(current_user: dict = Depends(get_current_user)):
                 "connected": True,
                 "captured_at": session.get('captured_at'),
                 "expires_at": session.get('expires_at'),
+                "has_auth_token": bool(session.get('auth_token')),
+                "token_source": session.get('token_source'),
+                "cookies_count": len(session.get('cookies', [])),
                 "message": "Sessão Solarman ativa"
             }
         else:
@@ -4846,16 +4849,19 @@ async def complete_solarman_login(
 @api_router.post("/integrations/solarman/capture-session")
 async def capture_solarman_session(request: Request):
     """
-    Public endpoint to receive cookies from bookmarklet.
-    Called from user's browser after they login to Solarman.
+    Public endpoint to receive session data from bookmarklet.
+    Captures cookies, localStorage, and sessionStorage.
     """
     try:
         data = await request.json()
         cookies_str = data.get('cookies', '')
-        token = data.get('token', '')  # Auth token from our system
+        local_storage = data.get('localStorage', {})
+        session_storage = data.get('sessionStorage', {})
+        source_url = data.get('url', '')
         
-        if not cookies_str:
-            return {"success": False, "error": "Cookies não fornecidos"}
+        logger.info(f"[Solarman] Capturando sessão - cookies: {len(cookies_str)}, localStorage: {len(local_storage)}, sessionStorage: {len(session_storage)}")
+        logger.info(f"[Solarman] localStorage keys: {list(local_storage.keys())}")
+        logger.info(f"[Solarman] sessionStorage keys: {list(session_storage.keys())}")
         
         # Parse cookies string into list
         cookies = []
@@ -4870,29 +4876,94 @@ async def capture_solarman_session(request: Request):
                     'path': '/'
                 })
         
-        if not cookies:
-            return {"success": False, "error": "Nenhum cookie válido encontrado"}
+        # Extract auth token from various possible locations
+        auth_token = None
+        token_source = None
         
-        # Save to DB
+        # Check localStorage for token (common pattern)
+        token_keys = ['token', 'access_token', 'accessToken', 'auth_token', 'authToken', 
+                      'jwtToken', 'jwt', 'Authorization', 'user-token', 'userToken']
+        for key in token_keys:
+            if local_storage.get(key):
+                auth_token = local_storage[key]
+                token_source = f'localStorage.{key}'
+                break
+        
+        # Check sessionStorage if not found
+        if not auth_token:
+            for key in token_keys:
+                if session_storage.get(key):
+                    auth_token = session_storage[key]
+                    token_source = f'sessionStorage.{key}'
+                    break
+        
+        # Check for token in cookies
+        if not auth_token:
+            for c in cookies:
+                if c['name'].lower() in ['token', 'access_token', 'tokenkey', 'auth']:
+                    auth_token = c['value']
+                    token_source = f'cookie.{c["name"]}'
+                    break
+        
+        # Try to parse JSON from storage values (tokens might be in JSON)
+        if not auth_token:
+            for storage_name, storage in [('localStorage', local_storage), ('sessionStorage', session_storage)]:
+                for key, value in storage.items():
+                    if not value:
+                        continue
+                    try:
+                        parsed = json.loads(value) if isinstance(value, str) else value
+                        if isinstance(parsed, dict):
+                            for tk in ['token', 'access_token', 'accessToken']:
+                                if parsed.get(tk):
+                                    auth_token = parsed[tk]
+                                    token_source = f'{storage_name}.{key}.{tk}'
+                                    break
+                        if auth_token:
+                            break
+                    except:
+                        pass
+                if auth_token:
+                    break
+        
+        if not cookies and not auth_token:
+            return {"success": False, "error": "Nenhum dado de sessão válido encontrado"}
+        
+        # Save to DB with all session data
+        session_data = {
+            'type': 'pro',
+            'cookies': cookies,
+            'local_storage': local_storage,
+            'session_storage': session_storage,
+            'auth_token': auth_token,
+            'token_source': token_source,
+            'source_url': source_url,
+            'logged_in': True,
+            'captured_at': datetime.now(timezone.utc).isoformat(),
+            'expires_at': (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
+            'source': 'bookmarklet'
+        }
+        
         await db.solarman_sessions.update_one(
             {'type': 'pro'},
-            {'$set': {
-                'type': 'pro',
-                'cookies': cookies,
-                'logged_in': True,
-                'captured_at': datetime.now(timezone.utc).isoformat(),
-                'expires_at': (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
-                'source': 'bookmarklet'
-            }},
+            {'$set': session_data},
             upsert=True
         )
         
-        logger.info(f"[Solarman] Sessão capturada via bookmarklet: {len(cookies)} cookies")
+        logger.info(f"[Solarman] Sessão capturada: {len(cookies)} cookies, token: {'Sim' if auth_token else 'Não'} ({token_source})")
+        
+        message_parts = []
+        if cookies:
+            message_parts.append(f"{len(cookies)} cookies")
+        if auth_token:
+            message_parts.append(f"token de autenticação ({token_source})")
         
         return {
             "success": True,
-            "message": f"Sessão salva! {len(cookies)} cookies capturados.",
-            "cookies_count": len(cookies)
+            "message": f"Sessão salva! Capturado: {', '.join(message_parts) or 'dados de sessão'}.",
+            "cookies_count": len(cookies),
+            "has_token": bool(auth_token),
+            "token_source": token_source
         }
     except Exception as e:
         logger.error(f"Solarman capture session error: {e}")
@@ -4922,6 +4993,40 @@ async def list_solarman_plants(current_user: dict = Depends(get_current_user)):
     except Exception as e:
         logger.error(f"Solarman plants error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@api_router.get("/integrations/solarman/debug-session")
+async def debug_solarman_session(current_user: dict = Depends(get_current_user)):
+    """Debug endpoint to check saved Solarman session data"""
+    try:
+        service = get_solarman_service(db)
+        session = await service.get_saved_session()
+        
+        if not session:
+            return {"success": False, "message": "Nenhuma sessão encontrada"}
+        
+        # Return session info without sensitive data
+        cookies = session.get('cookies', [])
+        cookie_names = [c.get('name') for c in cookies]
+        
+        return {
+            "success": True,
+            "session_info": {
+                "captured_at": session.get('captured_at'),
+                "expires_at": session.get('expires_at'),
+                "logged_in": session.get('logged_in'),
+                "source": session.get('source'),
+                "cookies_count": len(cookies),
+                "cookie_names": cookie_names,
+                "has_auth_token": bool(session.get('auth_token')),
+                "token_source": session.get('token_source'),
+                "auth_token_preview": session.get('auth_token', '')[:50] + '...' if session.get('auth_token') else None,
+                "local_storage_keys": list(session.get('local_storage', {}).keys()),
+                "session_storage_keys": list(session.get('session_storage', {}).keys()),
+            }
+        }
+    except Exception as e:
+        logger.error(f"Solarman debug session error: {e}")
+        return {"success": False, "error": str(e)}
 
 @api_router.post("/integrations/solarman/disconnect")
 async def disconnect_solarman(current_user: dict = Depends(get_current_user)):

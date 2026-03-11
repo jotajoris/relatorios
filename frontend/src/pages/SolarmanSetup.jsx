@@ -12,11 +12,26 @@ const SolarmanSetup = () => {
   // Backend URL for the bookmarklet
   const backendUrl = process.env.REACT_APP_BACKEND_URL || window.location.origin;
   
-  // Bookmarklet code - sends cookies to our API
+  // Bookmarklet code - sends cookies, localStorage, and sessionStorage to our API
   const bookmarkletCode = `javascript:(function(){
-    var cookies = document.cookie;
-    if (!cookies) {
-      alert('Nenhum cookie encontrado. Faça login primeiro!');
+    var cookies = document.cookie || '';
+    var ls = {};
+    var ss = {};
+    try {
+      for(var i=0; i<localStorage.length; i++) {
+        var k = localStorage.key(i);
+        ls[k] = localStorage.getItem(k);
+      }
+    } catch(e) {}
+    try {
+      for(var i=0; i<sessionStorage.length; i++) {
+        var k = sessionStorage.key(i);
+        ss[k] = sessionStorage.getItem(k);
+      }
+    } catch(e) {}
+    
+    if (!cookies && Object.keys(ls).length === 0 && Object.keys(ss).length === 0) {
+      alert('Nenhum dado de sessao encontrado. Faca login primeiro!');
       return;
     }
     
@@ -25,18 +40,23 @@ const SolarmanSetup = () => {
     fetch(apiUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ cookies: cookies })
+      body: JSON.stringify({ 
+        cookies: cookies, 
+        localStorage: ls, 
+        sessionStorage: ss,
+        url: window.location.href
+      })
     })
     .then(r => r.json())
     .then(data => {
       if (data.success) {
         alert('Sucesso! ' + data.message + ' Volte para o sistema ON Usinas.');
       } else {
-        alert('Erro: ' + (data.error || 'Falha ao salvar sessão'));
+        alert('Erro: ' + (data.error || 'Falha ao salvar sessao'));
       }
     })
     .catch(e => {
-      alert('Erro de conexão: ' + e.message);
+      alert('Erro de conexao: ' + e.message);
     });
   })();`.replace(/\s+/g, ' ').trim();
   
@@ -105,9 +125,19 @@ const SolarmanSetup = () => {
                     Conectado em: {new Date(status.captured_at).toLocaleString('pt-BR')}
                   </p>
                 )}
-                <Button variant="outline" size="sm" onClick={handleDisconnect}>
-                  Desconectar
-                </Button>
+                <div className="text-sm text-neutral-500 space-y-1">
+                  <p>Cookies: {status.cookies_count || 0}</p>
+                  <p>Token de autenticação: {status.has_auth_token ? (
+                    <span className="text-emerald-600">Capturado ({status.token_source})</span>
+                  ) : (
+                    <span className="text-amber-500">Não capturado - Pode falhar ao buscar usinas</span>
+                  )}</p>
+                </div>
+                <div className="flex gap-2 pt-2">
+                  <Button variant="outline" size="sm" onClick={handleDisconnect}>
+                    Desconectar
+                  </Button>
+                </div>
               </div>
             ) : (
               <p className="text-amber-600">Não conectado. Siga as instruções abaixo.</p>
@@ -206,6 +236,30 @@ const SolarmanSetup = () => {
                   <strong>Alternativa:</strong> Se não conseguir criar o favorito, você pode colar 
                   o código diretamente no Console do navegador (F12) enquanto estiver logado no Solarman.
                 </p>
+              </div>
+              
+              {/* Advanced Debug */}
+              <div className="pt-4 border-t border-neutral-200">
+                <details className="text-sm">
+                  <summary className="cursor-pointer font-medium text-neutral-700">
+                    Problemas com a integração? (Avançado)
+                  </summary>
+                  <div className="mt-3 p-3 bg-amber-50 rounded-lg text-neutral-600 space-y-2">
+                    <p>
+                      Se após capturar a sessão a busca de usinas não funcionar, pode ser necessário 
+                      capturar uma requisição de rede diretamente:
+                    </p>
+                    <ol className="list-decimal list-inside space-y-1">
+                      <li>Abra o Solarman PRO e faça login</li>
+                      <li>Pressione F12 para abrir as ferramentas de desenvolvedor</li>
+                      <li>Vá para a aba "Network" (Rede)</li>
+                      <li>Navegue até a lista de usinas no Solarman</li>
+                      <li>Encontre uma requisição que retorna as usinas (procure por "station" ou "plant")</li>
+                      <li>Clique com botão direito → "Copy as cURL"</li>
+                      <li>Entre em contato com o suporte técnico com esse cURL</li>
+                    </ol>
+                  </div>
+                </details>
               </div>
             </CardContent>
           </Card>

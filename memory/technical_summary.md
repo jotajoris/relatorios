@@ -2,7 +2,7 @@
 
 **Data de geração:** Dezembro/2025  
 **Domínio de produção:** https://onusinas.com  
-**Ambiente de preview:** https://solar-report-hub.preview.emergentagent.com
+**Ambiente de preview:** https://solar-report-1.preview.emergentagent.com
 
 ---
 
@@ -304,7 +304,7 @@
 
 ### 3.1 Ambiente de Preview/Desenvolvimento
 - **Plataforma:** Emergent Agent Platform
-- **URL:** https://solar-report-hub.preview.emergentagent.com
+- **URL:** https://solar-report-1.preview.emergentagent.com
 - **Arquitetura:** Container Kubernetes
 - **Serviços:**
   - Frontend: Porta 3000 (CRA/React)
@@ -334,7 +334,7 @@ JWT_SECRET=***
 
 **Frontend (.env):**
 ```
-REACT_APP_BACKEND_URL=https://solar-report-hub.preview.emergentagent.com
+REACT_APP_BACKEND_URL=https://solar-report-1.preview.emergentagent.com
 WDS_SOCKET_PORT=443
 ```
 

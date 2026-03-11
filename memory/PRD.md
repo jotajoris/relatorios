@@ -152,6 +152,20 @@ Aplicação web full-stack para gerenciamento e elaboração de relatórios de u
     - `/app/backend/server.py`: Novos endpoints para captura de sessão
     - `/app/frontend/src/pages/Portais.jsx`: Nova UI para fluxo de captura de sessão
 
+- [x] **Integração Solarman - Captura Completa de Sessão** (11/03/2026): Melhorias na captura de sessão Solarman:
+  - Backend: Endpoint `POST /api/integrations/solarman/capture-session` agora captura cookies + localStorage + sessionStorage
+  - Backend: Extração automática de token JWT de múltiplas fontes (cookies, localStorage, sessionStorage)
+  - Backend: Endpoint `GET /api/integrations/solarman/debug-session` para diagnóstico de sessão capturada
+  - Backend: Tentativa de múltiplos endpoints da API Solarman PRO (`/maintain-s/station/*`)
+  - Frontend: Bookmarklet atualizado para capturar todos os dados de sessão do navegador
+  - Frontend: Status detalhado mostrando quantidade de cookies e se token foi capturado
+  - Frontend: Instruções de debug avançado para capturar requisição cURL
+  - **BLOQUEIO ATUAL**: A API do Solarman PRO (`/maintain-s/station/list` e `/maintain-s/station/page`) retorna erro 400 "argument_validation_failed" mesmo com token JWT válido. É necessário investigar requisição de rede real do portal para identificar parâmetros obrigatórios.
+  - Alterações em:
+    - `/app/backend/services/solarman_service.py`: `fetch_plants()` melhorado com mais endpoints e logs
+    - `/app/backend/server.py`: Endpoints capture-session e debug-session expandidos
+    - `/app/frontend/src/pages/SolarmanSetup.jsx`: Novo bookmarklet e instruções de debug
+
 - [x] **Gráfico de Curva de Potência** (09/12/2025): Implementado gráfico de potência diária na página de detalhes da usina:
   - Backend: Endpoint `GET /api/dashboard/power-curve/{plant_id}?date=YYYY-MM-DD`
   - Backend: Lógica para tentar buscar dados reais da Growatt OSS (via Playwright)
