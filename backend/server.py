@@ -4843,6 +4843,61 @@ async def complete_solarman_login(
         logger.error(f"Solarman complete login error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@api_router.post("/integrations/solarman/capture-session")
+async def capture_solarman_session(request: Request):
+    """
+    Public endpoint to receive cookies from bookmarklet.
+    Called from user's browser after they login to Solarman.
+    """
+    try:
+        data = await request.json()
+        cookies_str = data.get('cookies', '')
+        token = data.get('token', '')  # Auth token from our system
+        
+        if not cookies_str:
+            return {"success": False, "error": "Cookies não fornecidos"}
+        
+        # Parse cookies string into list
+        cookies = []
+        for c in cookies_str.split(';'):
+            c = c.strip()
+            if '=' in c:
+                name, value = c.split('=', 1)
+                cookies.append({
+                    'name': name.strip(),
+                    'value': value.strip(),
+                    'domain': 'pro.solarmanpv.com',
+                    'path': '/'
+                })
+        
+        if not cookies:
+            return {"success": False, "error": "Nenhum cookie válido encontrado"}
+        
+        # Save to DB
+        await db.solarman_sessions.update_one(
+            {'type': 'pro'},
+            {'$set': {
+                'type': 'pro',
+                'cookies': cookies,
+                'logged_in': True,
+                'captured_at': datetime.now(timezone.utc).isoformat(),
+                'expires_at': (datetime.now(timezone.utc) + timedelta(days=7)).isoformat(),
+                'source': 'bookmarklet'
+            }},
+            upsert=True
+        )
+        
+        logger.info(f"[Solarman] Sessão capturada via bookmarklet: {len(cookies)} cookies")
+        
+        return {
+            "success": True,
+            "message": f"Sessão salva! {len(cookies)} cookies capturados.",
+            "cookies_count": len(cookies)
+        }
+    except Exception as e:
+        logger.error(f"Solarman capture session error: {e}")
+        return {"success": False, "error": str(e)}
+
 @api_router.get("/integrations/solarman/plants")
 async def list_solarman_plants(current_user: dict = Depends(get_current_user)):
     """List all plants from Solarman using saved session"""

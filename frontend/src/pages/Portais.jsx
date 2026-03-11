@@ -630,12 +630,11 @@ const Portais = () => {
                     ) : (
                       <div className="flex gap-2">
                         <Button 
-                          onClick={handleSolarmanLogin}
-                          disabled={loading}
+                          onClick={() => window.location.href = '/solarman-setup'}
                           className="bg-[#0066CC] hover:bg-[#0055AA] text-white"
                         >
-                          {loading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Link className="h-4 w-4 mr-2" />}
-                          {loading ? 'Aguardando login...' : 'Fazer Login'}
+                          <Link className="h-4 w-4 mr-2" />
+                          Configurar Conexão
                         </Button>
                         <Button 
                           variant="outline"

@@ -12,6 +12,7 @@ import Settings from "./pages/Settings";
 import Profile from "./pages/Profile";
 import Invoices from "./pages/Invoices";
 import Portais from "./pages/Portais";
+import SolarmanSetup from "./pages/SolarmanSetup";
 import Layout from "./components/Layout";
 
 const ProtectedRoute = ({ children }) => {
@@ -98,6 +99,11 @@ function App() {
           <Route path="/portais" element={
             <ProtectedRoute>
               <Portais />
+            </ProtectedRoute>
+          } />
+          <Route path="/solarman-setup" element={
+            <ProtectedRoute>
+              <SolarmanSetup />
             </ProtectedRoute>
           } />
           <Route path="/configuracoes" element={
