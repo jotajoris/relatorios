@@ -229,9 +229,9 @@ const Dashboard = () => {
             <RefreshCw className="h-3.5 w-3.5" />
           </Button>
           <Button variant="outline" size="sm" onClick={handleSyncAll} disabled={syncing}
-            className="h-7 text-xs border-[#FFD600] hover:bg-[#FFD600]/10" title="Sincronizar todas as usinas Growatt">
+            className="h-7 text-xs border-[#FFD600] hover:bg-[#FFD600]/10" title="Sincronizar todas as usinas">
             {syncing ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Wifi className="h-3 w-3 mr-1 text-[#FFD600]" />}
-            {syncing ? 'Sincronizando...' : 'Sync Growatt'}
+            {syncing ? 'Sincronizando...' : 'Sincronizar'}
           </Button>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400" />

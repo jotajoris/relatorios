@@ -195,7 +195,7 @@ Aplicação web full-stack para gerenciamento e elaboração de relatórios de u
   - Aguardar API oficial com credenciais de desenvolvedor
 - [ ] Frontend para gerenciamento do Sistema de Créditos (distribuição entre UCs)
 - [ ] Adicionar seção de detalhamento por UC beneficiária no relatório PDF (dados das faturas)
-- [ ] Implementar integrações com outros portais (Huawei FusionSolar, Deye/Sofar Solarman, Solis)
+- [ ] Implementar integrações com outros portais (Huawei FusionSolar, Solis)
 
 ## P2 - Backlog
 - [ ] Integração com outras marcas de inversores
@@ -203,6 +203,16 @@ Aplicação web full-stack para gerenciamento e elaboração de relatórios de u
 - [ ] Parser para faturas Energisa MS
 - [ ] Remover obrigatoriedade do campo "Potência (kWp)" quando usina é sincronizada com Growatt
 - [ ] Download de dados históricos da Growatt (funcionalidade ainda não implementada)
+- [ ] Corrigir navegação no dashboard que não leva para usina correta
+
+## Completed (11/03/2026)
+- [x] **UI de Portais Genérica**: Removidas referências fixas ao "Growatt" onde a usina pode estar conectada a outros portais (Solarman):
+  - Título da seção de integração: "Integração com Portal de Monitoramento" (dinâmico)
+  - Texto e botões mostram o nome correto do portal baseado em `solarman_id` ou `growatt_plant_name`
+  - Helper `getPlantPortalInfo()` determina automaticamente o portal da usina
+  - Botão do Dashboard mudou de "Sync Growatt" para "Sincronizar"
+  - Textos da Settings atualizados para mencionar Growatt + Solarman
+  - Alterações em: `PlantDetail.jsx`, `Dashboard.jsx`, `Settings.jsx`
 
 ## Credentials
 - Admin: projetos.onsolucoes@gmail.com / on123456

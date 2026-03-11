@@ -182,6 +182,39 @@ const PlantDetail = () => {
   const [newUtilityName, setNewUtilityName] = useState('');
   const [savingUtility, setSavingUtility] = useState(false);
 
+  // Helper para determinar o portal de integração da usina
+  const getPlantPortalInfo = (plantData) => {
+    if (!plantData) return { name: 'Portal', type: null, connected: false };
+    
+    // Se tem solarman_id, está conectado ao Solarman
+    if (plantData.solarman_id) {
+      return { name: 'Solarman', type: 'solarman', connected: true };
+    }
+    
+    // Se tem growatt_plant_name ou growatt_plant_id, está conectado ao Growatt
+    if (plantData.growatt_plant_name || plantData.growatt_plant_id) {
+      return { name: 'Growatt', type: 'growatt', connected: true };
+    }
+    
+    // Se não está conectado, sugerir baseado na marca do inversor
+    const brand = (plantData.inverter_brand || '').toLowerCase();
+    if (brand.includes('deye') || brand.includes('solarman')) {
+      return { name: 'Solarman', type: 'solarman', connected: false };
+    }
+    if (brand.includes('growatt')) {
+      return { name: 'Growatt', type: 'growatt', connected: false };
+    }
+    if (brand.includes('huawei') || brand.includes('fusion')) {
+      return { name: 'FusionSolar', type: 'fusionsolar', connected: false };
+    }
+    if (brand.includes('solis')) {
+      return { name: 'SolisCloud', type: 'solis', connected: false };
+    }
+    
+    // Padrão: sem portal definido
+    return { name: 'Portal de Monitoramento', type: null, connected: false };
+  };
+
   // Sync Growatt data for this plant
   const handleSyncGrowattDirect = async () => {
     setSyncingGrowatt(true);
@@ -1282,10 +1315,12 @@ const PlantDetail = () => {
                               <FileSpreadsheet className="mr-2 h-4 w-4" />
                               Enviar arquivo de geração
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={openImportDialog}>
-                              <Sun className="mr-2 h-4 w-4 text-orange-500" />
-                              Importar do portal Growatt
-                            </DropdownMenuItem>
+                            {(getPlantPortalInfo(plant).type === 'growatt' || getPlantPortalInfo(plant).connected) && (
+                              <DropdownMenuItem onClick={openImportDialog}>
+                                <Sun className="mr-2 h-4 w-4 text-orange-500" />
+                                Importar do {getPlantPortalInfo(plant).name}
+                              </DropdownMenuItem>
+                            )}
                           </DropdownMenuSubContent>
                         </DropdownMenuSub>
                         <DropdownMenuSeparator />
@@ -1525,12 +1560,12 @@ const PlantDetail = () => {
                       onClick={handleSyncGrowattDirect}
                       disabled={syncingGrowatt}
                       className="border-[#FFD600] text-[#1A1A1A] hover:bg-[#FFD600]/10"
-                      data-testid="sync-growatt-btn"
+                      data-testid="sync-portal-btn"
                     >
                       {syncingGrowatt ? (
                         <><Loader2 className="h-4 w-4 animate-spin mr-2" />Sincronizando...</>
                       ) : (
-                        <><Sun className="h-4 w-4 mr-2 text-[#FFD600]" />Sincronizar Growatt</>
+                        <><Sun className="h-4 w-4 mr-2 text-[#FFD600]" />Sincronizar Portal</>
                       )}
                     </Button>
                     <Button
@@ -2224,46 +2259,75 @@ const PlantDetail = () => {
               </CardContent>
             </Card>
 
-            {/* Integração Growatt */}
+            {/* Integração com Portal de Monitoramento */}
             <Card>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Sun className="h-5 w-5 text-[#FFD600]" />
-                  Integração com Inversores
+                  Integração com Portal de Monitoramento
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
-                <p className="text-sm text-neutral-500">
-                  Conecte esta usina ao portal Growatt para sincronizar automaticamente os dados de geração.
-                </p>
-                
-                {plant.growatt_plant_name ? (
-                  <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                    <div className="flex items-center gap-2 text-green-700">
-                      <CheckCircle className="h-5 w-5" />
-                      <span className="font-medium">Conectado ao Growatt</span>
-                    </div>
-                    <p className="text-sm text-green-600 mt-1">
-                      Vinculado à usina: <strong>{plant.growatt_plant_name}</strong>
-                    </p>
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="mt-3"
-                      onClick={() => setGrowattDialogOpen(true)}
-                    >
-                      Sincronizar Agora
-                    </Button>
-                  </div>
-                ) : (
-                  <Button 
-                    onClick={() => setGrowattDialogOpen(true)}
-                    className="bg-[#FFD600] hover:bg-[#EAB308] text-[#1A1A1A]"
-                  >
-                    <Zap className="h-4 w-4 mr-2" />
-                    Conectar ao Growatt
-                  </Button>
-                )}
+                {(() => {
+                  const portalInfo = getPlantPortalInfo(plant);
+                  const isConnected = plant.growatt_plant_name || plant.solarman_id;
+                  const connectedPortal = plant.solarman_id ? 'Solarman' : plant.growatt_plant_name ? 'Growatt' : null;
+                  const connectedName = plant.solarman_id || plant.growatt_plant_name;
+                  
+                  return (
+                    <>
+                      <p className="text-sm text-neutral-500">
+                        {isConnected 
+                          ? `Esta usina está conectada ao portal ${connectedPortal}.`
+                          : portalInfo.type 
+                            ? `Conecte esta usina ao ${portalInfo.name} para sincronizar automaticamente os dados de geração.`
+                            : 'Conecte esta usina a um portal de monitoramento para sincronizar automaticamente os dados de geração.'
+                        }
+                      </p>
+                      
+                      {isConnected ? (
+                        <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                          <div className="flex items-center gap-2 text-green-700">
+                            <CheckCircle className="h-5 w-5" />
+                            <span className="font-medium">Conectado ao {connectedPortal}</span>
+                          </div>
+                          <p className="text-sm text-green-600 mt-1">
+                            Vinculado à usina: <strong>{connectedName}</strong>
+                          </p>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            className="mt-3"
+                            onClick={() => setGrowattDialogOpen(true)}
+                          >
+                            Sincronizar Agora
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          {portalInfo.type === 'growatt' || !portalInfo.type ? (
+                            <Button 
+                              onClick={() => setGrowattDialogOpen(true)}
+                              className="bg-[#FFD600] hover:bg-[#EAB308] text-[#1A1A1A]"
+                            >
+                              <Zap className="h-4 w-4 mr-2" />
+                              Conectar ao Growatt
+                            </Button>
+                          ) : null}
+                          {portalInfo.type === 'solarman' || !portalInfo.type ? (
+                            <Button 
+                              variant="outline"
+                              onClick={() => navigate('/portals')}
+                            >
+                              <Sun className="h-4 w-4 mr-2" />
+                              Configurar Solarman
+                            </Button>
+                          ) : null}
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </CardContent>
             </Card>
 
@@ -2943,7 +3007,7 @@ const PlantDetail = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Import from Growatt Dialog */}
+      {/* Import from Portal Dialog */}
       <Dialog open={importDialogOpen} onOpenChange={setImportDialogOpen}>
         <DialogContent className="sm:max-w-lg bg-white">
           <DialogHeader>
@@ -2955,11 +3019,11 @@ const PlantDetail = () => {
           <div className="space-y-4 py-4">
             <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
               <p className="text-sm text-amber-800">
-                <strong>Nota:</strong> A API do Growatt tem limitações que impedem o download de histórico. 
+                <strong>Nota:</strong> A API do portal tem limitações que impedem o download de histórico. 
                 Use esta função para sincronizar os <strong>dados do dia atual</strong>.
               </p>
               <p className="text-sm text-amber-700 mt-1">
-                Para dados históricos, baixe do portal Growatt e use "Enviar arquivo de geração".
+                Para dados históricos, baixe do portal {getPlantPortalInfo(plant).name} e use "Enviar arquivo de geração".
               </p>
             </div>
             

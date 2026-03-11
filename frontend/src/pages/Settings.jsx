@@ -420,10 +420,10 @@ const Settings = () => {
             <CardHeader className="bg-white border-b border-neutral-100">
               <CardTitle className="text-lg flex items-center gap-2">
                 <Timer className="h-5 w-5 text-[#EAB308]" />
-                Sincronização Automática Growatt
+                Sincronização Automática
               </CardTitle>
               <CardDescription>
-                Configure a frequência de sincronização automática dos dados de geração do portal Growatt.
+                Configure a frequência de sincronização automática dos dados de geração dos portais (Growatt e Solarman).
               </CardDescription>
             </CardHeader>
             <CardContent className="bg-white pt-6 space-y-6">
@@ -531,8 +531,8 @@ const Settings = () => {
                     <ul className="text-sm text-blue-800 space-y-1">
                       <li>• O sistema busca automaticamente os dados de geração do dia atual</li>
                       <li>• Usinas sem geração no dia são marcadas como "offline" ou "0 kWh"</li>
-                      <li>• Você pode forçar uma sincronização manual no Dashboard (botão "Sync Growatt")</li>
-                      <li>• Apenas usinas com credenciais Growatt configuradas são sincronizadas</li>
+                      <li>• Você pode forçar uma sincronização manual no Dashboard (botão "Sincronizar")</li>
+                      <li>• Usinas configuradas com Growatt e Solarman são sincronizadas automaticamente</li>
                     </ul>
                   </div>
                 </>
