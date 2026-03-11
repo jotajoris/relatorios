@@ -171,7 +171,7 @@ class SolarmanSessionService:
                 cookies = await self.context.cookies()
                 
                 # Save cookies to DB
-                if self.db and cookies:
+                if self.db is not None and cookies:
                     await self.db.solarman_sessions.update_one(
                         {'type': 'pro'},
                         {'$set': {
@@ -424,12 +424,12 @@ def get_solarman_service(db=None) -> SolarmanSessionService:
     global _solarman_service
     if _solarman_service is None:
         _solarman_service = SolarmanSessionService(db)
-    elif db and _solarman_service.db is None:
+    elif db is not None and _solarman_service.db is None:
         _solarman_service.db = db
     return _solarman_service
 
 async def reset_solarman_service():
     global _solarman_service
-    if _solarman_service:
+    if _solarman_service is not None:
         await _solarman_service.close()
         _solarman_service = None
