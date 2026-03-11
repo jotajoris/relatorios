@@ -50,19 +50,19 @@ async def set_sync_interval(minutes: int):
         # Update the scheduler job
         if _scheduler:
             try:
-                _scheduler.remove_job('sync_growatt_interval')
+                _scheduler.remove_job('sync_all_plants')
             except:
                 pass
             
             from apscheduler.triggers.interval import IntervalTrigger
             _scheduler.add_job(
-                sync_all_growatt_plants,
+                sync_all_plants,
                 trigger=IntervalTrigger(minutes=minutes),
-                id='sync_growatt_interval',
-                name=f'Sync Growatt automatico (cada {minutes} min)',
+                id='sync_all_plants',
+                name=f'Sync TODAS usinas (cada {minutes} min)',
                 replace_existing=True,
             )
-            logger.info(f"Scheduler atualizado: Growatt sync a cada {minutes} minutos")
+            logger.info(f"Scheduler atualizado: Sync todas usinas a cada {minutes} minutos")
         
         return True
     except Exception as e:
@@ -340,11 +340,143 @@ async def sync_all_growatt_plants():
                 await service.close()
         
         logger.info(f"=== GROWATT SYNC CONCLUIDO: {total_synced} usinas sincronizadas, {total_errors} erros ===")
+        return total_synced, total_errors
         
     except Exception as e:
         logger.error(f"Growatt sync job error: {e}")
+        return 0, 1
     finally:
         client.close()
+
+
+async def _sync_solarman_plants(db):
+    """Internal function to sync Solarman plants. Called by sync_all_plants."""
+    logger.info("--- Sincronizando usinas Solarman ---")
+    
+    total_synced = 0
+    total_errors = 0
+    
+    try:
+        # Check if Solarman session is valid
+        session = await db.solarman_sessions.find_one({'type': 'pro', 'logged_in': True}, {'_id': 0})
+        
+        if not session or not session.get('auth_token'):
+            logger.info("Sessão Solarman não encontrada ou expirada. Pulando.")
+            return 0, 0
+        
+        # Get all plants with solarman_id
+        plants = await db.plants.find(
+            {'solarman_id': {'$exists': True, '$ne': None, '$ne': ''}, 'is_active': True},
+            {'_id': 0, 'id': 1, 'name': 1, 'solarman_id': 1}
+        ).to_list(200)
+        
+        if not plants:
+            logger.info("Nenhuma usina com solarman_id encontrada")
+            return 0, 0
+        
+        logger.info(f"Encontradas {len(plants)} usinas Solarman")
+        
+        # Build solarman_id to plant_id mapping
+        solarman_to_plant = {str(p.get('solarman_id')): p for p in plants}
+        
+        # Fetch all plants from Solarman API
+        from services.solarman_service import SolarmanSessionService
+        service = SolarmanSessionService(db)
+        
+        result = await service.fetch_plants()
+        
+        if not result.get('success'):
+            logger.warning(f"Falha ao buscar usinas do Solarman: {result.get('error')}")
+            return 0, 1
+        
+        solarman_plants = result.get('plants', [])
+        import uuid
+        
+        for sp in solarman_plants:
+            solarman_id = str(sp.get('id', ''))
+            
+            if solarman_id not in solarman_to_plant:
+                continue
+            
+            our_plant = solarman_to_plant[solarman_id]
+            plant_id = our_plant['id']
+            
+            try:
+                today_kwh = sp.get('today_energy_kwh') or sp.get('generationValue') or 0
+                total_kwh = sp.get('total_energy_kwh') or sp.get('generationTotal') or 0
+                status = sp.get('status', 'offline')
+                network_status = sp.get('networkStatus', 'UNKNOWN')
+                
+                today_str = datetime.now(BRT).strftime('%Y-%m-%d')
+                
+                if today_kwh > 0:
+                    existing = await db.generation_data.find_one({'plant_id': plant_id, 'date': today_str})
+                    if existing:
+                        await db.generation_data.update_one(
+                            {'plant_id': plant_id, 'date': today_str},
+                            {'$set': {'generation_kwh': today_kwh, 'source': 'solarman_auto'}}
+                        )
+                    else:
+                        await db.generation_data.insert_one({
+                            'id': str(uuid.uuid4()), 'plant_id': plant_id,
+                            'date': today_str, 'generation_kwh': today_kwh,
+                            'source': 'solarman_auto', 'created_at': datetime.now(BRT).isoformat()
+                        })
+                
+                await db.plants.update_one({'id': plant_id}, {'$set': {
+                    'last_sync': datetime.now(BRT).isoformat(),
+                    'solarman_status': status,
+                    'solarman_network_status': network_status,
+                    'solarman_total_kwh': total_kwh,
+                }})
+                
+                total_synced += 1
+                logger.info(f"  {our_plant.get('name')}: {today_kwh} kWh ({status})")
+                
+            except Exception as e:
+                logger.error(f"  Erro {our_plant.get('name')}: {e}")
+                total_errors += 1
+        
+        return total_synced, total_errors
+        
+    except Exception as e:
+        logger.error(f"Solarman sync error: {e}")
+        return 0, 1
+
+
+async def sync_all_plants():
+    """
+    Sync generation data from ALL portals (Growatt, Solarman, etc) for all monitored plants.
+    This is the main sync job that runs at the configured interval.
+    """
+    logger.info("========================================")
+    logger.info("=== JOB: Sincronização de TODAS as usinas ===")
+    logger.info("========================================")
+    
+    start_time = datetime.now(BRT)
+    
+    # Sync Growatt plants
+    growatt_synced, growatt_errors = await sync_all_growatt_plants()
+    
+    # Sync Solarman plants
+    client = AsyncIOMotorClient(os.environ.get('MONGO_URL', 'mongodb://localhost:27017'))
+    db = client[os.environ.get('DB_NAME', 'test_database')]
+    try:
+        solarman_synced, solarman_errors = await _sync_solarman_plants(db)
+    finally:
+        client.close()
+    
+    # Summary
+    total_synced = growatt_synced + solarman_synced
+    total_errors = growatt_errors + solarman_errors
+    duration = (datetime.now(BRT) - start_time).total_seconds()
+    
+    logger.info("========================================")
+    logger.info(f"=== SYNC COMPLETO em {duration:.1f}s ===")
+    logger.info(f"    Growatt: {growatt_synced} usinas")
+    logger.info(f"    Solarman: {solarman_synced} usinas")
+    logger.info(f"    Total: {total_synced} sincronizadas, {total_errors} erros")
+    logger.info("========================================")
 
 
 def start_scheduler():
@@ -366,18 +498,17 @@ def start_scheduler():
         replace_existing=True,
     )
     
-    # Growatt sync: every X minutes (default 30)
-    # Will be updated when settings are loaded
+    # Sync ALL plants (Growatt + Solarman + future portals): every X minutes
     _scheduler.add_job(
-        sync_all_growatt_plants,
+        sync_all_plants,
         trigger=IntervalTrigger(minutes=_current_sync_interval),
-        id='sync_growatt_interval',
-        name=f'Sync Growatt automatico (cada {_current_sync_interval} min)',
+        id='sync_all_plants',
+        name=f'Sync TODAS usinas (cada {_current_sync_interval} min)',
         replace_existing=True,
     )
     
     _scheduler.start()
-    logger.info(f"Scheduler iniciado: faturas COPEL (meia-noite) + Growatt sync (cada {_current_sync_interval} min)")
+    logger.info(f"Scheduler iniciado: faturas COPEL (meia-noite) + Sync todas usinas (cada {_current_sync_interval} min)")
     
     # Load interval from DB after scheduler starts
     async def load_interval():

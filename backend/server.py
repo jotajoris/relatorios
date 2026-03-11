@@ -3380,21 +3380,27 @@ async def get_sync_status(current_user: dict = Depends(get_current_user)):
     next_run = None
     
     if scheduler:
-        job = scheduler.get_job('sync_growatt_interval')
+        job = scheduler.get_job('sync_all_plants')
         if job and job.next_run_time:
             next_run = job.next_run_time.isoformat()
     
     # Get last sync time from any plant
     last_sync_plant = await db.plants.find_one(
-        {'last_growatt_sync': {'$exists': True}},
-        {'_id': 0, 'last_growatt_sync': 1},
-        sort=[('last_growatt_sync', -1)]
+        {'$or': [{'last_growatt_sync': {'$exists': True}}, {'last_sync': {'$exists': True}}]},
+        {'_id': 0, 'last_growatt_sync': 1, 'last_sync': 1},
+        sort=[('last_sync', -1)]
     )
-    last_sync = last_sync_plant.get('last_growatt_sync') if last_sync_plant else None
+    last_sync = None
+    if last_sync_plant:
+        last_sync = last_sync_plant.get('last_sync') or last_sync_plant.get('last_growatt_sync')
     
-    # Count plants with Growatt credentials
+    # Count plants with any portal credentials
     growatt_count = await db.plants.count_documents({
         'growatt_username': {'$exists': True, '$ne': ''},
+        'is_active': True
+    })
+    solarman_count = await db.plants.count_documents({
+        'solarman_id': {'$exists': True, '$ne': None, '$ne': ''},
         'is_active': True
     })
     
@@ -3402,18 +3408,20 @@ async def get_sync_status(current_user: dict = Depends(get_current_user)):
         "interval_minutes": get_current_interval(),
         "next_run": next_run,
         "last_sync": last_sync,
-        "plants_with_credentials": growatt_count
+        "plants_with_growatt": growatt_count,
+        "plants_with_solarman": solarman_count,
+        "plants_with_credentials": growatt_count + solarman_count
     }
 
 @api_router.post("/sync/growatt/all")
 async def sync_all_growatt_now(current_user: dict = Depends(get_current_user)):
-    """Manually trigger Growatt sync for all plants."""
-    from services.scheduler import sync_all_growatt_plants
+    """Manually trigger sync for all plants (Growatt + Solarman)."""
+    from services.scheduler import sync_all_plants
     
-    # Run in background using asyncio.create_task (not BackgroundTasks, which runs sync)
-    asyncio.create_task(sync_all_growatt_plants())
+    # Run in background using asyncio.create_task
+    asyncio.create_task(sync_all_plants())
     
-    return {"status": "started", "message": "Sincronização iniciada em background"}
+    return {"status": "started", "message": "Sincronização de TODAS usinas iniciada em background"}
 
 # ==================== REPORT DATA ====================
 
@@ -5128,7 +5136,8 @@ async def import_solarman_plants(
                 'solarman_server': server,
                 'solarman_group': group,
                 'solarman_plant_name': sp.get('name', ''),
-                'solarman_plant_id': sp.get('id', ''),
+                'solarman_id': str(sp.get('id', '')),  # Main ID field for sync
+                'solarman_plant_id': sp.get('id', ''),  # Legacy field
                 'inverter_integration': 'solarman',
             }
             if sp.get('capacity_kwp') and not existing.get('capacity_kwp'):
@@ -5146,7 +5155,8 @@ async def import_solarman_plants(
         doc = plant.model_dump()
         doc['created_at'] = doc['created_at'].isoformat()
         doc['solarman_plant_name'] = sp.get('name', '')
-        doc['solarman_plant_id'] = sp.get('id', '')
+        doc['solarman_id'] = str(sp.get('id', ''))  # Main ID field for sync
+        doc['solarman_plant_id'] = sp.get('id', '')  # Legacy field
         doc['solarman_email'] = email
         doc['solarman_password'] = password
         doc['solarman_server'] = server
