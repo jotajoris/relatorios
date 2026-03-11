@@ -876,13 +876,14 @@ const Portais = () => {
             <h3 className="text-lg font-semibold mb-4">Colar Cookies do Solarman</h3>
             
             <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded text-sm text-amber-800">
-              <p className="font-medium mb-2">Como obter os cookies:</p>
+              <p className="font-medium mb-2">Como obter os cookies (método fácil):</p>
               <ol className="list-decimal list-inside space-y-1 text-xs">
-                <li>Faça login no <a href="https://pro.solarmanpv.com/login" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">pro.solarmanpv.com</a> (portal de instalador)</li>
-                <li>Pressione F12 para abrir as ferramentas do desenvolvedor</li>
-                <li>Vá na aba "Application" (Chrome) ou "Storage" (Firefox)</li>
-                <li>Clique em "Cookies" → "pro.solarmanpv.com"</li>
-                <li>Copie todos os cookies no formato: nome=valor; nome2=valor2</li>
+                <li>Faça login no <a href="https://pro.solarmanpv.com/login" target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">pro.solarmanpv.com</a></li>
+                <li>Após logar, pressione <strong>F12</strong> para abrir o DevTools</li>
+                <li>Clique na aba <strong>"Console"</strong></li>
+                <li>Digite <code className="bg-white px-1 rounded">document.cookie</code> e pressione Enter</li>
+                <li>Clique com botão direito no resultado → <strong>"Copy string contents"</strong></li>
+                <li>Cole aqui embaixo</li>
               </ol>
             </div>
             
