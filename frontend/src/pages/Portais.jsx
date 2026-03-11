@@ -124,9 +124,25 @@ const Portais = () => {
         // Try parsing as simple cookie format: name=value; name2=value2
         cookies = cookiesInput.split(';').map(c => {
           const [name, ...valueParts] = c.trim().split('=');
-          return { name: name.trim(), value: valueParts.join('=').trim(), domain: '.solarmanpv.com' };
+          return { 
+            name: name.trim(), 
+            value: valueParts.join('=').trim(), 
+            domain: 'pro.solarmanpv.com',
+            path: '/'
+          };
         }).filter(c => c.name && c.value);
       }
+      
+      // Ensure all cookies have required fields for Playwright
+      cookies = cookies.map(c => ({
+        name: c.name,
+        value: c.value,
+        domain: c.domain || 'pro.solarmanpv.com',
+        path: c.path || '/',
+        secure: true,
+        httpOnly: false,
+        sameSite: 'Lax'
+      }));
       
       if (!Array.isArray(cookies) || cookies.length === 0) {
         toast.error('Formato de cookies inválido');
