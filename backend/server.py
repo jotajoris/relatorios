@@ -5726,23 +5726,39 @@ async def download_pdf_report(
             continue
         seen_ucs.add(uc_num)
         
-        # Para UC geradora, incluir economia da simultaneidade
+        # Para UC geradora, incluir economia da simultaneidade e usar energia injetada como compensada
         economia_uc = inv.get('amount_saved_brl', 0) or 0
-        if unit.get('is_generator') and economia_simultaneidade > 0:
-            economia_uc += economia_simultaneidade
+        energy_compensated_uc = (inv.get('energy_compensated_fp_kwh', 0) or 0) + (inv.get('energy_compensated_p_kwh', 0) or 0)
+        energy_billed_uc = inv.get('energy_billed_fp_kwh', 0) or 0
+        consumption_registered = (inv.get('energy_registered_fp_kwh', 0) or 0) + (inv.get('energy_registered_p_kwh', 0) or 0)
+        
+        if unit.get('is_generator'):
+            # Para UC geradora:
+            # - Energia compensada = energia injetada (que volta para compensar o consumo)
+            # - Energia faturada = consumo - injetada
+            # - Economia = simultaneidade + valor da compensação
+            energy_injected_uc = (inv.get('energy_injected_fp_kwh', 0) or 0) + (inv.get('energy_injected_p_kwh', 0) or 0)
+            
+            if energy_injected_uc > 0:
+                energy_compensated_uc = energy_injected_uc
+                energy_billed_uc = max(0, consumption_registered - energy_injected_uc)
+            
+            # Economia da geradora = simultaneidade + compensação da injeção
+            if economia_simultaneidade > 0:
+                economia_uc = economia_simultaneidade + (energy_injected_uc * tarifa_total if energy_injected_uc > 0 else 0)
         
         consumer_units_data.append({
             'uc_number': unit.get('uc_number', ''),
             'name': unit.get('holder_name') or unit.get('address') or '',
             'cycle': f"{(inv.get('billing_cycle_start') or '')[:10]} a {(inv.get('billing_cycle_end') or '')[:10]}",
             'percentage': unit.get('compensation_percentage', 0),
-            'consumption_registered': (inv.get('energy_registered_fp_kwh', 0) or 0) + (inv.get('energy_registered_p_kwh', 0) or 0),
-            'energy_compensated': (inv.get('energy_compensated_fp_kwh', 0) or 0) + (inv.get('energy_compensated_p_kwh', 0) or 0),
-            'energy_billed': inv.get('energy_billed_fp_kwh', 0) or 0,
+            'consumption_registered': consumption_registered,
+            'energy_compensated': energy_compensated_uc,
+            'energy_billed': energy_billed_uc,
             'credit_previous': inv.get('credits_balance_fp_kwh', 0) or 0,
             'credit_accumulated': inv.get('credits_accumulated_fp_kwh', 0) or 0,
             'amount_billed': inv.get('amount_total_brl', 0) or 0,
-            'amount_saved': economia_uc,  # Inclui simultaneidade para UC geradora
+            'amount_saved': economia_uc,
         })
     
     report_data['consumer_units'] = consumer_units_data
