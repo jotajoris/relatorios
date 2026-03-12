@@ -205,15 +205,16 @@ Aplicação web full-stack para gerenciamento e elaboração de relatórios de u
 - [ ] Download de dados históricos da Growatt (funcionalidade ainda não implementada)
 - [ ] Corrigir navegação no dashboard que não leva para usina correta
 
-## Completed (11/03/2026)
-- [x] **Cálculo de Simultaneidade implementado**: O relatório agora calcula e exibe corretamente:
-  - Simultaneidade (autoconsumo) = Geração Total - Energia Injetada
-  - Economia da Simultaneidade = kWh × Tarifa (TE + TUSD)
-  - Economia da Compensação = Créditos usados × Tarifa
-  - Economia Total = Simultaneidade + Compensação
-- [x] **Parser COPEL atualizado**: Agora detecta corretamente o padrão "ENERGIA INJ. OUC MPT" das faturas Grupo B, diferenciando energia injetada do mês atual vs créditos de meses anteriores
-- [x] **Endpoint de preview de relatório corrigido**: Agora busca faturas por `reference_month` (MM/YYYY) em vez de `billing_cycle_end`
-- [x] **UI de Portais Genérica**: Removidas referências fixas ao "Growatt" onde a usina pode estar conectada a outros portais (Solarman)
+## Completed (12/03/2026)
+- [x] **Cálculo de Simultaneidade implementado**: O sistema agora calcula corretamente:
+  - **Simultaneidade (autoconsumo)** = Geração Total - Energia Injetada (só na UC geradora!)
+  - **Economia da Simultaneidade** = kWh autoconsumo × Tarifa (TE + TUSD)
+  - **Economia da Compensação** = soma de amount_saved_brl de todas as faturas
+  - **Economia Total** = Simultaneidade + Compensação
+  - Para REVESTONE 02/2026: R$ 2.718,07 (autoconsumo) + R$ 4.632,20 (créditos) = **R$ 7.350,27**
+- [x] **Parser COPEL atualizado**: Detecta padrão "ENERGIA INJ. OUC MPT" das faturas Grupo B
+- [x] **Endpoints de preview e PDF atualizados**: Mostram economia total com simultaneidade
+- [x] **UI de Portais Genérica**: Removidas referências fixas ao "Growatt"
 
 ## Completed (Previous Session)
 - [x] **Integração com Solarman (DONE)**

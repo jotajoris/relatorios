@@ -405,18 +405,32 @@ class SolarReportGenerator:
         # Financial
         el.append(self._sec("Financeiro", dark=True))
         el.append(Spacer(1,2*mm))
-        # Detalhamento da economia
-        el.append(self._kpi_row([
-            {'l':'Eco. Simultaneidade','v':_brl(eco_simult),'g':True},
-            {'l':'Eco. Compensacao','v':_brl(eco_comp),'g':eco_comp>0},
-            {'l':'Economia do Mes','v':_brl(saved),'g':True},
-        ]))
+        # Detalhamento da economia - só mostra simultaneidade se houver
+        if eco_simult > 0:
+            el.append(self._kpi_row([
+                {'l':'Autoconsumo','v':_brl(eco_simult),'g':True},
+                {'l':'Creditos Usados','v':_brl(eco_comp),'g':eco_comp>0},
+                {'l':'Economia Total','v':_brl(saved),'g':True},
+            ]))
+        else:
+            el.append(self._kpi_row([
+                {'l':'Economia do Mes','v':_brl(saved),'g':True},
+                {'l':'Faturado','v':_brl(billed)},
+                {'l':'Retorno Mensal','v':f"{_n(roi_m,2)} %"},
+            ]))
         el.append(Spacer(1,2*mm))
-        el.append(self._kpi_row([
-            {'l':'Faturado','v':_brl(billed)},
-            {'l':'Retorno Mensal','v':f"{_n(roi_m,2)} %"},
-            {'l':'Retorno Total','v':f"{_n(roi_t,2)} %"},
-        ]))
+        if eco_simult > 0:
+            el.append(self._kpi_row([
+                {'l':'Faturado','v':_brl(billed)},
+                {'l':'Retorno Mensal','v':f"{_n(roi_m,2)} %"},
+                {'l':'Retorno Total','v':f"{_n(roi_t,2)} %"},
+            ]))
+        else:
+            el.append(self._kpi_row([
+                {'l':'Economia Total','v':_brl(total_sav),'g':True},
+                {'l':'Retorno Total','v':f"{_n(roi_t,2)} %"},
+                {'l':'Ger. Acordada','v':f"{_n(prog,0)} kWh"},
+            ]))
         el.append(Spacer(1,4*mm))
 
         # Meses Anteriores - dark readable text, more columns
