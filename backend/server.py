@@ -5691,6 +5691,12 @@ async def download_pdf_report(
         if uc_num in seen_ucs:
             continue
         seen_ucs.add(uc_num)
+        
+        # Para UC geradora, incluir economia da simultaneidade
+        economia_uc = inv.get('amount_saved_brl', 0) or 0
+        if unit.get('is_generator') and economia_simultaneidade > 0:
+            economia_uc += economia_simultaneidade
+        
         consumer_units_data.append({
             'uc_number': unit.get('uc_number', ''),
             'name': unit.get('holder_name') or unit.get('address') or '',
@@ -5702,7 +5708,7 @@ async def download_pdf_report(
             'credit_previous': inv.get('credits_balance_fp_kwh', 0) or 0,
             'credit_accumulated': inv.get('credits_accumulated_fp_kwh', 0) or 0,
             'amount_billed': inv.get('amount_total_brl', 0) or 0,
-            'amount_saved': inv.get('amount_saved_brl', 0) or 0,
+            'amount_saved': economia_uc,  # Inclui simultaneidade para UC geradora
         })
     
     report_data['consumer_units'] = consumer_units_data
