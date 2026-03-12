@@ -3463,11 +3463,12 @@ async def get_plant_report_data(
     # Get consumer units
     consumer_units = await db.consumer_units.find({'plant_id': plant_id, 'is_active': True}, {'_id': 0}).to_list(100)
     
-    # Get invoices for consumer units
+    # Get invoices for consumer units - match by reference_month
     unit_ids = [u['id'] for u in consumer_units]
+    ref_month = f"{mon:02d}/{year}"  # Format: MM/YYYY
     invoices = await db.invoices.find({
         'consumer_unit_id': {'$in': unit_ids},
-        'billing_cycle_end': {'$gte': start_date, '$lte': end_date}
+        'reference_month': ref_month
     }, {'_id': 0}).to_list(1000)
     
     total_saved = sum(i.get('amount_saved_brl', 0) for i in invoices)
@@ -3502,8 +3503,8 @@ async def get_plant_report_data(
     total_investment = plant.get('total_investment', 0)
     roi_monthly = (total_saved / total_investment * 100) if total_investment > 0 else 0
     
-    # Get total savings since installation
-    all_invoices = await db.invoices.find({'plant_id': plant_id}, {'_id': 0, 'amount_saved_brl': 1}).to_list(10000)
+    # Get total savings since installation - use consumer_unit_ids
+    all_invoices = await db.invoices.find({'consumer_unit_id': {'$in': unit_ids}}, {'_id': 0, 'amount_saved_brl': 1}).to_list(10000)
     total_savings_all_time = sum(i.get('amount_saved_brl', 0) for i in all_invoices)
     roi_total = (total_savings_all_time / total_investment * 100) if total_investment > 0 else 0
     
@@ -5583,26 +5584,38 @@ async def download_pdf_report(
     # Simultaneidade = Geração Total - Energia Injetada Total
     simultaneidade_kwh = max(0, total_generation - energy_injected_total)
     
-    # Economia da Simultaneidade = kWh que não passou pela rede (evitou tarifas)
-    # Usa tarifa TE + TUSD média (aproximadamente R$0.80/kWh, mas pode pegar da fatura)
-    economia_simultaneidade = simultaneidade_kwh * tariff_te_fp
+    # Economia da Simultaneidade = kWh que não passou pela rede (evitou tarifas TE + TUSD)
+    # Usa tarifa real da fatura ou estimada
+    tarifa_total = tariff_te_fp + (generator_inv.get('tariff_tusd_fp_brl', 0) or 0 if generator_inv else 0)
+    if tarifa_total <= 0:
+        tarifa_total = 0.78  # Estimativa padrão (TE ~0.37 + TUSD ~0.41)
+    economia_simultaneidade = simultaneidade_kwh * tarifa_total
     
-    # Economia da Compensação = Créditos usados (já está no amount_saved_brl da fatura)
-    economia_compensacao = total_saved  # Valor que já estava sendo calculado
+    # Economia da Compensação = Valor dos créditos usados de meses anteriores
+    # Isso é calculado separadamente: (Compensada - Injetada do mês) * tarifa
+    energia_compensada_total = (generator_inv.get('energy_compensated_fp_kwh', 0) or 0) if generator_inv else 0
+    creditos_usados = max(0, energia_compensada_total - energy_injected_total)
+    economia_compensacao = creditos_usados * tarifa_total
     
     # Economia Total Real = Simultaneidade + Compensação
     economia_total_real = economia_simultaneidade + economia_compensacao
+    
+    # Se a fatura tem amount_saved_brl preenchido com valor diferente, usá-lo como referência
+    # Mas garantir que mostramos o detalhamento (simultaneidade + compensação)
+    amount_saved_fatura = (generator_inv.get('amount_saved_brl', 0) or 0) if generator_inv else 0
     
     # Atualizar os dados financeiros com simultaneidade
     report_data['simultaneidade_kwh'] = round(simultaneidade_kwh, 2)
     report_data['economia_simultaneidade'] = round(economia_simultaneidade, 2)
     report_data['economia_compensacao'] = round(economia_compensacao, 2)
     report_data['economia_total_calculada'] = round(economia_total_real, 2)
-    report_data['financial']['saved_brl'] = round(economia_total_real, 2)  # Usar economia real
+    # Usar o maior valor entre calculado e informado na fatura
+    report_data['financial']['saved_brl'] = round(max(economia_total_real, amount_saved_fatura), 2)
     
     logger.info(f"[Report] Geração: {total_generation} kWh, Injetada: {energy_injected_total} kWh, "
-                f"Simultaneidade: {simultaneidade_kwh} kWh, Economia Simult.: R$ {economia_simultaneidade:.2f}, "
-                f"Economia Comp.: R$ {economia_compensacao:.2f}, Total: R$ {economia_total_real:.2f}")
+                f"Simultaneidade: {simultaneidade_kwh} kWh, Eco.Simult: R$ {economia_simultaneidade:.2f}, "
+                f"Créditos usados: {creditos_usados} kWh, Eco.Comp: R$ {economia_compensacao:.2f}, "
+                f"Total Calculado: R$ {economia_total_real:.2f}, Fatura: R$ {amount_saved_fatura:.2f}")
     
     # Consumer units with invoice data - deduplicate by uc_number
     consumer_units_data = []

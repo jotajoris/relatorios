@@ -378,14 +378,17 @@ def _extract_group_a_data(text: str) -> Dict[str, Any]:
     return data
 
 
-def _extract_group_b_data(text: str) -> Dict[str, Any]:
+def _extract_group_b_data(text: str, ref_month: str = None) -> Dict[str, Any]:
     """
     Extract Group B data.
 
     For beneficiary UCs:
     - ENERGIA ELET CONSUMO -> energy_registered_fp_kwh
-    - ENERGIA INJ. OUC OPT TE/TUS -> energy_compensated (sum of all injections)
+    - ENERGIA INJ. OUC OPT/MPT TE/TUS -> energy_compensated (sum of all injections)
     - SCEE section -> credits
+    
+    For generator UCs (with ENERGIA INJ. OUC MPT):
+    - Differentiate between current month injection and previous month credits
     """
     data = {}
 
@@ -404,23 +407,71 @@ def _extract_group_b_data(text: str) -> Dict[str, Any]:
 
     data["energy_registered_p_kwh"] = 0  # Group B has no peak
 
-    # Energy Injected/Compensated (from OUC - other UC - compensation)
-    # Sum all ENERGIA INJ. OUC lines (they appear with TE and TUS, take only TE to avoid double counting)
-    # Pattern: ENERGIA INJ. OUC OPT TE MM/YYYY GDII-II kWh -11.270
-    te_injections = re.findall(
-        r'ENERGIA\s+INJ\.\s+OUC\s+OPT\s+TE\s+\d{2}/\d{4}\s+GDII-II\s+kWh\s+([-\d.,]+)',
+    # Extract reference month from text if not provided
+    if not ref_month:
+        m_ref = re.search(r'Refer[êe]ncia\s+(\d{2}/\d{4})', text)
+        if m_ref:
+            ref_month = m_ref.group(1)
+    
+    # Energy Injected/Compensated from OUC - other UC - compensation
+    # New patterns for COPEL Group B:
+    # Pattern 1: ENERGIA INJ. OUC MPT TE MM/YYYY GDI-I kWh -5.144 0,375130 -1.929,67
+    # Pattern 2: ENERGIA INJ. OUC OPT TE MM/YYYY GDII-II kWh -11.270
+    
+    # Find all INJ. OUC lines with TE (to avoid counting TUSD duplicate)
+    # Group by month to separate current month injection from previous month credits
+    te_injections_current = []  # Same month as reference
+    te_injections_previous = []  # Previous months (credits being used)
+    te_tariff = 0
+    tusd_tariff = 0
+    
+    # Pattern for MPT (generator UC with autoconsumo)
+    mpt_matches = re.findall(
+        r'ENERGIA\s+INJ\.\s+OUC\s+MPT\s+TE\s+(\d{2}/\d{4})\s+GDI-I\s+kWh\s+([-\d.,]+)\s+([\d.,]+)',
         text
     )
-    total_compensated = 0
-    for val in te_injections:
-        total_compensated += abs(_parse_br_number(val))
-
+    for month, val, tariff in mpt_matches:
+        kwh_value = abs(_parse_br_number(val))
+        if month == ref_month:
+            te_injections_current.append(kwh_value)
+            te_tariff = _parse_br_number(tariff)
+        else:
+            te_injections_previous.append(kwh_value)
+    
+    # Pattern for OPT (beneficiary UC)
+    opt_matches = re.findall(
+        r'ENERGIA\s+INJ\.\s+OUC\s+OPT\s+TE\s+(\d{2}/\d{4})\s+GDII?-II?\s+kWh\s+([-\d.,]+)',
+        text
+    )
+    for month, val in opt_matches:
+        kwh_value = abs(_parse_br_number(val))
+        if month == ref_month:
+            te_injections_current.append(kwh_value)
+        else:
+            te_injections_previous.append(kwh_value)
+    
+    # Extract TUSD tariff from MPT TUSD line
+    tusd_match = re.search(
+        r'ENERGIA\s+INJ\.\s+OUC\s+MPT\s+TUSD.*?kWh\s+[-\d.,]+\s+([\d.,]+)',
+        text
+    )
+    if tusd_match:
+        tusd_tariff = _parse_br_number(tusd_match.group(1))
+    
+    # Current month injection = energy that was generated and went to the grid
+    energy_injected = sum(te_injections_current)
+    # Previous month credits = compensation using accumulated credits
+    energy_compensated_from_credits = sum(te_injections_previous)
+    
+    # For generator UCs: injected goes to energy_injected_fp_kwh
+    # For beneficiary UCs: all compensation goes to energy_compensated_fp_kwh
+    data["energy_injected_fp_kwh"] = energy_injected
+    data["energy_injected_p_kwh"] = 0
+    
+    # Total compensated = current month + previous credits
+    total_compensated = energy_injected + energy_compensated_from_credits
     data["energy_compensated_fp_kwh"] = total_compensated
     data["energy_compensated_p_kwh"] = 0
-
-    # For beneficiary, the "injected" represents what they received
-    data["energy_injected_fp_kwh"] = total_compensated
-    data["energy_injected_p_kwh"] = 0
 
     # Energy billed
     reg = data.get("energy_registered_fp_kwh", 0)
@@ -433,22 +484,31 @@ def _extract_group_b_data(text: str) -> Dict[str, Any]:
     data["demand_contracted_kw"] = 0
     data["demand_injected_kw"] = 0
 
-    # Tariff values - extract unit prices for TE and TUSD
+    # Tariff values - use extracted values or try to find from other lines
     tariffs = {}
-    consumption = data.get("energy_registered_fp_kwh", 0)
+    
+    # Use values extracted from INJ lines
+    if te_tariff > 0:
+        tariffs["te_fp"] = te_tariff
+        tariffs["te_fp_unit"] = te_tariff
+    if tusd_tariff > 0:
+        tariffs["tusd_fp"] = tusd_tariff
+        tariffs["usd_fp_unit"] = tusd_tariff
 
-    # ENERGIA ELET USO SISTEMA line is usually clean
+    # ENERGIA ELET USO SISTEMA line is usually clean (fallback)
     # Pattern: ENERGIA ELET USO SISTEMA kWh 6.744 0,498820 3.364,04
-    m = re.search(r'ENERGIA\s+ELET\s+USO\s+SISTEMA\s+kWh\s+[\d.,]+\s+([\d.,]+)', text)
-    if m:
-        tariffs["usd_fp_unit"] = _parse_br_number(m.group(1))
-        tariffs["tusd_fp"] = tariffs["usd_fp_unit"]
+    if "usd_fp_unit" not in tariffs:
+        m = re.search(r'ENERGIA\s+ELET\s+USO\s+SISTEMA\s+kWh\s+[\d.,]+\s+([\d.,]+)', text)
+        if m:
+            tariffs["usd_fp_unit"] = _parse_br_number(m.group(1))
+            tariffs["tusd_fp"] = tariffs["usd_fp_unit"]
 
-    # For TE, try from INJ OUC line (always clean) or garbled CONSUMO line
-    m = re.search(r'ENERGIA\s+INJ\.\s+OUC\s+OPT\s+TE.*?kWh\s+-?[\d.,]+\s+(0,\d{5,6})', text)
-    if m:
-        tariffs["te_fp"] = _parse_br_number(m.group(1))
-        tariffs["te_fp_unit"] = tariffs["te_fp"]
+    # For TE, try from INJ OUC line (always clean) or garbled CONSUMO line (fallback)
+    if "te_fp_unit" not in tariffs:
+        m = re.search(r'ENERGIA\s+INJ\.\s+OUC\s+(?:OPT|MPT)\s+TE.*?kWh\s+-?[\d.,]+\s+(0,\d{5,6})', text)
+        if m:
+            tariffs["te_fp"] = _parse_br_number(m.group(1))
+            tariffs["te_fp_unit"] = tariffs["te_fp"]
     if "te_fp_unit" not in tariffs:
         m = re.search(r'ENERGIA\s+ELET\s+CONSUMO.*?kWh.*?[\d.,]+\s+\w?\s*(0,\d{5,6})', text, re.DOTALL)
         if m:
@@ -599,10 +659,11 @@ def parse_copel_invoice(pdf_source) -> Dict[str, Any]:
         data["billing_cycle_start"], data["billing_cycle_end"] = _extract_billing_cycle(full_text)
 
         # Extract energy data based on group
+        ref_month = data.get("reference_month", "")
         if tariff_group == "A":
             data.update(_extract_group_a_data(full_text))
         else:
-            data.update(_extract_group_b_data(full_text))
+            data.update(_extract_group_b_data(full_text, ref_month))
 
         # Extract SCEE credits
         data.update(_extract_scee_credits(full_text))

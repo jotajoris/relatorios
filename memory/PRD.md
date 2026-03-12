@@ -206,13 +206,20 @@ Aplicação web full-stack para gerenciamento e elaboração de relatórios de u
 - [ ] Corrigir navegação no dashboard que não leva para usina correta
 
 ## Completed (11/03/2026)
-- [x] **UI de Portais Genérica**: Removidas referências fixas ao "Growatt" onde a usina pode estar conectada a outros portais (Solarman):
-  - Título da seção de integração: "Integração com Portal de Monitoramento" (dinâmico)
-  - Texto e botões mostram o nome correto do portal baseado em `solarman_id` ou `growatt_plant_name`
-  - Helper `getPlantPortalInfo()` determina automaticamente o portal da usina
-  - Botão do Dashboard mudou de "Sync Growatt" para "Sincronizar"
-  - Textos da Settings atualizados para mencionar Growatt + Solarman
-  - Alterações em: `PlantDetail.jsx`, `Dashboard.jsx`, `Settings.jsx`
+- [x] **Cálculo de Simultaneidade implementado**: O relatório agora calcula e exibe corretamente:
+  - Simultaneidade (autoconsumo) = Geração Total - Energia Injetada
+  - Economia da Simultaneidade = kWh × Tarifa (TE + TUSD)
+  - Economia da Compensação = Créditos usados × Tarifa
+  - Economia Total = Simultaneidade + Compensação
+- [x] **Parser COPEL atualizado**: Agora detecta corretamente o padrão "ENERGIA INJ. OUC MPT" das faturas Grupo B, diferenciando energia injetada do mês atual vs créditos de meses anteriores
+- [x] **Endpoint de preview de relatório corrigido**: Agora busca faturas por `reference_month` (MM/YYYY) em vez de `billing_cycle_end`
+- [x] **UI de Portais Genérica**: Removidas referências fixas ao "Growatt" onde a usina pode estar conectada a outros portais (Solarman)
+
+## Completed (Previous Session)
+- [x] **Integração com Solarman (DONE)**
+- [x] **Sincronização Unificada (DONE)**
+- [x] **Importação de Excel do Solarman (DONE)**
+- [x] **Correção de CORS (DONE in code)**
 
 ## Credentials
 - Admin: projetos.onsolucoes@gmail.com / on123456
