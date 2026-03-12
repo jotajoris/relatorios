@@ -55,80 +55,25 @@ security = HTTPBearer()
 app = FastAPI(title="ON Soluções Energéticas - Solar Management API")
 
 # =============================================================================
-# CORS Configuration - Forced headers on every response
+# CORS Configuration - Global for ALL routes
+# Headers: Access-Control-Allow-Origin: https://onusinas.com
+#          Access-Control-Allow-Methods: GET, POST, PUT, DELETE, PATCH, OPTIONS
+#          Access-Control-Allow-Headers: Content-Type, Authorization
+#          Access-Control-Allow-Credentials: true
 # =============================================================================
 
-CORS_ORIGINS = [
-    "https://onusinas.com",
-    "https://www.onusinas.com", 
-    "http://onusinas.com",
-    "http://www.onusinas.com",
-    "https://energy-hub-24.emergent.host",
-    "http://localhost:3000",
-    "http://localhost:5173",
-]
-
-@app.middleware("http")
-async def add_cors_headers(request: Request, call_next):
-    """
-    Middleware that adds CORS headers to EVERY response.
-    IMPORTANT: The Emergent proxy may modify the Origin header, so we need to handle this.
-    """
-    # Get the origin from request
-    origin = request.headers.get("origin", "")
-    
-    # Log for debugging
-    import logging
-    logger = logging.getLogger("cors")
-    logger.info(f"[CORS] Request from origin: {origin}, method: {request.method}, path: {request.url.path}")
-    
-    # The Emergent proxy might send its own origin, but we need to allow the actual client origin
-    # Always return the specific origin to allow credentials
-    # If origin is from Emergent infrastructure or in our allowed list, allow it
-    if origin in CORS_ORIGINS:
-        allowed_origin = origin
-    elif "emergent" in origin.lower() or "preview" in origin.lower():
-        # Emergent infrastructure - allow and return the requesting origin
-        allowed_origin = origin
-    else:
-        # Default to allowing onusinas.com for credentials to work
-        allowed_origin = "https://onusinas.com"
-    
-    logger.info(f"[CORS] Allowing origin: {allowed_origin}")
-    
-    # Handle preflight OPTIONS requests
-    if request.method == "OPTIONS":
-        response = Response(
-            status_code=204,
-            headers={
-                "Access-Control-Allow-Origin": allowed_origin,
-                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD",
-                "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, Origin, X-Requested-With",
-                "Access-Control-Allow-Credentials": "true",
-                "Access-Control-Max-Age": "86400",
-                "X-CORS-Debug": "preflight-handled-by-middleware",
-            }
-        )
-        return response
-    
-    # Process the actual request
-    response = await call_next(request)
-    
-    # IMPORTANT: Delete any existing CORS headers that might come from proxy
-    # and replace with our own
-    for header in list(response.headers.keys()):
-        if header.lower().startswith('access-control-'):
-            del response.headers[header]
-    
-    # Add our CORS headers
-    response.headers["Access-Control-Allow-Origin"] = allowed_origin
-    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD"
-    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Accept, Origin, X-Requested-With"
-    response.headers["Access-Control-Allow-Credentials"] = "true"
-    response.headers["Access-Control-Expose-Headers"] = "Content-Length, Content-Type"
-    response.headers["X-CORS-Debug"] = f"origin-set-to-{allowed_origin}"
-    
-    return response
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://onusinas.com",
+        "https://www.onusinas.com",
+    ],
+    allow_credentials=True,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"],
+    allow_headers=["Content-Type", "Authorization", "Accept", "Origin", "X-Requested-With"],
+    expose_headers=["Content-Length", "Content-Type"],
+    max_age=86400,
+)
 
 # =============================================================================
 # CORS Test Endpoint - Access directly to verify CORS is working
@@ -3203,26 +3148,50 @@ async def download_single_copel_invoice(
     request: dict,
     current_user: dict = Depends(get_current_user)
 ):
-    """Download a single invoice from COPEL for a specific UC and month."""
+    """
+    Download a single invoice from COPEL for a specific UC and month.
+    TIMEOUT: This operation can take up to 120 seconds due to COPEL portal slowness.
+    """
     from services.copel_ava_service import CopelAVAService
     from services.pdf_parser_service import parse_copel_invoice
     from io import BytesIO
+    import time
+    
+    start_time = time.time()
+    
+    # ========== LOG: INÍCIO DO PROCESSO ==========
+    logger.info(f"[COPEL-DOWNLOAD] ========== INÍCIO ==========")
+    logger.info(f"[COPEL-DOWNLOAD] Plant ID: {plant_id}")
+    logger.info(f"[COPEL-DOWNLOAD] Usuário: {current_user.get('email', 'unknown')}")
+    logger.info(f"[COPEL-DOWNLOAD] Request: {request}")
     
     plant = await db.plants.find_one({'id': plant_id, 'is_active': True}, {'_id': 0})
     if not plant:
+        logger.error(f"[COPEL-DOWNLOAD] ERRO: Usina {plant_id} não encontrada")
         raise HTTPException(status_code=404, detail="Usina não encontrada")
+    
+    logger.info(f"[COPEL-DOWNLOAD] Usina: {plant.get('name', 'N/A')}")
     
     cnpj = plant.get('copel_cnpj', '')
     password = plant.get('copel_password', '')
     
+    # ========== LOG: VERIFICAÇÃO DE CREDENCIAIS ==========
     if not cnpj or not password:
+        logger.error(f"[COPEL-DOWNLOAD] ERRO: Credenciais COPEL não configuradas para usina {plant.get('name')}")
+        logger.error(f"[COPEL-DOWNLOAD] CNPJ: {'Configurado' if cnpj else 'NÃO CONFIGURADO'}")
+        logger.error(f"[COPEL-DOWNLOAD] Senha: {'Configurada' if password else 'NÃO CONFIGURADA'}")
         raise HTTPException(status_code=400, detail="Credenciais COPEL não configuradas. Vá em Configurações da Usina.")
+    
+    logger.info(f"[COPEL-DOWNLOAD] Credenciais: CNPJ={cnpj[:8]}***, Senha=***")
     
     uc_number = request.get('uc_number', '')
     ref_month = request.get('reference_month', '')  # Format: MM/YYYY
     
     if not uc_number or not ref_month:
+        logger.error(f"[COPEL-DOWNLOAD] ERRO: Parâmetros faltando - UC={uc_number}, Mês={ref_month}")
         raise HTTPException(status_code=400, detail="uc_number e reference_month são obrigatórios")
+    
+    logger.info(f"[COPEL-DOWNLOAD] UC: {uc_number}, Mês: {ref_month}")
     
     # Find consumer unit
     consumer_unit = await db.consumer_units.find_one({
@@ -3232,7 +3201,10 @@ async def download_single_copel_invoice(
     }, {'_id': 0})
     
     if not consumer_unit:
+        logger.error(f"[COPEL-DOWNLOAD] ERRO: UC {uc_number} não encontrada no sistema")
         raise HTTPException(status_code=404, detail=f"UC {uc_number} não encontrada")
+    
+    logger.info(f"[COPEL-DOWNLOAD] UC encontrada: {consumer_unit.get('name', uc_number)}")
     
     # Parse month/year
     try:
@@ -3240,20 +3212,38 @@ async def download_single_copel_invoice(
         month = int(month_str)
         year = int(year_str)
     except:
+        logger.error(f"[COPEL-DOWNLOAD] ERRO: Formato de mês inválido: {ref_month}")
         raise HTTPException(status_code=400, detail="Formato de mês inválido. Use MM/YYYY")
     
     service = CopelAVAService()
     
     try:
-        # Login to COPEL
+        # ========== LOG: LOGIN NO PORTAL ==========
+        logger.info(f"[COPEL-DOWNLOAD] Iniciando login no portal COPEL...")
+        login_start = time.time()
+        
         login_result = await service.login(cnpj, password)
+        
+        login_duration = time.time() - login_start
+        logger.info(f"[COPEL-DOWNLOAD] Login completado em {login_duration:.1f}s")
+        
         if not login_result.get('success'):
+            logger.error(f"[COPEL-DOWNLOAD] ERRO no login: {login_result.get('error')}")
             raise HTTPException(status_code=400, detail=login_result.get('error', 'Login COPEL falhou'))
         
-        # Try to download invoice
+        logger.info(f"[COPEL-DOWNLOAD] Login OK! UCs disponíveis: {login_result.get('total', 0)}")
+        
+        # ========== LOG: DOWNLOAD DA FATURA ==========
+        logger.info(f"[COPEL-DOWNLOAD] Iniciando download da fatura UC {uc_number} ref {ref_month}...")
+        download_start = time.time()
+        
         pdf_data = await service.download_invoice(uc_number, ref_month)
         
+        download_duration = time.time() - download_start
+        logger.info(f"[COPEL-DOWNLOAD] Download completado em {download_duration:.1f}s")
+        
         if not pdf_data:
+            logger.warning(f"[COPEL-DOWNLOAD] Fatura não disponível: UC {uc_number} ref {ref_month}")
             # Update status to unavailable
             await db.invoice_download_status.update_one(
                 {'plant_id': plant_id, 'consumer_unit_id': consumer_unit['id'], 'year': year, 'month': month},
@@ -3264,15 +3254,24 @@ async def download_single_copel_invoice(
                 }},
                 upsert=True
             )
+            
+            total_duration = time.time() - start_time
+            logger.info(f"[COPEL-DOWNLOAD] ========== FIM (sem fatura) - Total: {total_duration:.1f}s ==========")
+            
             return {
                 "success": False,
                 "message": "Fatura não disponível na COPEL para esta UC/mês"
             }
         
+        # ========== LOG: PROCESSAMENTO DO PDF ==========
+        logger.info(f"[COPEL-DOWNLOAD] PDF baixado com sucesso! Tamanho: {len(pdf_data)} bytes")
+        logger.info(f"[COPEL-DOWNLOAD] Iniciando processamento do PDF...")
+        
         # Parse the PDF
         parsed = parse_copel_invoice(BytesIO(pdf_data))
         
         if not parsed.get('success'):
+            logger.error(f"[COPEL-DOWNLOAD] ERRO ao processar PDF: {parsed.get('error', 'Erro desconhecido')}")
             await db.invoice_download_status.update_one(
                 {'plant_id': plant_id, 'consumer_unit_id': consumer_unit['id'], 'year': year, 'month': month},
                 {'$set': {
@@ -3283,6 +3282,9 @@ async def download_single_copel_invoice(
                 upsert=True
             )
             raise HTTPException(status_code=500, detail="Erro ao processar PDF da fatura")
+        
+        logger.info(f"[COPEL-DOWNLOAD] PDF processado com sucesso!")
+        logger.info(f"[COPEL-DOWNLOAD] Dados extraídos: Consumo={parsed.get('energy_consumed_kwh', 0)}kWh, Valor=R${parsed.get('total_amount', 0)}")
         
         # Save invoice to database
         invoice_data = {
@@ -3301,6 +3303,8 @@ async def download_single_copel_invoice(
         }
         await db.invoices.insert_one(invoice_data)
         
+        logger.info(f"[COPEL-DOWNLOAD] Fatura salva no banco com ID: {invoice_data['id']}")
+        
         # Update download status to success
         await db.invoice_download_status.update_one(
             {'plant_id': plant_id, 'consumer_unit_id': consumer_unit['id'], 'year': year, 'month': month},
@@ -3313,6 +3317,9 @@ async def download_single_copel_invoice(
             upsert=True
         )
         
+        total_duration = time.time() - start_time
+        logger.info(f"[COPEL-DOWNLOAD] ========== SUCESSO! Total: {total_duration:.1f}s ==========")
+        
         return {
             "success": True,
             "invoice_id": invoice_data['id'],
@@ -3322,7 +3329,13 @@ async def download_single_copel_invoice(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error downloading single invoice: {e}")
+        total_duration = time.time() - start_time
+        logger.error(f"[COPEL-DOWNLOAD] ========== ERRO FATAL ==========")
+        logger.error(f"[COPEL-DOWNLOAD] Exceção: {type(e).__name__}: {str(e)}")
+        logger.error(f"[COPEL-DOWNLOAD] Tempo total: {total_duration:.1f}s")
+        import traceback
+        logger.error(f"[COPEL-DOWNLOAD] Traceback: {traceback.format_exc()}")
+        
         await db.invoice_download_status.update_one(
             {'plant_id': plant_id, 'consumer_unit_id': consumer_unit['id'], 'year': year, 'month': month},
             {'$set': {
