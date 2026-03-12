@@ -164,7 +164,9 @@ class SolarReportGenerator:
         return r
 
     def _energy_flow_diagram(self, d):
-        """Energy flow as a clean structured table - with simultaneidade."""
+        """Energy flow as a clean structured table - with simultaneidade.
+        Adapts layout for Group B (no peak/off-peak distinction).
+        """
         gen = d.get('total_generation_kwh',0) or 0
         inj_p = d.get('energy_injected_p',0) or 0
         inj_fp = d.get('energy_injected_fp',0) or 0
@@ -172,6 +174,10 @@ class SolarReportGenerator:
         cons_p = d.get('consumption_p',0) or 0
         cons_fp = d.get('consumption_fp',0) or 0
         simult = d.get('simultaneidade_kwh', 0) or max(0, gen - inj_total)
+        
+        # Detect if Group B (no peak distinction) - check if has any peak values
+        # Group B only has "fora ponta" (off-peak), no "ponta" (peak)
+        is_group_b = (cons_p == 0 and inj_p == 0)
 
         lbl = _ps('FL2',7,'Helvetica',GD,TA_CENTER,9)
         val = _ps('FV2',9,'Helvetica-Bold',BK,TA_CENTER,11)
@@ -180,24 +186,43 @@ class SolarReportGenerator:
         def _cell(label, value, green=False):
             return [Paragraph(label, lbl), Paragraph(f"<b>{value}</b>", val_g if green else val)]
 
-        # Coluna esquerda: Geração
+        # Coluna esquerda: Geração + Simultaneidade
         left = _cell("Geracao Total", f"{_n(gen,0)} kWh")
         left += [Spacer(1,3*mm)]
-        left += _cell("Simultaneidade", f"{_n(simult,0)} kWh", green=True)
-        left += [Spacer(1,1*mm)]
-        left += [Paragraph("<i>(autoconsumo)</i>", _ps('FL3',6,'Helvetica-Oblique',GM,TA_CENTER,8))]
+        if simult > 0:
+            left += _cell("Simultaneidade", f"{_n(simult,0)} kWh", green=True)
+            left += [Spacer(1,1*mm)]
+            left += [Paragraph("<i>(autoconsumo)</i>", _ps('FL3',6,'Helvetica-Oblique',GM,TA_CENTER,8))]
+        else:
+            left += [Spacer(1,8*mm)]
 
-        # Coluna central: Consumo registrado
-        mid = _cell("Consumo F.Ponta", f"{_n(cons_fp,0)} kWh")
-        mid += _cell("Consumo Ponta", f"{_n(cons_p,0)} kWh")
-        mid += [Spacer(1,2*mm)]
-        mid += _cell("Total Consumo", f"{_n(cons_p + cons_fp,0)} kWh")
+        if is_group_b:
+            # Grupo B: Layout simplificado sem distinção ponta/fora ponta
+            # Coluna central: Consumo (apenas total)
+            mid = _cell("Consumo Registrado", f"{_n(cons_fp,0)} kWh")
+            mid += [Spacer(1,5*mm)]
+            mid += [Paragraph("<i>Grupo B</i>", _ps('FL3',6,'Helvetica-Oblique',GM,TA_CENTER,8))]
 
-        # Coluna direita: Injetada
-        right = _cell("E. Injetada Ponta", f"{_n(inj_p,0)} kWh")
-        right += _cell("E. Injetada F.Ponta", f"{_n(inj_fp,0)} kWh")
-        right += [Spacer(1,2*mm)]
-        right += _cell("Total Injetada", f"{_n(inj_total,0)} kWh")
+            # Coluna direita: Injetada (apenas total)
+            right = _cell("Energia Injetada", f"{_n(inj_total,0)} kWh")
+            right += [Spacer(1,5*mm)]
+            if inj_total > 0:
+                right += [Paragraph("<i>(enviada p/ rede)</i>", _ps('FL3',6,'Helvetica-Oblique',GM,TA_CENTER,8))]
+            else:
+                right += [Paragraph("<i>-</i>", _ps('FL3',6,'Helvetica-Oblique',GM,TA_CENTER,8))]
+        else:
+            # Grupo A: Layout completo com ponta e fora ponta
+            # Coluna central: Consumo registrado
+            mid = _cell("Consumo F.Ponta", f"{_n(cons_fp,0)} kWh")
+            mid += _cell("Consumo Ponta", f"{_n(cons_p,0)} kWh")
+            mid += [Spacer(1,2*mm)]
+            mid += _cell("Total Consumo", f"{_n(cons_p + cons_fp,0)} kWh")
+
+            # Coluna direita: Injetada
+            right = _cell("E. Injetada Ponta", f"{_n(inj_p,0)} kWh")
+            right += _cell("E. Injetada F.Ponta", f"{_n(inj_fp,0)} kWh")
+            right += [Spacer(1,2*mm)]
+            right += _cell("Total Injetada", f"{_n(inj_total,0)} kWh")
 
         data = [[left, mid, right]]
         t = Table(data, colWidths=[CW/3]*3)
@@ -277,13 +302,18 @@ class SolarReportGenerator:
         t.setStyle(TableStyle(cmds))
         return t
 
-    def _hist_table(self, hist_data):
-        """Meses Anteriores - ON palette (black text, yellow section header)."""
+    def _hist_table(self, hist_data, is_group_b=False):
+        """Meses Anteriores - ON palette (black text, yellow section header).
+        Simplifies columns for Group B (no peak/off-peak distinction).
+        """
         hs = _ps('HH2',7.5,'Helvetica-Bold',GD,TA_CENTER,10)
         tv = _ps('HV2',8,'Helvetica-Bold',BK,TA_CENTER,10)
         tl = _ps('HL2',8,'Helvetica',BK,TA_LEFT,10)
 
-        headers = ['Mes/Ano','Geracao','Desemp.','Consumo PT','Consumo FP','Economizado','Faturado']
+        if is_group_b:
+            headers = ['Mes/Ano','Geracao','Desemp.','Consumo','Economizado','Faturado']
+        else:
+            headers = ['Mes/Ano','Geracao','Desemp.','Consumo PT','Consumo FP','Economizado','Faturado']
         pdata = [[Paragraph(h, hs) for h in headers]]
 
         sum_gen = sum_pt = sum_fp = sum_eco = sum_fat = 0
@@ -301,28 +331,52 @@ class SolarReportGenerator:
             if pf > 0:
                 perf_values.append(pf)
             count += 1
-            pdata.append([
-                Paragraph(h.get('month',h.get('month_year','')), tl),
-                Paragraph(f"{_n(gk,0)} kWh", tv),
-                Paragraph(f"{pf:.0f}%", tv),
-                Paragraph(f"{_n(pt,0)} kWh" if pt else "-", tv),
-                Paragraph(f"{_n(fp,0)} kWh" if fp else "-", tv),
-                Paragraph(_brl(eco) if eco else "-", tv),
-                Paragraph(_brl(fat) if fat else "-", tv),
-            ])
+            
+            if is_group_b:
+                # Grupo B: apenas uma coluna de consumo (soma PT + FP, ou só FP)
+                cons_total = pt + fp if pt > 0 else fp
+                pdata.append([
+                    Paragraph(h.get('month',h.get('month_year','')), tl),
+                    Paragraph(f"{_n(gk,0)} kWh", tv),
+                    Paragraph(f"{pf:.0f}%", tv),
+                    Paragraph(f"{_n(cons_total,0)} kWh" if cons_total else "-", tv),
+                    Paragraph(_brl(eco) if eco else "-", tv),
+                    Paragraph(_brl(fat) if fat else "-", tv),
+                ])
+            else:
+                pdata.append([
+                    Paragraph(h.get('month',h.get('month_year','')), tl),
+                    Paragraph(f"{_n(gk,0)} kWh", tv),
+                    Paragraph(f"{pf:.0f}%", tv),
+                    Paragraph(f"{_n(pt,0)} kWh" if pt else "-", tv),
+                    Paragraph(f"{_n(fp,0)} kWh" if fp else "-", tv),
+                    Paragraph(_brl(eco) if eco else "-", tv),
+                    Paragraph(_brl(fat) if fat else "-", tv),
+                ])
 
         # SOMA row - with average desempenho
         avg_perf = sum(perf_values) / len(perf_values) if perf_values else 0
         sb = _ps('SB2',8,'Helvetica-Bold',BK,TA_CENTER,10)
         su = _ps('SU2',6,'Helvetica',GD,TA_CENTER,8)
-        pdata.append([Paragraph('',sb)] + [Paragraph(v,sb) for v in [
-            'Soma\nGeracao','Media\nDesemp.','Soma Cons.\nPT','Soma Cons.\nFP','Soma\nEconomizado','Soma\nFaturado']])
-        pdata.append([Paragraph('',sb)] + [Paragraph(v,sb) for v in [
-            f"{_n(sum_gen,0)}", f"{avg_perf:.0f}%", f"{_n(sum_pt,0)}", f"{_n(sum_fp,0)}", f"{_n(sum_eco,2)}", f"{_n(sum_fat,2)}"]])
-        pdata.append([Paragraph('',su)] + [Paragraph(v,su) for v in ['kWh','%','kWh','kWh','R$','R$']])
+        
+        if is_group_b:
+            pdata.append([Paragraph('',sb)] + [Paragraph(v,sb) for v in [
+                'Soma\nGeracao','Media\nDesemp.','Soma\nConsumo','Soma\nEconomizado','Soma\nFaturado']])
+            pdata.append([Paragraph('',sb)] + [Paragraph(v,sb) for v in [
+                f"{_n(sum_gen,0)}", f"{avg_perf:.0f}%", f"{_n(sum_pt + sum_fp,0)}", f"{_n(sum_eco,2)}", f"{_n(sum_fat,2)}"]])
+            pdata.append([Paragraph('',su)] + [Paragraph(v,su) for v in ['kWh','%','kWh','R$','R$']])
+            w = CW / 6
+            num_cols = 6
+        else:
+            pdata.append([Paragraph('',sb)] + [Paragraph(v,sb) for v in [
+                'Soma\nGeracao','Media\nDesemp.','Soma Cons.\nPT','Soma Cons.\nFP','Soma\nEconomizado','Soma\nFaturado']])
+            pdata.append([Paragraph('',sb)] + [Paragraph(v,sb) for v in [
+                f"{_n(sum_gen,0)}", f"{avg_perf:.0f}%", f"{_n(sum_pt,0)}", f"{_n(sum_fp,0)}", f"{_n(sum_eco,2)}", f"{_n(sum_fat,2)}"]])
+            pdata.append([Paragraph('',su)] + [Paragraph(v,su) for v in ['kWh','%','kWh','kWh','R$','R$']])
+            w = CW / 7
+            num_cols = 7
 
-        w = CW / 7
-        t = Table(pdata, colWidths=[w]*7)
+        t = Table(pdata, colWidths=[w]*num_cols)
         n_data = len(hist_data)
         t.setStyle(TableStyle([
             ('VALIGN',(0,0),(-1,-1),'MIDDLE'),
@@ -435,10 +489,14 @@ class SolarReportGenerator:
 
         # Meses Anteriores - dark readable text, more columns
         hist = d.get('historical',[])
+        # Detect Group B (no peak values)
+        cons_p = d.get('consumption_p',0) or 0
+        inj_p = d.get('energy_injected_p',0) or 0
+        is_group_b = (cons_p == 0 and inj_p == 0)
         if hist:
             el.append(self._sec("Meses Anteriores"))
             el.append(Spacer(1,2*mm))
-            el.append(self._hist_table(hist[:6]))
+            el.append(self._hist_table(hist[:6], is_group_b))
 
         # ═══ PAGE 2: CHART + PROGNOSIS + ENVIRONMENTAL ═══
         el.append(PageBreak())
