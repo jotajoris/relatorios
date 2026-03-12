@@ -54,73 +54,108 @@ security = HTTPBearer()
 # Create the main app
 app = FastAPI(title="ON Soluções Energéticas - Solar Management API")
 
-# Custom CORS Middleware - Forces CORS headers on ALL responses
+# =============================================================================
+# CORS Configuration - Multiple layers to ensure it works
+# =============================================================================
+
+ALLOWED_ORIGINS = [
+    "https://onusinas.com",
+    "https://www.onusinas.com",
+    "http://onusinas.com",
+    "http://www.onusinas.com",
+    "https://pro.solarmanpv.com",
+    "https://solarmanpv.com",
+    "https://energy-hub-24.emergent.host",
+    "http://localhost:3000",
+    "http://localhost:5173",
+]
+
+# Layer 1: Handle OPTIONS preflight at the very start
+@app.options("/{rest_of_path:path}")
+async def preflight_handler(request: Request, rest_of_path: str):
+    origin = request.headers.get("origin", "*")
+    return Response(
+        status_code=200,
+        headers={
+            "Access-Control-Allow-Origin": origin if origin in ALLOWED_ORIGINS else "*",
+            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Allow-Credentials": "true",
+            "Access-Control-Max-Age": "86400",
+        }
+    )
+
+# Layer 2: Custom middleware that forces CORS headers on EVERY response
 class ForceCORSMiddleware(BaseHTTPMiddleware):
-    # Allowed origins
-    ALLOWED_ORIGINS = [
-        "https://onusinas.com",
-        "https://www.onusinas.com",
-        "https://pro.solarmanpv.com",  # For Solarman bookmarklet
-        "https://solarmanpv.com",
-        "https://energy-hub-24.emergent.host",
-        "https://copel-scraper.preview.emergentagent.com",
-        "http://localhost:3000",
-    ]
-    
-    def get_cors_origin(self, request: Request) -> str:
-        origin = request.headers.get("origin", "")
-        # If origin is in allowed list, return it; otherwise return wildcard
-        if origin in self.ALLOWED_ORIGINS:
-            return origin
-        # For development/preview, allow all
-        return "*"
-    
     async def dispatch(self, request: Request, call_next):
-        origin = self.get_cors_origin(request)
+        origin = request.headers.get("origin", "*")
         
-        # Handle preflight OPTIONS requests
+        # Allow specific origins or fallback to wildcard
+        if origin not in ALLOWED_ORIGINS:
+            origin = "*"
+        
+        # Skip OPTIONS - handled above
         if request.method == "OPTIONS":
-            response = Response(status_code=204)
-            response.headers["Access-Control-Allow-Origin"] = origin
-            response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD"
-            response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, Accept, Origin"
-            response.headers["Access-Control-Allow-Credentials"] = "true"
-            response.headers["Access-Control-Max-Age"] = "3600"
-            return response
+            return Response(
+                status_code=200,
+                headers={
+                    "Access-Control-Allow-Origin": origin,
+                    "Access-Control-Allow-Methods": "*",
+                    "Access-Control-Allow-Headers": "*",
+                    "Access-Control-Allow-Credentials": "true",
+                }
+            )
         
-        # Process the request
-        response = await call_next(request)
+        # Process request and add CORS headers to response
+        try:
+            response = await call_next(request)
+        except Exception as e:
+            # Even on error, return CORS headers
+            response = JSONResponse(
+                status_code=500,
+                content={"detail": str(e)},
+            )
         
-        # Force CORS headers on ALL responses
+        # Force CORS headers
         response.headers["Access-Control-Allow-Origin"] = origin
-        response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD"
-        response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, X-Requested-With, Accept, Origin"
+        response.headers["Access-Control-Allow-Methods"] = "*"
+        response.headers["Access-Control-Allow-Headers"] = "*"
         response.headers["Access-Control-Allow-Credentials"] = "true"
-        response.headers["Access-Control-Expose-Headers"] = "Content-Length, Content-Type"
+        response.headers["Access-Control-Expose-Headers"] = "*"
         
         return response
 
-# Add custom CORS middleware FIRST (executes last, so headers are always added)
+# Add our custom CORS middleware
 app.add_middleware(ForceCORSMiddleware)
 
-# Standard CORS middleware as backup
+# Layer 3: Standard CORSMiddleware as final fallback
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://onusinas.com",
-        "https://www.onusinas.com",
-        "https://pro.solarmanpv.com",  # For Solarman bookmarklet
-        "https://solarmanpv.com",
-        "https://energy-hub-24.emergent.host",
-        "https://copel-scraper.preview.emergentagent.com",
-        "http://localhost:3000",
-    ],
+    allow_origins=["*"],  # Allow all origins as fallback
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],
-    max_age=3600,
+    max_age=86400,
 )
+
+# =============================================================================
+# CORS Test Endpoint - Access directly to verify CORS is working
+# =============================================================================
+@app.get("/api/cors-test")
+async def cors_test(request: Request):
+    """
+    Test endpoint to verify CORS headers are being sent.
+    Access this directly in browser: https://energy-hub-24.emergent.host/api/cors-test
+    """
+    origin = request.headers.get("origin", "No origin header")
+    return {
+        "cors_status": "working",
+        "origin_received": origin,
+        "message": "Se você está vendo isso, o backend está funcionando!",
+        "timestamp": datetime.now(BRAZIL_TZ).isoformat(),
+        "allowed_origins": ALLOWED_ORIGINS
+    }
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
