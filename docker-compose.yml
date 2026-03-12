@@ -10,11 +10,12 @@ services:
       - JWT_SECRET=${JWT_SECRET}
       - GROWATT_USER=${GROWATT_USER}
       - GROWATT_PASS=${GROWATT_PASS}
+      - DB_NAME=${DB_NAME}
     networks:
       - app-network
+      - coolify
     expose:
       - "8000"
-
   frontend:
     build:
       context: .
@@ -27,7 +28,8 @@ services:
       - backend
     networks:
       - app-network
-
 networks:
   app-network:
     driver: bridge
+  coolify:
+    external: true
