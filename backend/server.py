@@ -3474,6 +3474,15 @@ async def get_plant_report_data(
     total_saved = sum(i.get('amount_saved_brl', 0) for i in invoices)
     total_billed = sum(i.get('amount_billed_brl', 0) for i in invoices)
     
+    # Calculate energia enviada para beneficiárias (UCs não-geradoras)
+    energia_para_beneficiarias = 0
+    for inv in invoices:
+        inv_uc = next((u for u in consumer_units if u['id'] == inv.get('consumer_unit_id')), None)
+        if inv_uc and not inv_uc.get('is_generator'):
+            comp_p = inv.get('energy_compensated_p_kwh', 0) or 0
+            comp_fp = inv.get('energy_compensated_fp_kwh', 0) or 0
+            energia_para_beneficiarias += comp_p + comp_fp
+    
     # Calculate simultaneidade from generator UC only
     generator_inv = None
     for inv in invoices:
@@ -3491,10 +3500,13 @@ async def get_plant_report_data(
         tarifa_total = tariff_te + tariff_tusd
         
         if energy_injected > 0:
-            # Com dados de injeção: simultaneidade = geração - injetada
-            simultaneidade_kwh = max(0, total_generation - energy_injected)
+            # Com dados de injeção: simultaneidade = geração - injetada - beneficiárias
+            simultaneidade_kwh = max(0, total_generation - energy_injected - energia_para_beneficiarias)
+        elif energia_para_beneficiarias > 0:
+            # Sem injeção mas com beneficiárias: simultaneidade = geração - beneficiárias
+            simultaneidade_kwh = max(0, total_generation - energia_para_beneficiarias)
         else:
-            # Sem dados de injeção: simultaneidade = min(geração, consumo)
+            # Sem beneficiárias nem injeção: simultaneidade = min(geração, consumo)
             consumo_total = (generator_inv.get('energy_registered_fp_kwh', 0) or 0) + (generator_inv.get('energy_registered_p_kwh', 0) or 0)
             if consumo_total > 0 and total_generation > 0:
                 simultaneidade_kwh = min(total_generation, consumo_total)
@@ -5588,8 +5600,26 @@ async def download_pdf_report(
             generator_uc = uc
             break
 
+    # Calcular total de energia enviada para beneficiárias
+    # (soma de energy_compensated de todas as UCs não-geradoras)
+    energia_para_beneficiarias = 0
+    for inv in invoices:
+        # Encontrar a UC dessa fatura
+        inv_uc = next((u for u in units if u['id'] == inv.get('consumer_unit_id')), None)
+        if not inv_uc:
+            inv_cu_id = inv.get('consumer_unit_id', '')
+            inv_uc_doc = await db.consumer_units.find_one({'id': inv_cu_id}, {'_id': 0, 'is_generator': 1})
+            if inv_uc_doc:
+                inv_uc = {'is_generator': inv_uc_doc.get('is_generator', False)}
+        
+        # Se NÃO é geradora (é beneficiária), somar a energia compensada
+        if inv_uc and not inv_uc.get('is_generator'):
+            comp_p = inv.get('energy_compensated_p_kwh', 0) or 0
+            comp_fp = inv.get('energy_compensated_fp_kwh', 0) or 0
+            energia_para_beneficiarias += comp_p + comp_fp
+
     # Simultaneidade só existe na UC GERADORA (onde energia é gerada e consumida no mesmo local)
-    # Nas beneficiárias, toda energia vem por créditos de compensação
+    # Fórmula: Simultaneidade = Geração - Injetada (geradora) - Energia enviada para beneficiárias
     energy_injected_total = 0
     simultaneidade_kwh = 0
     economia_simultaneidade = 0
@@ -5611,22 +5641,26 @@ async def download_pdf_report(
         if tarifa_total <= 0:
             tarifa_total = 0.78  # Estimativa padrão (TE ~0.37 + TUSD ~0.41)
         
-        # Simultaneidade = Geração Total - Energia Injetada (só na geradora!)
-        # É a energia que foi gerada e consumida instantaneamente, sem passar pela rede
+        # Calcular simultaneidade corretamente:
+        # Simultaneidade = Geração - Injetada (da geradora) - Energia enviada para beneficiárias
         if energy_injected_total > 0:
-            # Se temos dados de injeção, calcular normalmente
-            simultaneidade_kwh = max(0, total_generation - energy_injected_total)
+            # Se temos dados de injeção na fatura da geradora
+            simultaneidade_kwh = max(0, total_generation - energy_injected_total - energia_para_beneficiarias)
+        elif energia_para_beneficiarias > 0:
+            # Se NÃO temos injeção na geradora, mas temos compensação nas beneficiárias
+            # Simultaneidade = Geração - Energia enviada para beneficiárias
+            simultaneidade_kwh = max(0, total_generation - energia_para_beneficiarias)
         else:
-            # Se NÃO temos dados de injeção, mas há consumo e geração:
-            # Simultaneidade = min(Geração, Consumo registrado)
-            # Porque a simultaneidade não pode ser maior que o consumo local
-            consumo_total = (generator_inv.get('energy_registered_fp_kwh', 0) or 0) + (generator_inv.get('energy_registered_p_kwh', 0) or 0)
-            if consumo_total > 0 and total_generation > 0:
-                # Caso especial: se não há dados de injeção, estimamos
-                # A simultaneidade é no máximo igual à geração ou ao consumo (o menor)
-                simultaneidade_kwh = min(total_generation, consumo_total)
+            # Se não há beneficiárias nem dados de injeção:
+            # Simultaneidade = min(Geração, Consumo da geradora)
+            consumo_geradora = (generator_inv.get('energy_registered_fp_kwh', 0) or 0) + (generator_inv.get('energy_registered_p_kwh', 0) or 0)
+            if consumo_geradora > 0 and total_generation > 0:
+                simultaneidade_kwh = min(total_generation, consumo_geradora)
         
         economia_simultaneidade = simultaneidade_kwh * tarifa_total
+        
+        logger.info(f"[Simultaneidade] Geração: {total_generation}, Injetada geradora: {energy_injected_total}, "
+                    f"Enviada beneficiárias: {energia_para_beneficiarias}, Simultaneidade: {simultaneidade_kwh}")
     else:
         report_data['energy_injected_p'] = 0
         report_data['energy_injected_fp'] = 0
