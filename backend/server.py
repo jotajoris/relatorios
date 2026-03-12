@@ -63,7 +63,7 @@ class ForceCORSMiddleware(BaseHTTPMiddleware):
         "https://pro.solarmanpv.com",  # For Solarman bookmarklet
         "https://solarmanpv.com",
         "https://energy-hub-24.emergent.host",
-        "https://solar-hub-14.preview.emergentagent.com",
+        "https://copel-scraper.preview.emergentagent.com",
         "http://localhost:3000",
     ]
     
@@ -112,7 +112,7 @@ app.add_middleware(
         "https://pro.solarmanpv.com",  # For Solarman bookmarklet
         "https://solarmanpv.com",
         "https://energy-hub-24.emergent.host",
-        "https://solar-hub-14.preview.emergentagent.com",
+        "https://copel-scraper.preview.emergentagent.com",
         "http://localhost:3000",
     ],
     allow_credentials=True,
@@ -3092,6 +3092,86 @@ async def update_download_status(
     return {"success": True}
 
 
+@api_router.post("/integrations/copel/test-download-debug")
+async def test_copel_download_debug(
+    request: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Debug endpoint to test COPEL invoice download.
+    Returns detailed logs and screenshots.
+    
+    Request body:
+    - cnpj: CNPJ do cliente (ex: "77952604000162")
+    - password: Senha do portal COPEL
+    - uc_number: Número da UC (ex: "113577680") 
+    - reference_month: Mês de referência (ex: "03/2026")
+    """
+    from services.copel_ava_service import CopelAVAService
+    import os
+    
+    cnpj = request.get('cnpj', '')
+    password = request.get('password', '')
+    uc_number = request.get('uc_number', '')
+    ref_month = request.get('reference_month', '')
+    
+    if not cnpj or not password:
+        raise HTTPException(status_code=400, detail="cnpj e password são obrigatórios")
+    
+    service = CopelAVAService()
+    result = {
+        "login": None,
+        "download": None,
+        "screenshots": [],
+        "logs": []
+    }
+    
+    try:
+        # Step 1: Login
+        result["logs"].append(f"Iniciando login para CNPJ: {cnpj[:8]}...")
+        login_result = await service.login(cnpj, password)
+        result["login"] = login_result
+        
+        if login_result.get('success'):
+            result["logs"].append(f"Login OK! UCs encontradas: {login_result.get('total', 0)}")
+            
+            # Check for screenshots
+            if os.path.exists('/tmp/copel_login_page.png'):
+                result["screenshots"].append("copel_login_page.png")
+            if os.path.exists('/tmp/copel_after_login.png'):
+                result["screenshots"].append("copel_after_login.png")
+            
+            # Step 2: Download invoice if uc_number provided
+            if uc_number and ref_month:
+                result["logs"].append(f"Tentando baixar fatura UC {uc_number} ref {ref_month}...")
+                pdf_data = await service.download_invoice(uc_number, ref_month)
+                
+                if pdf_data:
+                    result["download"] = {"success": True, "size_bytes": len(pdf_data)}
+                    result["logs"].append(f"Download OK! {len(pdf_data)} bytes")
+                else:
+                    result["download"] = {"success": False, "error": "Fatura não disponível ou erro no download"}
+                    result["logs"].append("Download falhou")
+                
+                # Collect more screenshots
+                for filename in ['copel_uc_selected_*.png', 'copel_services_page.png', 
+                                'copel_segunda_via_page.png', 'copel_modal.png']:
+                    import glob
+                    for path in glob.glob(f'/tmp/{filename}'):
+                        result["screenshots"].append(os.path.basename(path))
+        else:
+            result["logs"].append(f"Login falhou: {login_result.get('error')}")
+        
+        return result
+        
+    except Exception as e:
+        result["logs"].append(f"Erro: {str(e)}")
+        result["error"] = str(e)
+        return result
+    finally:
+        await service.close()
+
+
 @api_router.post("/integrations/copel/download-invoice/{plant_id}")
 async def download_single_copel_invoice(
     plant_id: str,
@@ -5783,6 +5863,26 @@ async def download_pdf_report(
             "Content-Disposition": f"attachment; filename={filename}"
         }
     )
+
+
+@api_router.post("/admin/trigger-copel-download")
+async def trigger_copel_download(current_user: dict = Depends(get_current_user)):
+    """
+    Manually trigger the COPEL invoice download job.
+    This is the same job that runs automatically at midnight.
+    """
+    from services.scheduler import download_missing_invoices
+    
+    # Run in background
+    import asyncio
+    asyncio.create_task(download_missing_invoices())
+    
+    return {
+        "success": True,
+        "message": "Download de faturas COPEL iniciado em background. Verifique os logs para acompanhar."
+    }
+
+
 
 # Include the router in the main app
 app.include_router(api_router)

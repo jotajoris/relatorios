@@ -13,7 +13,7 @@ Aplicação web full-stack para gerenciamento e elaboração de relatórios de u
 1. **Gerenciamento de Entidades:** CRUD para Clientes, Usinas e UCs. Upload de logo.
 2. **Sistema de Créditos:** UCs geradoras e beneficiárias com distribuição de créditos.
 3. **Entrada de Dados de Geração:** Upload manual de faturas PDF (COPEL, Energisa MS), planilhas Excel (Growatt), integração com inversores.
-4. **Automação COPEL:** Web scraping para baixar faturas (bloqueada por reCAPTCHA).
+4. **Automação COPEL:** Web scraping para baixar faturas - **CORRIGIDO (12/03/2026)**.
 5. **Geração de Relatórios PDF:** Relatório unificado por usina com branding ON.
 6. **Página de Faturas:** Seção dedicada no menu lateral para upload de faturas.
 
@@ -31,17 +31,24 @@ Aplicação web full-stack para gerenciamento e elaboração de relatórios de u
 - **Gerador de PDF com branding ON - CORRIGIDO** (19/02/2026)
 - Sistema de Créditos (backend: distribuição percentual)
 - Integração Growatt (web scraping + Excel)
+- **Download automático de faturas COPEL - CORRIGIDO (12/03/2026)**
+  - Fluxo corrigido: UC list → Segunda via online → Débitos Pendentes → "2 via"/"1 via" → Modal download
+  - Tratamento de modal de inatividade
+  - Endpoint de debug: `/api/integrations/copel/test-download-debug`
+  - Endpoint de trigger manual: `/api/admin/trigger-copel-download`
 
 ## Architecture
 ```
 /app/backend/
   server.py            # FastAPI routes
   services/
-    copel_service.py         # COPEL automation (Playwright)
+    copel_service.py         # COPEL automation (Playwright) - LEGADO
+    copel_ava_service.py     # COPEL AVA automation (Playwright) - PRINCIPAL, CORRIGIDO
     pdf_parser_service.py    # Invoice PDF parser (REESCRITO)
     pdf_generator_service.py # PDF report generator (CORRIGIDO)
     growatt_service.py       # Growatt web scraping
     growatt_excel_service.py # Growatt Excel parser
+    scheduler.py             # Jobs automatizados (faturas COPEL, sync usinas)
   assets/
     logo_on_sem_fundo.png    # ON logo
     logo_on_fundo_preto.png  # ON logo dark
