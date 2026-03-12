@@ -55,89 +55,80 @@ security = HTTPBearer()
 app = FastAPI(title="ON Soluções Energéticas - Solar Management API")
 
 # =============================================================================
-# CORS Configuration - Multiple layers to ensure it works
+# CORS Configuration - Forced headers on every response
 # =============================================================================
 
-ALLOWED_ORIGINS = [
+CORS_ORIGINS = [
     "https://onusinas.com",
-    "https://www.onusinas.com",
+    "https://www.onusinas.com", 
     "http://onusinas.com",
     "http://www.onusinas.com",
-    "https://pro.solarmanpv.com",
-    "https://solarmanpv.com",
     "https://energy-hub-24.emergent.host",
     "http://localhost:3000",
     "http://localhost:5173",
 ]
 
-# Layer 1: Handle OPTIONS preflight at the very start
-@app.options("/{rest_of_path:path}")
-async def preflight_handler(request: Request, rest_of_path: str):
-    origin = request.headers.get("origin", "*")
-    return Response(
-        status_code=200,
-        headers={
-            "Access-Control-Allow-Origin": origin if origin in ALLOWED_ORIGINS else "*",
-            "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH, HEAD",
-            "Access-Control-Allow-Headers": "*",
-            "Access-Control-Allow-Credentials": "true",
-            "Access-Control-Max-Age": "86400",
-        }
-    )
-
-# Layer 2: Custom middleware that forces CORS headers on EVERY response
-class ForceCORSMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
-        origin = request.headers.get("origin", "*")
-        
-        # Allow specific origins or fallback to wildcard
-        if origin not in ALLOWED_ORIGINS:
-            origin = "*"
-        
-        # Skip OPTIONS - handled above
-        if request.method == "OPTIONS":
-            return Response(
-                status_code=200,
-                headers={
-                    "Access-Control-Allow-Origin": origin,
-                    "Access-Control-Allow-Methods": "*",
-                    "Access-Control-Allow-Headers": "*",
-                    "Access-Control-Allow-Credentials": "true",
-                }
-            )
-        
-        # Process request and add CORS headers to response
-        try:
-            response = await call_next(request)
-        except Exception as e:
-            # Even on error, return CORS headers
-            response = JSONResponse(
-                status_code=500,
-                content={"detail": str(e)},
-            )
-        
-        # Force CORS headers
-        response.headers["Access-Control-Allow-Origin"] = origin
-        response.headers["Access-Control-Allow-Methods"] = "*"
-        response.headers["Access-Control-Allow-Headers"] = "*"
-        response.headers["Access-Control-Allow-Credentials"] = "true"
-        response.headers["Access-Control-Expose-Headers"] = "*"
-        
+@app.middleware("http")
+async def add_cors_headers(request: Request, call_next):
+    """
+    Middleware that adds CORS headers to EVERY response.
+    IMPORTANT: The Emergent proxy may modify the Origin header, so we need to handle this.
+    """
+    # Get the origin from request
+    origin = request.headers.get("origin", "")
+    
+    # Log for debugging
+    import logging
+    logger = logging.getLogger("cors")
+    logger.info(f"[CORS] Request from origin: {origin}, method: {request.method}, path: {request.url.path}")
+    
+    # The Emergent proxy might send its own origin, but we need to allow the actual client origin
+    # Always return the specific origin to allow credentials
+    # If origin is from Emergent infrastructure or in our allowed list, allow it
+    if origin in CORS_ORIGINS:
+        allowed_origin = origin
+    elif "emergent" in origin.lower() or "preview" in origin.lower():
+        # Emergent infrastructure - allow and return the requesting origin
+        allowed_origin = origin
+    else:
+        # Default to allowing onusinas.com for credentials to work
+        allowed_origin = "https://onusinas.com"
+    
+    logger.info(f"[CORS] Allowing origin: {allowed_origin}")
+    
+    # Handle preflight OPTIONS requests
+    if request.method == "OPTIONS":
+        response = Response(
+            status_code=204,
+            headers={
+                "Access-Control-Allow-Origin": allowed_origin,
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization, Accept, Origin, X-Requested-With",
+                "Access-Control-Allow-Credentials": "true",
+                "Access-Control-Max-Age": "86400",
+                "X-CORS-Debug": "preflight-handled-by-middleware",
+            }
+        )
         return response
-
-# Add our custom CORS middleware
-app.add_middleware(ForceCORSMiddleware)
-
-# Layer 3: Standard CORSMiddleware as final fallback
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins as fallback
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["*"],
-    max_age=86400,
-)
+    
+    # Process the actual request
+    response = await call_next(request)
+    
+    # IMPORTANT: Delete any existing CORS headers that might come from proxy
+    # and replace with our own
+    for header in list(response.headers.keys()):
+        if header.lower().startswith('access-control-'):
+            del response.headers[header]
+    
+    # Add our CORS headers
+    response.headers["Access-Control-Allow-Origin"] = allowed_origin
+    response.headers["Access-Control-Allow-Methods"] = "GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type, Authorization, Accept, Origin, X-Requested-With"
+    response.headers["Access-Control-Allow-Credentials"] = "true"
+    response.headers["Access-Control-Expose-Headers"] = "Content-Length, Content-Type"
+    response.headers["X-CORS-Debug"] = f"origin-set-to-{allowed_origin}"
+    
+    return response
 
 # =============================================================================
 # CORS Test Endpoint - Access directly to verify CORS is working
@@ -154,7 +145,6 @@ async def cors_test(request: Request):
         "origin_received": origin,
         "message": "Se você está vendo isso, o backend está funcionando!",
         "timestamp": datetime.now(BRAZIL_TZ).isoformat(),
-        "allowed_origins": ALLOWED_ORIGINS
     }
 
 # Create a router with the /api prefix
