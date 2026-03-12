@@ -5750,6 +5750,8 @@ async def download_pdf_report(
         consumer_units_data.append({
             'uc_number': unit.get('uc_number', ''),
             'name': unit.get('holder_name') or unit.get('address') or '',
+            'address': unit.get('address', ''),
+            'is_generator': unit.get('is_generator', False),
             'cycle': f"{(inv.get('billing_cycle_start') or '')[:10]} a {(inv.get('billing_cycle_end') or '')[:10]}",
             'percentage': unit.get('compensation_percentage', 0),
             'consumption_registered': consumption_registered,

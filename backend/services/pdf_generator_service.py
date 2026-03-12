@@ -566,7 +566,7 @@ class SolarReportGenerator:
             el.append(self._sec("INFORMACOES CONCESSIONARIA", dark=True))
             el.append(Spacer(1,3*mm))
 
-            hdr = ['UC','Endereco','Ciclo','(%)','Consumo\nRegist.','Energ.\nComp.','Energ.\nFatur.','Cred.\nAnter.','Cred.\nAcum.','Faturado\n(R$)','Economia\n(R$)']
+            hdr = ['UC','Tipo','Endereco','Ciclo','(%)','Consumo\nRegist.','Energ.\nComp.','Energ.\nFatur.','Cred.\nAnter.','Cred.\nAcum.','Faturado\n(R$)','Economia\n(R$)']
             rows = []
             tc=tp=tf=ta=tac=tb=ts2=0
             for c in cu:
@@ -580,12 +580,17 @@ class SolarReportGenerator:
                 tc+=cons;tp+=comp;tf+=fat;ta+=ca;tac+=cacc;tb+=bill;ts2+=sav
                 pct_val = c.get('percentage',0) or 0
                 pct = f"{_n(pct_val,2)}%"
-                rows.append([c.get('uc_number',''),(c.get('name') or '')[:28],c.get('cycle',''),
+                # Tipo: Geradora ou Beneficiária
+                tipo = "Geradora" if c.get('is_generator') else "Benef."
+                # Endereço completo (sem cortar)
+                endereco = c.get('name') or c.get('address') or ''
+                rows.append([c.get('uc_number',''),tipo,endereco,c.get('cycle',''),
                     pct,_n(cons,0),_n(comp,0),_n(fat,0),_n(ca,0),_n(cacc,0),_n(bill,2),_n(sav,2)])
-            rows.append(['TOTAL','','','',_n(tc,0),_n(tp,0),_n(tf,0),_n(ta,0),_n(tac,0),_n(tb,2),_n(ts2,2)])
+            rows.append(['TOTAL','','','','',_n(tc,0),_n(tp,0),_n(tf,0),_n(ta,0),_n(tac,0),_n(tb,2),_n(ts2,2)])
 
+            # Larguras ajustadas: UC=48, Tipo=40, Endereco=100, resto proporcional
             el.append(self._data_table(hdr, rows,
-                [52,76,54,28,42,42,40,38,38,46,46], has_total=True))
+                [48,40,100,50,26,38,38,36,34,34,42,42], has_total=True))
             el.append(Spacer(1,4*mm))
             el.append(Paragraph(
                 f"<b>Resumo:</b> Consumo: {_n(tc,0)} kWh | Compensado: {_n(tp,0)} kWh | "
