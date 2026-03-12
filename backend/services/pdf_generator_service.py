@@ -164,32 +164,40 @@ class SolarReportGenerator:
         return r
 
     def _energy_flow_diagram(self, d):
-        """Energy flow as a clean structured table - no image."""
+        """Energy flow as a clean structured table - with simultaneidade."""
         gen = d.get('total_generation_kwh',0) or 0
         inj_p = d.get('energy_injected_p',0) or 0
         inj_fp = d.get('energy_injected_fp',0) or 0
+        inj_total = inj_p + inj_fp
         cons_p = d.get('consumption_p',0) or 0
         cons_fp = d.get('consumption_fp',0) or 0
+        simult = d.get('simultaneidade_kwh', 0) or max(0, gen - inj_total)
 
         lbl = _ps('FL2',7,'Helvetica',GD,TA_CENTER,9)
         val = _ps('FV2',9,'Helvetica-Bold',BK,TA_CENTER,11)
+        val_g = _ps('FV2G',9,'Helvetica-Bold',GR,TA_CENTER,11)
 
-        def _cell(label, value):
-            return [Paragraph(label, lbl), Paragraph(f"<b>{value}</b>", val)]
+        def _cell(label, value, green=False):
+            return [Paragraph(label, lbl), Paragraph(f"<b>{value}</b>", val_g if green else val)]
 
-        left = _cell("Unidade Geradora", f"{_n(gen,0)} kWh")
-        left += [Spacer(1,2*mm)]
-        left += _cell("C. Registrado Ponta", f"{_n(cons_p,0)} kWh")
-        left += _cell("C. Registrado F.Ponta", f"{_n(cons_fp,0)} kWh")
+        # Coluna esquerda: Geração
+        left = _cell("Geracao Total", f"{_n(gen,0)} kWh")
+        left += [Spacer(1,3*mm)]
+        left += _cell("Simultaneidade", f"{_n(simult,0)} kWh", green=True)
+        left += [Spacer(1,1*mm)]
+        left += [Paragraph("<i>(autoconsumo)</i>", _ps('FL3',6,'Helvetica-Oblique',GM,TA_CENTER,8))]
 
+        # Coluna central: Consumo registrado
         mid = _cell("Consumo F.Ponta", f"{_n(cons_fp,0)} kWh")
         mid += _cell("Consumo Ponta", f"{_n(cons_p,0)} kWh")
         mid += [Spacer(1,2*mm)]
-        mid += _cell("Geracao Total", f"{_n(gen,0)} kWh")
+        mid += _cell("Total Consumo", f"{_n(cons_p + cons_fp,0)} kWh")
 
+        # Coluna direita: Injetada
         right = _cell("E. Injetada Ponta", f"{_n(inj_p,0)} kWh")
-        right += [Spacer(1,2*mm)]
         right += _cell("E. Injetada F.Ponta", f"{_n(inj_fp,0)} kWh")
+        right += [Spacer(1,2*mm)]
+        right += _cell("Total Injetada", f"{_n(inj_total,0)} kWh")
 
         data = [[left, mid, right]]
         t = Table(data, colWidths=[CW/3]*3)
@@ -373,6 +381,10 @@ class SolarReportGenerator:
         roi_m = fin.get('roi_monthly',0) or 0
         roi_t = fin.get('roi_total',0) or 0
         ann_prog = d.get('prognosis_annual_kwh', prog*12) or 0
+        # Simultaneidade / Autoconsumo
+        simult = d.get('simultaneidade_kwh', 0) or 0
+        eco_simult = d.get('economia_simultaneidade', 0) or 0
+        eco_comp = d.get('economia_compensacao', 0) or 0
 
         # ═══ PAGE 1: DASHBOARD ═══
         el.extend(self._hdr(d))
@@ -393,16 +405,17 @@ class SolarReportGenerator:
         # Financial
         el.append(self._sec("Financeiro", dark=True))
         el.append(Spacer(1,2*mm))
+        # Detalhamento da economia
         el.append(self._kpi_row([
-            {'l':'Faturado','v':_brl(billed)},
+            {'l':'Eco. Simultaneidade','v':_brl(eco_simult),'g':True},
+            {'l':'Eco. Compensacao','v':_brl(eco_comp),'g':eco_comp>0},
             {'l':'Economia do Mes','v':_brl(saved),'g':True},
-            {'l':'Retorno Mensal','v':f"{_n(roi_m,2)} %"},
         ]))
         el.append(Spacer(1,2*mm))
         el.append(self._kpi_row([
-            {'l':'Economia Total','v':_brl(total_sav),'g':True},
+            {'l':'Faturado','v':_brl(billed)},
+            {'l':'Retorno Mensal','v':f"{_n(roi_m,2)} %"},
             {'l':'Retorno Total','v':f"{_n(roi_t,2)} %"},
-            {'l':'Ger. Acordada','v':f"{_n(prog,0)} kWh"},
         ]))
         el.append(Spacer(1,4*mm))
 

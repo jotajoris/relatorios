@@ -5553,16 +5553,56 @@ async def download_pdf_report(
             generator_inv = inv
             break
 
+    # Calculate simultaneidade (autoconsumo) = Geração - Injetada
+    energy_injected_total = 0
     if generator_inv:
-        report_data['energy_injected_p'] = generator_inv.get('energy_injected_p_kwh', 0) or 0
-        report_data['energy_injected_fp'] = generator_inv.get('energy_injected_fp_kwh', 0) or 0
+        energy_injected_p = generator_inv.get('energy_injected_p_kwh', 0) or 0
+        energy_injected_fp = generator_inv.get('energy_injected_fp_kwh', 0) or 0
+        energy_injected_total = energy_injected_p + energy_injected_fp
+        report_data['energy_injected_p'] = energy_injected_p
+        report_data['energy_injected_fp'] = energy_injected_fp
         report_data['consumption_p'] = generator_inv.get('energy_registered_p_kwh', 0) or 0
         report_data['consumption_fp'] = generator_inv.get('energy_registered_fp_kwh', 0) or 0
+        
+        # Get tarifa média da UC geradora para calcular economia da simultaneidade
+        tariff_te_fp = generator_inv.get('tariff_te_fp_brl', 0) or generator_inv.get('energy_tariff_fp_brl', 0) or 0
+        tariff_tusd = generator_inv.get('tariff_tusd_fp_brl', 0) or 0
+        # Se não tiver tarifa separada, usar valor médio baseado no valor economizado
+        if tariff_te_fp <= 0:
+            # Estimativa: tarifa média ~0.80 R$/kWh (pode variar por região)
+            tariff_te_fp = 0.80
     else:
+        energy_injected_p = 0
+        energy_injected_fp = 0
+        tariff_te_fp = 0.80  # Tarifa padrão estimada
         report_data['energy_injected_p'] = 0
         report_data['energy_injected_fp'] = 0
         report_data['consumption_p'] = 0
         report_data['consumption_fp'] = 0
+    
+    # Simultaneidade = Geração Total - Energia Injetada Total
+    simultaneidade_kwh = max(0, total_generation - energy_injected_total)
+    
+    # Economia da Simultaneidade = kWh que não passou pela rede (evitou tarifas)
+    # Usa tarifa TE + TUSD média (aproximadamente R$0.80/kWh, mas pode pegar da fatura)
+    economia_simultaneidade = simultaneidade_kwh * tariff_te_fp
+    
+    # Economia da Compensação = Créditos usados (já está no amount_saved_brl da fatura)
+    economia_compensacao = total_saved  # Valor que já estava sendo calculado
+    
+    # Economia Total Real = Simultaneidade + Compensação
+    economia_total_real = economia_simultaneidade + economia_compensacao
+    
+    # Atualizar os dados financeiros com simultaneidade
+    report_data['simultaneidade_kwh'] = round(simultaneidade_kwh, 2)
+    report_data['economia_simultaneidade'] = round(economia_simultaneidade, 2)
+    report_data['economia_compensacao'] = round(economia_compensacao, 2)
+    report_data['economia_total_calculada'] = round(economia_total_real, 2)
+    report_data['financial']['saved_brl'] = round(economia_total_real, 2)  # Usar economia real
+    
+    logger.info(f"[Report] Geração: {total_generation} kWh, Injetada: {energy_injected_total} kWh, "
+                f"Simultaneidade: {simultaneidade_kwh} kWh, Economia Simult.: R$ {economia_simultaneidade:.2f}, "
+                f"Economia Comp.: R$ {economia_compensacao:.2f}, Total: R$ {economia_total_real:.2f}")
     
     # Consumer units with invoice data - deduplicate by uc_number
     consumer_units_data = []
