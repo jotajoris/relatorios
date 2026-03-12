@@ -163,6 +163,18 @@ async def download_missing_invoices():
                 for item in missing:
                     try:
                         pdf_data = await service.download_invoice(item['uc'], item['ref'])
+                        
+                        # If download returned None, might be session expired - try relogin once
+                        if pdf_data is None:
+                            logger.info(f"    Sessão pode ter expirado, tentando novo login...")
+                            await service.close()
+                            service = CopelAVAService()
+                            relogin = await service.login(cnpj, password)
+                            if relogin.get('success'):
+                                pdf_data = await service.download_invoice(item['uc'], item['ref'])
+                            else:
+                                logger.warning(f"    Re-login falhou: {relogin.get('error')}")
+                        
                         if pdf_data:
                             # Parse the PDF
                             parsed = parse_copel_invoice(BytesIO(pdf_data))

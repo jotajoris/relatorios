@@ -119,6 +119,24 @@ class CopelAVAService:
             logger.info("[COPEL] Waiting for login response...")
             await self.page.wait_for_timeout(8000)
 
+            # Dismiss any inactivity modal that might have appeared (from previous session)
+            try:
+                inactivity_modal = await self.page.query_selector('.ui-dialog:has-text("Inatividade")')
+                if inactivity_modal:
+                    logger.info("[COPEL] Found stale inactivity modal after login, dismissing via JS...")
+                    await self.page.evaluate('''() => {
+                        const btn = document.querySelector('.ui-dialog button');
+                        if (btn) btn.click();
+                    }''')
+                    await self.page.wait_for_timeout(3000)
+                    
+                    # Force navigate to UC list page to clear any modal state
+                    logger.info("[COPEL] Force navigating to UC list to clear modal...")
+                    await self.page.goto(COPEL_UC_LIST_URL, timeout=30000, wait_until='networkidle')
+                    await self.page.wait_for_timeout(3000)
+            except:
+                pass
+
             # Take screenshot after login
             await self.page.screenshot(path='/tmp/copel_after_login.png')
 
@@ -282,6 +300,49 @@ class CopelAVAService:
             logger.error(f"[COPEL] Error navigating to Segunda via: {e}")
             return False
 
+    async def _dismiss_inactivity_modal(self) -> bool:
+        """
+        Try to dismiss inactivity modal if present. 
+        Returns True only if modal is VISIBLE and contains inactivity warning.
+        """
+        try:
+            # Check for the inactivity dialog specifically - must be visible
+            inactivity_modal = await self.page.query_selector('.ui-dialog[aria-hidden="false"]:has-text("Tela inativa")')
+            if inactivity_modal:
+                # Double check it's really visible
+                is_visible = await inactivity_modal.is_visible()
+                if not is_visible:
+                    return False
+                    
+                logger.info("[COPEL] Inactivity modal VISIBLE, attempting to dismiss...")
+                await self.page.screenshot(path='/tmp/copel_inactivity_modal.png')
+                
+                # Try to dismiss via JavaScript
+                await self.page.evaluate('''() => {
+                    const btn = document.querySelector('.ui-dialog button');
+                    if (btn) btn.click();
+                }''')
+                await self.page.wait_for_timeout(2000)
+                
+                # Force navigate to UC list to clear any modal state
+                await self.page.goto(COPEL_UC_LIST_URL, timeout=30000, wait_until='networkidle')
+                await self.page.wait_for_timeout(2000)
+                
+                # Check if modal is still there and visible
+                still_there = await self.page.query_selector('.ui-dialog[aria-hidden="false"]:has-text("Tela inativa")')
+                if still_there:
+                    is_still_visible = await still_there.is_visible()
+                    if is_still_visible:
+                        logger.warning("[COPEL] Inactivity modal still visible after dismiss attempt")
+                        return True  # Still expired
+                
+                logger.info("[COPEL] Inactivity modal dismissed successfully")
+                return False  # Modal dismissed, can continue
+            return False  # No visible modal
+        except Exception as e:
+            logger.warning(f"[COPEL] Error handling inactivity modal: {e}")
+            return False
+
     async def download_invoice(self, uc_number: str, reference_month: str) -> Optional[bytes]:
         """
         Download a specific invoice PDF for a UC and month.
@@ -300,6 +361,11 @@ class CopelAVAService:
             return None
 
         try:
+            # Check for inactivity before starting
+            if await self._dismiss_inactivity_modal():
+                logger.warning("[COPEL] Session expired before starting - need new login")
+                return None
+            
             # Step 1: Select the UC
             if not await self._select_uc(uc_number):
                 logger.error(f"[COPEL] Failed to select UC {uc_number}")
@@ -342,19 +408,12 @@ class CopelAVAService:
                             await via_link.click()
                             await self.page.wait_for_timeout(3000)
                             
-                            # Check for and dismiss inactivity modal if present
-                            try:
-                                inactivity_modal = await self.page.query_selector('.ui-dialog:has-text("Inatividade")')
-                                if inactivity_modal:
-                                    logger.warning("[COPEL] Inactivity modal detected - session expired. Will return None and caller should retry.")
-                                    # Take screenshot for debugging
-                                    await self.page.screenshot(path='/tmp/copel_inactivity_modal.png')
-                                    return None  # Return None so caller can retry with fresh session
-                            except Exception as e:
-                                logger.warning(f"[COPEL] Error checking inactivity modal: {e}")
+                            # Check for inactivity modal - if present, session expired
+                            if await self._dismiss_inactivity_modal():
+                                logger.warning("[COPEL] Session expired during download - will retry with new session")
+                                return None
                             
                             # Step 5: Modal opens - click download button
-                            # Button text varies: "Fazer download da 1ª via" or "Fazer download da 2ª via"
                             await self.page.screenshot(path='/tmp/copel_modal.png')
                             
                             # Log modal content for debugging
@@ -364,17 +423,7 @@ class CopelAVAService:
                             except:
                                 pass
                             
-                            # Check if it's still an inactivity modal
-                            try:
-                                body_text = await self.page.inner_text('.ui-dialog')
-                                if 'Inatividade' in body_text or 'inativa' in body_text.lower():
-                                    logger.warning("[COPEL] Still showing inactivity modal, session expired")
-                                    return None
-                            except:
-                                pass
-                            
                             # Wait for modal and find download button
-                            # Use shorter timeout since we try multiple selectors
                             download_btn_selectors = [
                                 'button:has-text("Fazer download da 2ª via")',
                                 'button:has-text("Fazer download da 1ª via")',
@@ -385,7 +434,6 @@ class CopelAVAService:
                                 '.ui-dialog-content button',
                                 '.ui-dialog button',
                                 'button:has-text("download")',
-                                # PrimeFaces specific
                                 'button.ui-button',
                             ]
                             
