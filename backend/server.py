@@ -3486,11 +3486,20 @@ async def get_plant_report_data(
     economia_simultaneidade = 0
     if generator_inv:
         energy_injected = (generator_inv.get('energy_injected_fp_kwh', 0) or 0) + (generator_inv.get('energy_injected_p_kwh', 0) or 0)
+        tariff_te = generator_inv.get('tariff_te_fp_brl', 0) or 0.37
+        tariff_tusd = generator_inv.get('tariff_tusd_fp_brl', 0) or 0.41
+        tarifa_total = tariff_te + tariff_tusd
+        
         if energy_injected > 0:
+            # Com dados de injeção: simultaneidade = geração - injetada
             simultaneidade_kwh = max(0, total_generation - energy_injected)
-            tariff_te = generator_inv.get('tariff_te_fp_brl', 0) or 0.37
-            tariff_tusd = generator_inv.get('tariff_tusd_fp_brl', 0) or 0.41
-            economia_simultaneidade = simultaneidade_kwh * (tariff_te + tariff_tusd)
+        else:
+            # Sem dados de injeção: simultaneidade = min(geração, consumo)
+            consumo_total = (generator_inv.get('energy_registered_fp_kwh', 0) or 0) + (generator_inv.get('energy_registered_p_kwh', 0) or 0)
+            if consumo_total > 0 and total_generation > 0:
+                simultaneidade_kwh = min(total_generation, consumo_total)
+        
+        economia_simultaneidade = simultaneidade_kwh * tarifa_total
     
     # Total economy = simultaneidade + compensation
     economia_total = economia_simultaneidade + total_saved
@@ -5605,8 +5614,19 @@ async def download_pdf_report(
         # Simultaneidade = Geração Total - Energia Injetada (só na geradora!)
         # É a energia que foi gerada e consumida instantaneamente, sem passar pela rede
         if energy_injected_total > 0:
+            # Se temos dados de injeção, calcular normalmente
             simultaneidade_kwh = max(0, total_generation - energy_injected_total)
-            economia_simultaneidade = simultaneidade_kwh * tarifa_total
+        else:
+            # Se NÃO temos dados de injeção, mas há consumo e geração:
+            # Simultaneidade = min(Geração, Consumo registrado)
+            # Porque a simultaneidade não pode ser maior que o consumo local
+            consumo_total = (generator_inv.get('energy_registered_fp_kwh', 0) or 0) + (generator_inv.get('energy_registered_p_kwh', 0) or 0)
+            if consumo_total > 0 and total_generation > 0:
+                # Caso especial: se não há dados de injeção, estimamos
+                # A simultaneidade é no máximo igual à geração ou ao consumo (o menor)
+                simultaneidade_kwh = min(total_generation, consumo_total)
+        
+        economia_simultaneidade = simultaneidade_kwh * tarifa_total
     else:
         report_data['energy_injected_p'] = 0
         report_data['energy_injected_fp'] = 0
@@ -5639,6 +5659,22 @@ async def download_pdf_report(
     # Consumer units with invoice data - deduplicate by uc_number
     consumer_units_data = []
     seen_ucs = set()
+    
+    # Auto-fix: If only generator UC (no beneficiaries), set compensation to 100%
+    generators = [u for u in units if u.get('is_generator')]
+    beneficiaries = [u for u in units if not u.get('is_generator')]
+    if len(generators) == 1 and len(beneficiaries) == 0:
+        # Only generator - should receive 100% of credits
+        gen = generators[0]
+        if gen.get('compensation_percentage', 0) != 100.0:
+            # Fix in memory for this report
+            gen['compensation_percentage'] = 100.0
+            # Also fix in database for future reports
+            await db.consumer_units.update_one(
+                {'id': gen['id']},
+                {'$set': {'compensation_percentage': 100.0}}
+            )
+    
     for inv in invoices:
         # Find matching UC in THIS plant
         unit = next((u for u in units if u['id'] == inv.get('consumer_unit_id')), None)
