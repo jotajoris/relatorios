@@ -81,28 +81,70 @@ class CopelAVAService:
 
             # Take screenshot for debugging
             await self.page.screenshot(path='/tmp/copel_login_page.png')
+            
+            # Log the page HTML for debugging
+            page_html = await self.page.content()
+            logger.info(f"[COPEL] Page title: {await self.page.title()}")
+            logger.info(f"[COPEL] Page URL: {self.page.url}")
+            logger.info(f"[COPEL] Page HTML length: {len(page_html)} chars")
 
             logger.info("[COPEL] Filling credentials...")
+            
             # Try multiple selectors for CPF/CNPJ field
-            cpf_field = await self.page.query_selector('#formulario\\:numDoc')
-            if not cpf_field:
-                cpf_field = await self.page.query_selector('input[id*="numDoc"]')
-            if not cpf_field:
-                cpf_field = await self.page.query_selector('input[name*="numDoc"]')
+            cpf_selectors = [
+                '#formulario\\:numDoc',
+                'input[id="formulario:numDoc"]',
+                'input[id*="numDoc"]',
+                'input[name*="numDoc"]',
+                'input[placeholder*="CNPJ"]',
+                'input[placeholder*="CPF"]',
+            ]
+            
+            cpf_field = None
+            for selector in cpf_selectors:
+                try:
+                    cpf_field = await self.page.query_selector(selector)
+                    if cpf_field:
+                        logger.info(f"[COPEL] Found CPF/CNPJ field with selector: {selector}")
+                        break
+                except Exception as e:
+                    logger.debug(f"[COPEL] Selector {selector} failed: {e}")
             
             if cpf_field:
                 await cpf_field.fill(cnpj)
+                logger.info("[COPEL] CPF/CNPJ filled successfully")
             else:
-                logger.error("[COPEL] Could not find CPF/CNPJ field")
-                return {"success": False, "error": "Campo CPF/CNPJ não encontrado"}
+                logger.error("[COPEL] Could not find CPF/CNPJ field with any selector")
+                # Log available inputs for debugging
+                inputs = await self.page.query_selector_all('input')
+                for i, inp in enumerate(inputs):
+                    inp_id = await inp.get_attribute('id')
+                    inp_name = await inp.get_attribute('name')
+                    inp_type = await inp.get_attribute('type')
+                    logger.error(f"[COPEL] Available input {i}: id={inp_id}, name={inp_name}, type={inp_type}")
+                return {"success": False, "error": "Campo CPF/CNPJ não encontrado na página de login"}
             
             # Try multiple selectors for password field
-            pass_field = await self.page.query_selector('#formulario\\:pass')
-            if not pass_field:
-                pass_field = await self.page.query_selector('input[type="password"]')
+            pass_selectors = [
+                '#formulario\\:pass',
+                'input[id="formulario:pass"]',
+                'input[type="password"]',
+                'input[name*="pass"]',
+            ]
+            
+            pass_field = None
+            for selector in pass_selectors:
+                try:
+                    pass_field = await self.page.query_selector(selector)
+                    if pass_field:
+                        logger.info(f"[COPEL] Found password field with selector: {selector}")
+                        break
+                except:
+                    pass
             
             if pass_field:
                 await pass_field.fill(password)
+                logger.info("[COPEL] Password filled successfully")
             else:
                 logger.error("[COPEL] Could not find password field")
                 return {"success": False, "error": "Campo senha não encontrado"}
@@ -111,9 +153,13 @@ class CopelAVAService:
             submit_btn = await self.page.query_selector('button[type="submit"]')
             if not submit_btn:
                 submit_btn = await self.page.query_selector('input[type="submit"]')
+            if not submit_btn:
+                submit_btn = await self.page.query_selector('#formulario\\:j_idt41')
             if submit_btn:
                 await submit_btn.click()
+                logger.info("[COPEL] Submit button clicked")
             else:
+                logger.info("[COPEL] No submit button found, pressing Enter")
                 await self.page.keyboard.press('Enter')
             
             logger.info("[COPEL] Waiting for login response...")
