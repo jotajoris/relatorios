@@ -28,6 +28,7 @@ services:
       - backend
     networks:
       - app-network
+      - coolify
     labels:
       - "traefik.http.services.frontend-hw4cowow4w0c0w4w4ck4scgk.loadbalancer.server.port=80"
 networks:
