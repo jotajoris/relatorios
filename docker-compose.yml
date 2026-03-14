@@ -3,42 +3,34 @@ services:
     build:
       context: .
       dockerfile: backend.Dockerfile
-    container_name: licitacoes-backend
+    container_name: usinas-backend
     restart: unless-stopped
     environment:
       - MONGO_URL=${MONGO_URL}
+      - JWT_SECRET=${JWT_SECRET}
+      - GROWATT_USER=${GROWATT_USER}
+      - GROWATT_PASS=${GROWATT_PASS}
       - DB_NAME=${DB_NAME}
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY}
-      - RESEND_API_KEY=${RESEND_API_KEY}
-      - SENDER_EMAIL=${SENDER_EMAIL}
-      - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY}
-      - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET}
-      - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME}
-      - CORREIOS_USUARIO=${CORREIOS_USUARIO}
-      - CORREIOS_SENHA=${CORREIOS_SENHA}
-      - CORREIOS_CONTRATO=${CORREIOS_CONTRATO}
-      - CORREIOS_CARTAO_POSTAGEM=${CORREIOS_CARTAO_POSTAGEM}
-      - FRONTEND_URL=https://onlicitacoes.com
     networks:
       - app-network
       - coolify
     expose:
       - "8000"
   frontend:
-
     build:
       context: .
       dockerfile: frontend.Dockerfile
-    container_name: licitacoes-frontend
+    container_name: usinas-frontend
     restart: unless-stopped
     ports:
-      - "3002:80"
+      - "3000:80"
     depends_on:
       - backend
     networks:
       - app-network
+      - coolify
     labels:
-      - "traefik.http.services.licitacoes-frontend.loadbalancer.server.port=80"
+      - "traefik.http.services.frontend-hw4cowow4w0c0w4w4ck4scgk.loadbalancer.server.port=80"
 networks:
   app-network:
     driver: bridge
